@@ -1,0 +1,23 @@
+# permissions for end users to view mdaihubs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: mdai-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: mdaihub-viewer-role
+rules:
+- apiGroups:
+  - mdai.mdai.ai
+  resources:
+  - mdaihubs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - mdai.mdai.ai
+  resources:
+  - mdaihubs/status
+  verbs:
+  - get

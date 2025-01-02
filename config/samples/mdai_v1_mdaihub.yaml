@@ -1,0 +1,32 @@
+apiVersion: mdai.mdai.ai/v1
+kind: MdaiHub
+metadata:
+  labels:
+    app.kubernetes.io/name: mdai-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: mdaihub-sample
+spec:
+  variables:
+    - name: service-list
+      source:
+        type: "valkey"
+      type: "scalar"
+      delimiter: "|"
+  evaluations:
+    - name: evaluation-1
+      evaluationType: prometheus
+      alertingRules:
+        - name: daily
+          alert_query: 'increase(mdai_log_bytes_sent_total{service_name="service1"}[24h]) > 2*1024*1024*1024'
+          for: 10m
+          severity: critical
+          action: toggleFilter
+        - name: hourly
+          alert_query: 'increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024'
+          for: 5m
+          severity: warning
+          action: manageFilter
+  events:
+    - name: event-1
+  observers:
+    - name: observer-1
