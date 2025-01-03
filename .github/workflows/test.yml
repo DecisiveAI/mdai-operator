@@ -4,11 +4,18 @@ on:
   push:
   pull_request:
 
+env:
+  GOPRIVATE: github.com/decisiveai/opentelemetry-operator
+  TOKEN: ${{ secrets.TOKEN_OPERATOR }}
+
 jobs:
   test:
     name: Run on Ubuntu
     runs-on: ubuntu-latest
     steps:
+      - name: Configure git for private modules
+        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
+
       - name: Clone the code
         uses: actions/checkout@v4
 
