@@ -2,7 +2,13 @@ name: E2E Tests
 
 on:
   push:
+    branches: [ "main" ]
   pull_request:
+    branches: [ "main" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 env:
   GOPRIVATE: github.com/decisiveai/opentelemetry-operator
@@ -10,7 +16,7 @@ env:
 
 jobs:
   test-e2e:
-    name: Run on Ubuntu
+    name: E2E tests on Ubuntu
     runs-on: ubuntu-latest
     steps:
       - name: Configure git for private modules
@@ -22,7 +28,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '~1.22'
+          go-version: '~1.23'
 
       - name: Install the latest version of kind
         run: |
