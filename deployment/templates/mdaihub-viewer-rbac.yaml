@@ -1,0 +1,21 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "deployment.fullname" . }}-mdaihub-viewer-role
+  labels:
+  {{- include "deployment.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - mdai.mdai.ai
+  resources:
+  - mdaihubs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - mdai.mdai.ai
+  resources:
+  - mdaihubs/status
+  verbs:
+  - get
