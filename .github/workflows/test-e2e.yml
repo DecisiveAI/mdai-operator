@@ -44,5 +44,6 @@ jobs:
 
       - name: Running Test e2e
         run: |
+          go mod vendor
           go mod tidy
           make test-e2e
