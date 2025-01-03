@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -98,7 +99,7 @@ func (r *MdaiHubReconciler) ReconcileHandler(adapter HubAdapter) (ctrl.Result, e
 			return ctrl.Result{}, nil
 		}
 	}
-	//TODO final status update?
+	// TODO final status update?
 	return ctrl.Result{}, nil
 }
 
@@ -135,27 +136,32 @@ func (r *MdaiHubReconciler) requeueByLabels(ctx context.Context, obj client.Obje
 	}
 	log.Info("OpenTelemetryCollector for MdaiHub found with label", "label", label)
 
-	var mdaiHubs mdaiv1.MdaiHubList
-	if err := r.List(context.Background(), &mdaiHubs); err != nil {
-		log.Error(err, "unable to list MdaiHubs")
+	nsName := types.NamespacedName{
+		Name:      label,
+		Namespace: otelCollector.Namespace, // TODO Assuming MdaiHub is namespaced
+	}
+
+	var mdaiHub mdaiv1.MdaiHub
+	err := r.Get(ctx, nsName, &mdaiHub)
+	if err != nil {
+		if client.IgnoreNotFound(err) != nil {
+			log.Error(err, "unable to fetch MdaiHub", "label", label, "namespace", otelCollector.Namespace)
+		} else {
+			log.Info("MdaiHub not found; possible misconfiguration", "label", label, "namespace", otelCollector.Namespace)
+		}
 		return nil
 	}
 
-	var requests []ctrl.Request
-	for _, mdaiHub := range mdaiHubs.Items {
-		if mdaiHub.Name != label {
-			log.Info("Skipping requeue for MdaiHub", "mdaiHub", mdaiHub.Name)
-			continue
-		}
-		log.Info("Requeuing MdaiHub triggered by otel collector", "mdaiHub", mdaiHub.Name, "otelCollector", otelCollector.Name)
-		requests = append(requests, ctrl.Request{
+	log.Info("Requeuing MdaiHub triggered by otel collector", "mdaiHub", mdaiHub.Name, "otelCollector", otelCollector.Name)
+
+	return []ctrl.Request{
+		{
 			NamespacedName: types.NamespacedName{
 				Name:      mdaiHub.Name,
-				Namespace: mdaiHub.Namespace,
+				Namespace: mdaiHub.Namespace, // TODO Assuming MdaiHub is namespaced
 			},
-		})
+		},
 	}
-	return requests
 }
 
 var noDeletePredicate = predicate.Funcs{

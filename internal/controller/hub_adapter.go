@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/go-logr/logr"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -15,7 +17,6 @@ import (
 	mdaiv1 "mdai.ai/operator/api/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"time"
 )
 
 const (
@@ -96,15 +97,15 @@ func (c HubAdapter) FinalizeHub() (ObjectState, error) {
 
 	c.logger.Info("Performing Finalizer Operations for Cluster before delete CR")
 
-	//meta.SetStatusCondition(&c.mdaiCR.Status.Conditions, metav1.Condition{
+	// meta.SetStatusCondition(&c.mdaiCR.Status.Conditions, metav1.Condition{
 	//	Type:    typeDegradedEngine,
 	//	Status:  metav1.ConditionUnknown,
 	//	Reason:  "Finalizing",
 	//	Message: fmt.Sprintf("Performing finalizer operations for the custom resource: %s ", c.mdaiCR.Name)})
-	//if err := c.client.Status().Update(c.context, c.mdaiCR); err != nil {
+	// if err := c.client.Status().Update(c.context, c.mdaiCR); err != nil {
 	//	c.logger.Info("Failed to update Cluster status, will re-try later")
 	//	return ObjectUnchanged, err
-	//}
+	// }
 
 	c.logger.Info("Here we are doing some real finalization")
 
@@ -271,7 +272,7 @@ func composePrometheusRule(alertingRules []mdaiv1.AlertingRule, engineName strin
 			For:   alertingRule.For,
 			Annotations: map[string]string{
 				"action":      alertingRule.Action,
-				"alert_name":  alertingRule.Name, //FIXME we need a relationship between alert and variable
+				"alert_name":  alertingRule.Name, // FIXME we need a relationship between alert and variable
 				"engine_name": engineName,
 			},
 			Labels: map[string]string{
