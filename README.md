@@ -27,8 +27,8 @@ export GOPRIVATE=github.com/decisiveai/*
 
 ```sh
 go mod vendor
-make docker-build IMG=mdai-operator:0.0.1
-kind load docker-image mdai-operator:0.0.1 --name mdai-operator-test
+make docker-build IMG=mdai-operator:v0.0.1
+kind load docker-image mdai-operator:v0.0.1 --name mdai-operator-test
 ```
 
 **NOTE:** This image ought to be published in the personal registry you specified.
@@ -44,7 +44,7 @@ make install
 **Deploy the Manager to the cluster with the image specified by `IMG`:**
 
 ```sh
-make deploy IMG=mdai-operator:0.0.1
+make deploy IMG=mdai-operator:v0.0.1
 ```
 
 > **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
@@ -85,7 +85,7 @@ Following are the steps to build the installer and distribute this project to us
 1. Build the installer for the image built and published in the registry:
 
 ```sh
-make build-installer IMG=mdai-operator:0.0.1
+make build-installer IMG=mdai-operator:v0.0.1
 ```
 
 NOTE: The makefile target mentioned above generates an 'install.yaml'
