@@ -23,7 +23,7 @@ import (
 )
 
 type Variable struct {
-	//+kubebuilder:validation:MinLength=0
+	// +kubebuilder:validation:MinLength=0
 	Name string `json:"name"`
 	// +kubebuilder:validation:Required
 	Source VariableSource `json:"source"`
@@ -59,14 +59,14 @@ type Evaluation struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 	// +kubebuilder:validation:Required
-	EvaluationType EvaluationType `json:"evaluationType"` //prometheus
+	EvaluationType EvaluationType `json:"evaluationType"` // prometheus
 	// +kubebuilder:validation:Optional
 	AlertingRules *[]AlertingRule `json:"alertingRules"`
 }
 
 type Observer struct {
 	// +kubebuilder:validation:Required
-	Name string `json:"name"` //TODO: define the kind of observer (datalyzer)
+	Name string `json:"name"` // TODO: define the kind of observer (datalyzer)
 }
 
 // MdaiHubSpec defines the desired state of MdaiHub.
@@ -79,7 +79,7 @@ type MdaiHubSpec struct {
 
 type Event struct {
 	// +kubebuilder:validation:Required
-	Name string `json:"name"` //TODO: define the kind of event (update variables through api and operator)
+	Name string `json:"name"` // TODO: define the kind of event (update variables through api and operator)
 }
 
 // MdaiHubStatus defines the observed state of MdaiHub.
