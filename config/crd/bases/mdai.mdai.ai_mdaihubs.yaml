@@ -85,7 +85,7 @@ spec:
                     - severity
                   type: object
                 type: array
-              evaluations:
+              triggers:
                 items:
                   properties:
                     alertingRuleName:

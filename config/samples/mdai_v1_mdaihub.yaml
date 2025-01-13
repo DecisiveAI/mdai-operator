@@ -12,21 +12,35 @@ spec:
         type: "valkey"
       type: "scalar"
       delimiter: "|"
-  evaluations:
-    - name: evaluation-1
+  actions:
+    - name: addService
+      action_type: update_variable
+      operation: add
+      variable_name: service-list
+    - name: removeService
+      action_type: update_variable
+      operation: remove
+      variable_name: service-list
+  alerts:
+    - name: hourly
+      expr: '(increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024) by service_name'
+      for: 5m
+      severity: warning
+  triggers:
+    - name: serviceTooNoisyHourly
       evaluationType: prometheus
-      alertingRules:
-        - name: daily
-          alert_query: 'increase(mdai_log_bytes_sent_total{service_name="service1"}[24h]) > 2*1024*1024*1024'
-          for: 10m
-          severity: critical
-          action: toggleFilter
-        - name: hourly
-          alert_query: 'increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024'
-          for: 5m
-          severity: warning
-          action: manageFilter
-  events:
-    - name: event-1
+      alertingRuleName: hourly
+      alertStatus: 'firing'
+      relevantLabel: 'service_name'
+    - name: serviceWentQuietHourly
+      evaluationType: prometheus
+      alertingRuleName: hourly
+      alertStatus: 'resolved'
+      relevantLabel: 'service_name'
+  eventMap:
+    serviceTooNoisyHourly:
+      - addService
+    serviceWentQuietHourly:
+      - removeService
   observers:
     - name: observer-1
