@@ -189,11 +189,110 @@ func Filter(list []string, strToFilter string) (newList []string) {
 	return
 }
 
+// Utility function to create a map from a slice of any type using a key selector function
+func createMapFromSlice[T any, K comparable](slice *[]T, keyFn func(T) K) map[K]T {
+	result := make(map[K]T)
+	for _, item := range *slice {
+		key := keyFn(item)
+		result[key] = item
+	}
+	return result
+}
+
+type HydratedEvent struct {
+	Trigger *mdaiv1.Trigger
+	Actions *[]mdaiv1.Action
+}
+
+// AlertFirstEventMap Alert name is key
+type AlertFirstEventMap map[string]*[]HydratedEvent
+
+func (c HubAdapter) createHydratedEventMap() (AlertFirstEventMap, error) {
+	// Retrieve event map from CR
+	eventMap := c.mdaiCR.Spec.EventMap
+	if eventMap == nil {
+		c.logger.Info("No event map found in the CR, skipping hydration, PrometheusRule synchronization")
+		return nil, errors.New("no event map configured")
+	}
+
+	// Create temporary maps from the configured slices
+	tmpEvalsMap := createMapFromSlice(c.mdaiCR.Spec.Triggers, func(trigger mdaiv1.Trigger) string {
+		return trigger.Name
+	})
+	tmpActionsMap := createMapFromSlice(c.mdaiCR.Spec.Actions, func(action mdaiv1.Action) string {
+		return action.Name
+	})
+	tmpAlertsMap := createMapFromSlice(c.mdaiCR.Spec.Alerts, func(alert mdaiv1.AlertingRule) string {
+		return alert.Name
+	})
+
+	// Initialize the hydrated event map
+	hydratedEventMap := make(AlertFirstEventMap)
+
+	// Process each Trigger in the event map
+	for evalName, actionNames := range *eventMap {
+		thisTrigger, evalExists := tmpEvalsMap[evalName]
+		if !evalExists {
+			// TODO: these `'%s'` not configured logs should probably do something else
+			c.logger.Info("Trigger '%s' declared in event map but not configured", evalName)
+			continue
+		}
+
+		// Skip if no alerting rule is configured for this Trigger
+		if thisTrigger.AlertingRuleName == "" {
+			continue
+		}
+
+		// Check if the corresponding alerting rule is configured
+		_, alertExists := tmpAlertsMap[thisTrigger.AlertingRuleName]
+		if !alertExists {
+			c.logger.Info("Alert '%s' declared as Trigger dependency but not configured", thisTrigger.AlertingRuleName)
+			continue
+		}
+
+		// Collect actions associated with the Trigger
+		tmpHydratedActions := make([]mdaiv1.Action, 0)
+		for _, actionName := range actionNames {
+			thisAction, actionExists := tmpActionsMap[actionName]
+			if !actionExists {
+				c.logger.Info("Action '%s' declared in event map but not configured", actionName)
+				continue
+			}
+			tmpHydratedActions = append(tmpHydratedActions, thisAction)
+		}
+
+		// If there are no valid actions, skip this Trigger
+		if len(tmpHydratedActions) == 0 {
+			c.logger.Info("No valid actions found for Trigger '%s'", evalName)
+			continue
+		}
+
+		// Create and append the hydrated event
+		tmpHydratedEvent := HydratedEvent{
+			Trigger: &thisTrigger,
+			Actions: &tmpHydratedActions,
+		}
+
+		// Initialize the slice if it's nil for this alerting rule
+		if hydratedEventMap[thisTrigger.AlertingRuleName] == nil {
+			*hydratedEventMap[thisTrigger.AlertingRuleName] = make([]HydratedEvent, 0)
+		}
+
+		// Append the hydrated event to the map
+		*hydratedEventMap[thisTrigger.AlertingRuleName] = append(
+			*hydratedEventMap[thisTrigger.AlertingRuleName],
+			tmpHydratedEvent,
+		)
+	}
+	// TODO: The keys of this map indicate which alerts should be sent and configured as Prometheus rules
+	return hydratedEventMap, nil
+}
+
 // EnsurePrometheusRuleSynchronized creates or updates PrometheusFilter CR
 func (c HubAdapter) ensureEvaluationsSynchronized() (OperationResult, error) {
-	evals := c.mdaiCR.Spec.Evaluations
+	evals := c.mdaiCR.Spec.Triggers
 	if evals == nil {
-		c.logger.Info("No evaluation found in the CR, skipping PrometheusRule synchronization")
+		c.logger.Info("No triggers found in the CR, skipping PrometheusRule synchronization")
 		return ContinueProcessing()
 	}
 
@@ -201,8 +300,8 @@ func (c HubAdapter) ensureEvaluationsSynchronized() (OperationResult, error) {
 	c.logger.Info("EnsurePrometheusRuleSynchronized")
 
 	for _, eval := range *evals {
-		if eval.EvaluationType == mdaiv1.EvaluationTypePrometheus {
-			c.logger.Info("Evaluation type is Prometheus")
+		if eval.TriggerType == mdaiv1.TriggerTypePrometheus {
+			c.logger.Info("Trigger type is Prometheus")
 
 			prometheusRuleCR, err := c.getOrCreatePrometheusRuleCR(defaultPrometheusRuleName)
 			if err != nil {
@@ -210,12 +309,30 @@ func (c HubAdapter) ensureEvaluationsSynchronized() (OperationResult, error) {
 				return RequeueAfter(time.Second*10, err)
 			}
 
-			if eval.AlertingRules == nil {
-				c.logger.Info("No alerting rules found in the evaluation, skipping PrometheusRule synchronization")
+			if eval.AlertingRuleName == "" {
+				c.logger.Info("Trigger does not depend on alerting rule, skipping PrometheusRule synchronization")
 				continue
 			}
 
-			prometheusRuleCR.Spec.Groups[0].Rules = composePrometheusRule(*eval.AlertingRules, c.mdaiCR.Name)
+			var alertRule mdaiv1.AlertingRule
+			alertRuleFound := false
+
+			for _, rule := range *c.mdaiCR.Spec.Alerts {
+				if rule.Name == eval.AlertingRuleName {
+					alertRule = rule
+					alertRuleFound = true
+					break
+				}
+			}
+
+			if alertRuleFound {
+				prometheusRuleCR.Spec.Groups[0].Rules = composePrometheusRule(
+					[]mdaiv1.AlertingRule{
+						alertRule,
+					}, c.mdaiCR.Name)
+			} else {
+				c.logger.Info("Alert '%s' declared as Trigger dependency but not configured", eval.AlertingRuleName)
+			}
 
 			if err = c.client.Update(c.context, prometheusRuleCR); err != nil {
 				c.logger.Error(err, "Failed to update PrometheusRule")
@@ -267,11 +384,10 @@ func composePrometheusRule(alertingRules []mdaiv1.AlertingRule, engineName strin
 	prometheusRules := make([]prometheusv1.Rule, 0, len(alertingRules))
 	for _, alertingRule := range alertingRules {
 		prometheusRule := prometheusv1.Rule{
-			Expr:  alertingRule.AlertQuery,
+			Expr:  alertingRule.Expr,
 			Alert: alertingRule.Name,
 			For:   alertingRule.For,
 			Annotations: map[string]string{
-				"action":      alertingRule.Action,
 				"alert_name":  alertingRule.Name, // FIXME we need a relationship between alert and variable
 				"engine_name": engineName,
 			},

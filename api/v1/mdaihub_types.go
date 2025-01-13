@@ -45,23 +45,30 @@ type AlertingRule struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
 	// +kubebuilder:validation:Required
-	AlertQuery intstr.IntOrString `json:"alert_query" yaml:"alert_query"`
+	Expr intstr.IntOrString `json:"expr" yaml:"expr"`
 	// Alerts are considered firing once they have been returned for this long.
 	// +kubebuilder:validation:Optional
 	For *prometheusv1.Duration `json:"for,omitempty" yaml:"for,omitempty"`
+	// Alert will continue firing for this amount of time
+	// +kubebuilder:validation:Optional
+	KeepFiringFor *prometheusv1.Duration `json:"keep_firing_for,omitempty" yaml:"keep_firing_for,omitempty"`
 	// +kubebuilder:validation:Pattern:="^(warning|critical)$"
 	Severity string `json:"severity" yaml:"severity"`
-	// +kubebuilder:validation:Required
-	Action string `json:"action" yaml:"action"`
 }
 
-type Evaluation struct {
+type Trigger struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 	// +kubebuilder:validation:Required
-	EvaluationType EvaluationType `json:"evaluationType"` // prometheus
+	TriggerType TriggerType `json:"triggerType"` // prometheus
 	// +kubebuilder:validation:Optional
-	AlertingRules *[]AlertingRule `json:"alertingRules"`
+	AlertingRuleName string `json:"alertingRule,omitempty"`
+	// Does this evaluation kick off an action on 'firing' status or 'resolved'?
+	// +kubebuilder:validation:Optional
+	AlertStatus string `json:"alertStatus,omitempty" yaml:"alertStatus,omitempty"` // 'firing' | 'resolved'
+	// Label from the Expr indicating which value(s) the alert payload will forward
+	// +kubebuilder:validation:Optional
+	RelevantLabel string `json:"relevantLabel,omitempty" yaml:"relevantLabel,omitempty"`
 }
 
 type Observer struct {
@@ -71,15 +78,27 @@ type Observer struct {
 
 // MdaiHubSpec defines the desired state of MdaiHub.
 type MdaiHubSpec struct {
-	Variables   *[]Variable   `json:"variables,omitempty"`
-	Observers   *[]Observer   `json:"observers,omitempty"`   // watchers configuration (datalyzer)
-	Evaluations *[]Evaluation `json:"evaluations,omitempty"` // evaluations configuration (alerting rules)
-	Events      *[]Event      `json:"events,omitempty"`      // events configuration (update variables through api and operator)
+	Alerts    *[]AlertingRule `json:"alerts,omitempty"`
+	Variables *[]Variable     `json:"variables,omitempty"`
+	Observers *[]Observer     `json:"observers,omitempty"`   // watchers configuration (datalyzer)
+	Triggers  *[]Trigger      `json:"evaluations,omitempty"` // triggers configuration (alerting rules)
+	Actions   *[]Action       `json:"events,omitempty"`      // events configuration (update variables through api and operator)
+	EventMap  *EventMap       `json:"eventMap,omitempty"`
 }
 
-type Event struct {
+// Keys should be names of Triggers
+// Values should be arrays of names of Actions
+type EventMap map[string][]string
+
+type Action struct {
 	// +kubebuilder:validation:Required
-	Name string `json:"name"` // TODO: define the kind of event (update variables through api and operator)
+	Name string `json:"name"`
+	// +kubebuilder:validation:Required
+	ActionType string `json:"actionType"` // update_variable
+	// +kubebuilder:validation:Required
+	Operation string `json:"operation"` // Depends on variable type
+	// +kubebuilder:validation:Required
+	VariableName string `json:"variableName"`
 }
 
 // MdaiHubStatus defines the observed state of MdaiHub.
@@ -121,12 +140,12 @@ func init() {
 	SchemeBuilder.Register(&MdaiHub{}, &MdaiHubList{})
 }
 
-type EvaluationType string
+type TriggerType string
 type VariableSourceType string
 type VariableType string
 
 const (
-	EvaluationTypePrometheus EvaluationType     = "prometheus"
+	TriggerTypePrometheus    TriggerType        = "prometheus"
 	VariableSourceTypeValkey VariableSourceType = "valkey"
 	VariableTypeScalar       VariableType       = "scalar"
 	VariableTypeArray        VariableType       = "array"
