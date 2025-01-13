@@ -4,6 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
+	"github.com/valkey-io/valkey-go"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"reflect"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -29,15 +35,18 @@ const (
 
 	ObjectModified  ObjectState = true
 	ObjectUnchanged ObjectState = false
+
+	mdaiVariablePrefix = "MDAI_"
 )
 
 type HubAdapter struct {
-	mdaiCR   *mdaiv1.MdaiHub
-	logger   logr.Logger
-	client   client.Client
-	recorder record.EventRecorder
-	scheme   *runtime.Scheme
-	context  context.Context
+	mdaiCR       *mdaiv1.MdaiHub
+	logger       logr.Logger
+	client       client.Client
+	recorder     record.EventRecorder
+	scheme       *runtime.Scheme
+	context      context.Context
+	valKeyClient *valkey.Client
 }
 
 type ObjectState bool
@@ -48,14 +57,17 @@ func NewHubAdapter(
 	log logr.Logger,
 	client client.Client,
 	recorder record.EventRecorder,
-	scheme *runtime.Scheme) *HubAdapter {
+	scheme *runtime.Scheme,
+	valkeyClient *valkey.Client) *HubAdapter {
 	return &HubAdapter{
-		context:  ctx,
-		mdaiCR:   cr,
-		logger:   log,
-		client:   client,
-		recorder: recorder,
-		scheme:   scheme}
+		context:      ctx,
+		mdaiCR:       cr,
+		logger:       log,
+		client:       client,
+		recorder:     recorder,
+		scheme:       scheme,
+		valKeyClient: valkeyClient,
+	}
 }
 
 func (c HubAdapter) ensureFinalizerInitialized() (OperationResult, error) {
@@ -308,11 +320,149 @@ func (c HubAdapter) deletePrometheusRule() error {
 }
 
 func (c HubAdapter) ensureVariableSynced() (OperationResult, error) {
-	// TODO: Implement this function
-	// here we update variables for OTEL collectors that has labels with hub name
-	// we sort variables by source type
-	// next process each source type and update variables
+	// current assumption is we have only built-in Valkey storage
+	variables := c.mdaiCR.Spec.Variables
+	if variables == nil {
+		c.logger.Info("No variables found in the CR, skipping variable synchronization")
+		return ContinueProcessing()
+	}
+
+	if c.valKeyClient == nil {
+		c.logger.Error(nil, "Valkey valkeyClient not initialized, cannot sync variables")
+		return ContinueProcessing()
+	}
+
+	envVariables := make([]v1.EnvVar, 0)
+	valkeyClient := *c.valKeyClient
+	for _, variable := range *variables {
+		// we should test filter processor when the variable is empty and if breaks it we may recommend to use some placeholder as default value
+		if variable.StorageType == mdaiv1.VariableSourceTypeBultInValkey {
+			valkeyKey := variable.Name
+			if variable.Type == mdaiv1.VariableTypeArray {
+				valueAsSlice, err := valkeyClient.Do(
+					c.context,
+					valkeyClient.B().Smembers().Key(valkeyKey).Build(),
+				).AsStrSlice()
+
+				if err != nil {
+					c.logger.Error(err, "Failed to get value from Valkey", "key", valkeyKey)
+					return RequeueAfter(time.Second*10, err)
+				}
+
+				c.logger.Info("Valkey data received", "key", valkeyKey, "valueAsSlice", valueAsSlice)
+
+				if variable.DefaultValue != nil && len(valueAsSlice) == 0 {
+					c.logger.Info("Applying default value to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
+					valueAsSlice = append(valueAsSlice, *variable.DefaultValue)
+				} else {
+					c.logger.Info("No value found in Valkey, skipping", "key", valkeyKey)
+					continue
+				}
+				variableWithDelimiter := strings.Join(valueAsSlice, variable.Delimiter)
+				envVariables = append(
+					envVariables,
+					v1.EnvVar{
+						Name:  transformKeyToVariableName(valkeyKey),
+						Value: variableWithDelimiter,
+					},
+				)
+			} else if variable.Type == mdaiv1.VariableTypeScalar {
+				value, err := valkeyClient.Do(
+					c.context,
+					valkeyClient.B().Get().Key(valkeyKey).Build(),
+				).ToString()
+
+				if err != nil && err.Error() == "valkey nil message" {
+					if variable.DefaultValue != nil {
+						c.logger.Info("Applying default value to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
+						value = *variable.DefaultValue
+					} else {
+						c.logger.Info("No value found in Valkey, skipping", "key", valkeyKey)
+						continue
+					}
+				} else {
+					c.logger.Error(err, "Failed to get value from Valkey", "key", valkeyKey)
+					return RequeueAfter(time.Second*10, err)
+				}
+
+				c.logger.Info("Valkey data received", "key", valkeyKey, "value", value)
+				envVariables = append(envVariables, v1.EnvVar{
+					Name:  transformKeyToVariableName(valkeyKey),
+					Value: value,
+				})
+			}
+		}
+	}
+
+	if len(envVariables) == 0 {
+		c.logger.Info("No variables need to be updated")
+		return ContinueProcessing()
+	}
+
+	collectors, err := c.listOtelCollectorsWithLabel(c.context, fmt.Sprintf("%s=%s", LabelMdaiHubName, c.mdaiCR.Name))
+	if err != nil {
+		return OperationResult{}, err
+	}
+	for _, collector := range collectors {
+		c.logger.Info("Updating environment variables in OpenTelemetry Collector", "name", collector.Name)
+		// insert env variable
+		collectorCopy := collector.DeepCopy()
+		//TODO clean up old env variables with mdai prefix
+		collectorCopy.Spec.Env = upsertEnvVars(collectorCopy.Spec.Env, envVariables)
+
+		if collector.Spec.Env != nil && reflect.DeepEqual(collector.Spec.Env, collectorCopy.Spec.Env) {
+			c.logger.Info("Environment variables are already up-to-date")
+			continue
+		}
+
+		// trigger update
+		if err := c.client.Update(c.context, collectorCopy); err != nil {
+			c.logger.Error(err, "Failed to update OpenTelemetry Collector", "name", collectorCopy.Name)
+			return OperationResult{}, err
+		}
+	}
+
 	return ContinueProcessing()
+}
+
+func transformKeyToVariableName(valkeyKey string) string {
+	return mdaiVariablePrefix + strings.ToUpper(valkeyKey)
+}
+
+func upsertEnvVars(existingEnv []v1.EnvVar, newEnv []v1.EnvVar) []v1.EnvVar {
+	envMap := make(map[string]int)
+	for i, env := range existingEnv {
+		envMap[env.Name] = i
+	}
+
+	for _, env := range newEnv {
+		if idx, exists := envMap[env.Name]; exists {
+			existingEnv[idx].Value = env.Value
+		} else {
+			existingEnv = append(existingEnv, env)
+		}
+	}
+
+	return existingEnv
+}
+
+func (c HubAdapter) listOtelCollectorsWithLabel(ctx context.Context, labelSelector string) ([]v1beta1.OpenTelemetryCollector, error) {
+	var collectorList v1beta1.OpenTelemetryCollectorList
+
+	selector, err := labels.Parse(labelSelector)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse label selector: %w", err)
+	}
+
+	listOptions := &client.ListOptions{
+		LabelSelector: selector,
+	}
+
+	if err := c.client.List(ctx, &collectorList, listOptions); err != nil {
+		return nil, fmt.Errorf("failed to list OpenTelemetryCollectors: %w", err)
+	}
+
+	return collectorList.Items, nil
 }
 
 // ensureHubDeletionProcessed deletes Cluster in cases a deletion was triggered

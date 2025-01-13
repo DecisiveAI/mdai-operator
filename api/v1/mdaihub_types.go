@@ -26,19 +26,15 @@ type Variable struct {
 	// +kubebuilder:validation:MinLength=0
 	Name string `json:"name"`
 	// +kubebuilder:validation:Required
-	Source VariableSource `json:"source"`
+	// +kubebuilder:validation:Enum:=mdai-valkey
+	StorageType VariableStorageType `json:"storageType"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum:=scalar;array
 	Type VariableType `json:"type"`
 	// +kubebuilder:validation:Optional
 	Delimiter string `json:"delimiter,omitempty"`
-}
-
-type VariableSource struct {
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=valkey
-	Type VariableSourceType `json:"type"`
-	// depending on the type some additional fields are needed
+	// +kubebuilder:validation:Optional
+	DefaultValue *string `json:"defaultValue,omitempty"`
 }
 
 type AlertingRule struct {
@@ -122,12 +118,12 @@ func init() {
 }
 
 type EvaluationType string
-type VariableSourceType string
+type VariableStorageType string
 type VariableType string
 
 const (
-	EvaluationTypePrometheus EvaluationType     = "prometheus"
-	VariableSourceTypeValkey VariableSourceType = "valkey"
-	VariableTypeScalar       VariableType       = "scalar"
-	VariableTypeArray        VariableType       = "array"
+	EvaluationTypePrometheus       EvaluationType      = "prometheus"
+	VariableSourceTypeBultInValkey VariableStorageType = "mdai-valkey"
+	VariableTypeScalar             VariableType        = "scalar"
+	VariableTypeArray              VariableType        = "array"
 )

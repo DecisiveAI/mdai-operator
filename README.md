@@ -2,7 +2,14 @@
 // TODO(user): Add simple overview of use/purpose
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+Operator 
+- watches OTEL collectors that has labels matching hub name
+- creates alerting rules for Prometheus operator
+- reads variables from ValKey
+- supported two types of variables: array and scalar
+- all mdai environment variables added prefix 'MDAI_' when injected into OTEL collector and changed to upper case
+- injects environmental variables into OTEL collectors that has labels matching hub name
+- supports built-in ValKey storage type for variables 
 
 ## Getting Started
 ### Importing opentelemetry-operator module from private repo
@@ -57,6 +64,10 @@ You can apply the samples (examples) from the config/sample:
 kubectl apply -k config/samples/
 ```
 
+```sh
+kubectl apply -k test/test-samples/
+```
+
 >**NOTE**: Ensure that the samples has default values to test it out.
 
 ### To Uninstall
@@ -64,6 +75,9 @@ kubectl apply -k config/samples/
 
 ```sh
 kubectl delete -k config/samples/
+```
+```sh
+kubectl delete -k test/test-samples/
 ```
 
 **Delete the APIs(CRDs) from the cluster:**

@@ -18,9 +18,11 @@ package controller
 
 import (
 	"context"
-
+	"fmt"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
+	"github.com/valkey-io/valkey-go"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -33,6 +35,7 @@ import (
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"time"
 )
 
 const (
@@ -42,8 +45,9 @@ const (
 // MdaiHubReconciler reconciles a MdaiHub object
 type MdaiHubReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme       *runtime.Scheme
+	Recorder     record.EventRecorder
+	ValKeyClient *valkey.Client
 }
 
 // +kubebuilder:rbac:groups=mdai.mdai.ai,resources=mdaihubs,verbs=get;list;watch;create;update;patch;delete
@@ -73,12 +77,17 @@ func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	_, err := r.ReconcileHandler(*NewHubAdapter(ctx, fetchedCR, log, r.Client, r.Recorder, r.Scheme))
+	_, err := r.ReconcileHandler(*NewHubAdapter(ctx, fetchedCR, log, r.Client, r.Recorder, r.Scheme, r.ValKeyClient))
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
 	log.Info("-- Finished reconciliation --")
+	if r.ValKeyClient != nil {
+		//TODO make 2 configurable
+		log.Info("Rescheduling in 2 minutes for valkey synchronization")
+		return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -99,7 +108,9 @@ func (r *MdaiHubReconciler) ReconcileHandler(adapter HubAdapter) (ctrl.Result, e
 			return ctrl.Result{}, nil
 		}
 	}
+
 	// TODO final status update?
+
 	return ctrl.Result{}, nil
 }
 
@@ -107,16 +118,54 @@ type ReconcileOperation func() (OperationResult, error)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := r.initializeValkey(); err != nil {
+		return err
+	}
+
+	// watch collectors which have the hub label
+	collectorSelector := metav1.LabelSelector{
+		MatchExpressions: []metav1.LabelSelectorRequirement{
+			{
+				Key:      LabelMdaiHubName,
+				Operator: metav1.LabelSelectorOpExists,
+			},
+		},
+	}
+	selectorPredicate, err := predicate.LabelSelectorPredicate(collectorSelector)
+	if err != nil {
+		return err
+	}
+
+	combinedPredicate := predicate.And(predicate.GenerationChangedPredicate{}, selectorPredicate, noDeletePredicate)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&mdaiv1.MdaiHub{}).
 		Watches(
 			&v1beta1.OpenTelemetryCollector{},
 			handler.EnqueueRequestsFromMapFunc(r.requeueByLabels),
-			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
-			builder.WithPredicates(noDeletePredicate),
+			builder.WithPredicates(combinedPredicate),
 		).
 		Named("mdaihub").
 		Complete(r)
+}
+
+func (r *MdaiHubReconciler) initializeValkey() error {
+	// for built-in valkey storage we read the environment variable to get connection string
+	valkeyEndpoint := "127.0.0.1:6379" //"valkey-primary.default.svc.cluster.local:6379" //os.Getenv("VALKEY_ENDPOINT")
+	valkeyPassword := "abc"            //os.Getenv("VALKEY_PASSWORD")
+	if valkeyEndpoint == "" || valkeyPassword == "" {
+		log := logger.FromContext(context.Background())
+		log.Info("ValKey client is not enabled; skipping initialization")
+	} else {
+		log := logger.FromContext(context.Background())
+		log.Info("Initializing ValKey/Vault client", "endpoint", valkeyEndpoint)
+		valkeyClient, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{valkeyEndpoint}, Password: valkeyPassword})
+		if err != nil {
+			return fmt.Errorf("failed to initialize ValKey/Vault client: %w", err)
+		}
+		r.ValKeyClient = &valkeyClient
+	}
+	return nil
 }
 
 func (r *MdaiHubReconciler) requeueByLabels(ctx context.Context, obj client.Object) []reconcile.Request {
@@ -129,36 +178,35 @@ func (r *MdaiHubReconciler) requeueByLabels(ctx context.Context, obj client.Obje
 		return nil
 	}
 
-	label, exists := otelCollector.Labels[LabelMdaiHubName]
-	if !exists || label == "" {
-		log.Info("OpenTelemetryCollector does not have the label 'mdaihub-name'; skipping requeue")
+	hubNameFromLabel, exists := otelCollector.Labels[LabelMdaiHubName]
+	if !exists || hubNameFromLabel == "" {
+		log.Info("OpenTelemetryCollector does not have the hubNameFromLabel 'mdaihub-name'; skipping requeue")
 		return nil
 	}
-	log.Info("OpenTelemetryCollector for MdaiHub found with label", "label", label)
+	log.Info("OpenTelemetryCollector for MdaiHub found with hubNameFromLabel", "hubNameFromLabel", hubNameFromLabel)
 
-	nsName := types.NamespacedName{
-		Name:      label,
-		Namespace: otelCollector.Namespace, // TODO Assuming MdaiHub is namespaced
-	}
+	//nsName := types.NamespacedName{
+	//	Name:      hubNameFromLabel,
+	//	Namespace: otelCollector.Namespace, // TODO Assuming MdaiHub is namespaced
+	//}
 
-	var mdaiHub mdaiv1.MdaiHub
-	err := r.Get(ctx, nsName, &mdaiHub)
-	if err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			log.Error(err, "unable to fetch MdaiHub", "label", label, "namespace", otelCollector.Namespace)
-		} else {
-			log.Info("MdaiHub not found; possible misconfiguration", "label", label, "namespace", otelCollector.Namespace)
-		}
-		return nil
-	}
+	//var mdaiHub mdaiv1.MdaiHub
+	//if err := r.Get(ctx, nsName, &mdaiHub); err != nil {
+	//	if client.IgnoreNotFound(err) != nil {
+	//		log.Error(err, "unable to fetch MdaiHub", "hubNameFromLabel", hubNameFromLabel, "namespace", otelCollector.Namespace)
+	//	} else {
+	//		log.Info("MdaiHub not found; possible misconfiguration", "hubNameFromLabel", hubNameFromLabel, "namespace", otelCollector.Namespace)
+	//	}
+	//	return nil
+	//}
 
-	log.Info("Requeuing MdaiHub triggered by otel collector", "mdaiHub", mdaiHub.Name, "otelCollector", otelCollector.Name)
+	log.Info("Requeueing MdaiHub triggered by otel collector", "hubNameFromLabel", hubNameFromLabel, "otelCollector", otelCollector.Name)
 
 	return []ctrl.Request{
 		{
 			NamespacedName: types.NamespacedName{
-				Name:      mdaiHub.Name,
-				Namespace: mdaiHub.Namespace, // TODO Assuming MdaiHub is namespaced
+				Name:      hubNameFromLabel,
+				Namespace: otelCollector.Namespace, // TODO Assuming MdaiHub is namespaced
 			},
 		},
 	}

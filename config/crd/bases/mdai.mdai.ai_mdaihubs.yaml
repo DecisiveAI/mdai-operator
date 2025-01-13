@@ -99,20 +99,17 @@ spec:
               variables:
                 items:
                   properties:
+                    defaultValue:
+                      type: string
                     delimiter:
                       type: string
                     name:
                       minLength: 0
                       type: string
-                    source:
-                      properties:
-                        type:
-                          enum:
-                          - valkey
-                          type: string
-                      required:
-                      - type
-                      type: object
+                    storageType:
+                      enum:
+                      - mdai-valkey
+                      type: string
                     type:
                       enum:
                       - scalar
@@ -120,7 +117,7 @@ spec:
                       type: string
                   required:
                   - name
-                  - source
+                  - storageType
                   - type
                   type: object
                 type: array

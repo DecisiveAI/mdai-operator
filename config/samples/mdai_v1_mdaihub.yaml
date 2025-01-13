@@ -7,11 +7,14 @@ metadata:
   name: mdaihub-sample
 spec:
   variables:
-    - name: service-list
-      source:
-        type: "valkey"
-      type: "scalar"
+    - name: service_list
+      storageType: "mdai-valkey"
+      type: "array"
       delimiter: "|"
+      defaultValue: "n/a"
+    - name: service
+      storageType: "mdai-valkey"
+      type: "scalar"
   evaluations:
     - name: evaluation-1
       evaluationType: prometheus
