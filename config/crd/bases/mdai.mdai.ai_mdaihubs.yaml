@@ -94,15 +94,6 @@ spec:
                   - severity
                   type: object
                 type: array
-              eventMap:
-                additionalProperties:
-                  items:
-                    type: string
-                  type: array
-                description: |-
-                  EventMap Keys should be names of Triggers
-                  Values should be arrays of name of Actions
-                type: object
               observers:
                 items:
                   properties:
@@ -112,6 +103,20 @@ spec:
                   - name
                   type: object
                 type: array
+              platform:
+                description: Platform is where a user will define the behavior of
+                  the constructs that they have configured
+                properties:
+                  eventMap:
+                    additionalProperties:
+                      items:
+                        type: string
+                      type: array
+                    description: |-
+                      EventMap Keys should be names of Triggers
+                      Values should be arrays of name of Actions
+                    type: object
+                type: object
               triggers:
                 items:
                   properties:

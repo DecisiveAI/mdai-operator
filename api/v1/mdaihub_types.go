@@ -86,12 +86,15 @@ type MdaiHubSpec struct {
 	Evaluations *[]Evaluation `json:"evaluations,omitempty"` // evaluation configuration (alerting rules)
 	Triggers    *[]Trigger    `json:"triggers,omitempty"`    // triggers configuration (alert assessment)
 	Actions     *[]Action     `json:"actions,omitempty"`     // events configuration (update variables through api and operator)
-	EventMap    *EventMap     `json:"eventMap,omitempty"`    // associate triggers with actions
+	Platform    *Platform     `json:"platform,omitempty"`    // declare the behavior of the constructs
 }
 
-// EventMap Keys should be names of Triggers
-// Values should be arrays of name of Actions
-type EventMap map[string][]string
+// Platform is where a user will define the behavior of the constructs that they have configured
+type Platform struct {
+	// EventMap Keys should be names of Triggers
+	// Values should be arrays of name of Actions
+	EventMap *map[string]*[]string `json:"eventMap,omitempty"`
+}
 
 type Action struct {
 	// How this Action will be referred to elsewhere in the config

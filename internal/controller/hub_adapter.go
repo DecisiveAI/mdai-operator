@@ -209,7 +209,7 @@ type AlertFirstEventMap map[string]*[]HydratedEvent
 
 func (c HubAdapter) createHydratedEventMap() (AlertFirstEventMap, error) {
 	// Retrieve event map from CR
-	eventMap := c.mdaiCR.Spec.EventMap
+	eventMap := c.mdaiCR.Spec.Platform.EventMap
 	if eventMap == nil {
 		c.logger.Info("No event map found in the CR, skipping hydration, PrometheusRule synchronization")
 		return nil, errors.New("no event map configured")
@@ -247,7 +247,7 @@ func (c HubAdapter) createHydratedEventMap() (AlertFirstEventMap, error) {
 
 		// Collect actions associated with the Trigger
 		tmpHydratedActions := make([]mdaiv1.Action, 0)
-		for _, actionName := range actionNames {
+		for _, actionName := range *actionNames {
 			thisAction, actionExists := tmpActionsMap[actionName]
 			if !actionExists {
 				c.logger.Info("Action '%s' declared in event map but not configured", actionName)
