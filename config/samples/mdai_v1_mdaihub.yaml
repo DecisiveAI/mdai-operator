@@ -6,10 +6,10 @@ metadata:
   labels:
     app.kubernetes.io/name: mdai-operator
     app.kubernetes.io/managed-by: kustomize
-  name: mdaihub-sample
-spec:
+  name: mdaihub-dynamic-data-filtering-sample
 # Specification section for the MdaiHub resource
-spec:  observers:
+spec:
+  observers:
     - name: observer-1
   variables:
     - name: service_list
@@ -30,21 +30,19 @@ spec:  observers:
       alertStatus: 'firing'
       relevantLabels:
         - 'service_name'
-      evaluationType: prometheus
     - name: serviceLogsBelowThreshold
       evaluationName: logBytesOutTooHighBySvc
       alertStatus: 'resolved'
       relevantLabels:
         - 'service_name'
-      evaluationType: prometheus
 # Define triggers (events that occur based on evaluations) and are controlled by variables which you can define. See here for more details. 
   actions:
     - name: addService
-      action_type: mdai/update_variable
+      actionType: mdai/update_variable
       operation: add
       variable_name: service_list
     - name: removeService
-      action_type: mdai/update_variable
+      actionType: mdai/update_variable
       operation: remove
       variable_name: service_list
 # Map triggers to actions. When a trigger is activated, the requisite action is taken.

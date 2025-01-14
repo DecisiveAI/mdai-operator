@@ -222,8 +222,8 @@ func (c HubAdapter) createHydratedEventMap() (AlertFirstEventMap, error) {
 	tmpActionsMap := createMapFromSlice(c.mdaiCR.Spec.Actions, func(action mdaiv1.Action) string {
 		return action.Name
 	})
-	tmpAlertsMap := createMapFromSlice(c.mdaiCR.Spec.Alerts, func(alert mdaiv1.AlertingRule) string {
-		return alert.Name
+	tmpAlertsMap := createMapFromSlice(c.mdaiCR.Spec.Evaluations, func(evaluation mdaiv1.Evaluation) string {
+		return evaluation.Name
 	})
 
 	// Initialize the hydrated event map
@@ -238,15 +238,10 @@ func (c HubAdapter) createHydratedEventMap() (AlertFirstEventMap, error) {
 			continue
 		}
 
-		// Skip if no alerting rule is configured for this Trigger
-		if thisTrigger.AlertingRuleName == "" {
-			continue
-		}
-
 		// Check if the corresponding alerting rule is configured
-		_, alertExists := tmpAlertsMap[thisTrigger.AlertingRuleName]
+		_, alertExists := tmpAlertsMap[thisTrigger.EvaluationName]
 		if !alertExists {
-			c.logger.Info("Alert '%s' declared as Trigger dependency but not configured", thisTrigger.AlertingRuleName)
+			c.logger.Info("Alert '%s' declared as Trigger dependency but not configured", thisTrigger.EvaluationName)
 			continue
 		}
 
@@ -274,13 +269,13 @@ func (c HubAdapter) createHydratedEventMap() (AlertFirstEventMap, error) {
 		}
 
 		// Initialize the slice if it's nil for this alerting rule
-		if hydratedEventMap[thisTrigger.AlertingRuleName] == nil {
-			*hydratedEventMap[thisTrigger.AlertingRuleName] = make([]HydratedEvent, 0)
+		if hydratedEventMap[thisTrigger.EvaluationName] == nil {
+			*hydratedEventMap[thisTrigger.EvaluationName] = make([]HydratedEvent, 0)
 		}
 
 		// Append the hydrated event to the map
-		*hydratedEventMap[thisTrigger.AlertingRuleName] = append(
-			*hydratedEventMap[thisTrigger.AlertingRuleName],
+		*hydratedEventMap[thisTrigger.EvaluationName] = append(
+			*hydratedEventMap[thisTrigger.EvaluationName],
 			tmpHydratedEvent,
 		)
 	}
@@ -290,6 +285,7 @@ func (c HubAdapter) createHydratedEventMap() (AlertFirstEventMap, error) {
 
 // EnsurePrometheusRuleSynchronized creates or updates PrometheusFilter CR
 func (c HubAdapter) ensureEvaluationsSynchronized() (OperationResult, error) {
+	// TODO: Update this such that `evals` is informed by the Evaluation.Name values that serve as keys to the `hydratedEventMap`
 	evals := c.mdaiCR.Spec.Triggers
 	if evals == nil {
 		c.logger.Info("No triggers found in the CR, skipping PrometheusRule synchronization")
@@ -300,43 +296,38 @@ func (c HubAdapter) ensureEvaluationsSynchronized() (OperationResult, error) {
 	c.logger.Info("EnsurePrometheusRuleSynchronized")
 
 	for _, eval := range *evals {
-		if eval.TriggerType == mdaiv1.TriggerTypePrometheus {
-			c.logger.Info("Trigger type is Prometheus")
 
-			prometheusRuleCR, err := c.getOrCreatePrometheusRuleCR(defaultPrometheusRuleName)
-			if err != nil {
-				c.logger.Error(err, "Failed to get/create PrometheusRule")
-				return RequeueAfter(time.Second*10, err)
+		prometheusRuleCR, err := c.getOrCreatePrometheusRuleCR(defaultPrometheusRuleName)
+		if err != nil {
+			c.logger.Error(err, "Failed to get/create PrometheusRule")
+			return RequeueAfter(time.Second*10, err)
+		}
+
+		if eval.EvaluationName == "" {
+			c.logger.Info("Trigger does not depend on alerting rule, skipping PrometheusRule synchronization")
+			continue
+		}
+
+		var evaluation mdaiv1.Evaluation
+		evaluationFound := false
+
+		for _, rule := range *c.mdaiCR.Spec.Evaluations {
+			if rule.Name == eval.EvaluationName {
+				evaluation = rule
+				evaluationFound = true
+				break
 			}
+		}
 
-			if eval.AlertingRuleName == "" {
-				c.logger.Info("Trigger does not depend on alerting rule, skipping PrometheusRule synchronization")
-				continue
-			}
+		if evaluationFound {
+			prometheusRuleCR.Spec.Groups[0].Rules = composePrometheusRule(
+				evaluation, c.mdaiCR.Name)
+		} else {
+			c.logger.Info("Alert '%s' declared as Trigger dependency but not configured", eval.EvaluationName)
+		}
 
-			var alertRule mdaiv1.AlertingRule
-			alertRuleFound := false
-
-			for _, rule := range *c.mdaiCR.Spec.Alerts {
-				if rule.Name == eval.AlertingRuleName {
-					alertRule = rule
-					alertRuleFound = true
-					break
-				}
-			}
-
-			if alertRuleFound {
-				prometheusRuleCR.Spec.Groups[0].Rules = composePrometheusRule(
-					[]mdaiv1.AlertingRule{
-						alertRule,
-					}, c.mdaiCR.Name)
-			} else {
-				c.logger.Info("Alert '%s' declared as Trigger dependency but not configured", eval.AlertingRuleName)
-			}
-
-			if err = c.client.Update(c.context, prometheusRuleCR); err != nil {
-				c.logger.Error(err, "Failed to update PrometheusRule")
-			}
+		if err = c.client.Update(c.context, prometheusRuleCR); err != nil {
+			c.logger.Error(err, "Failed to update PrometheusRule")
 		}
 	}
 
@@ -380,24 +371,22 @@ func (c HubAdapter) getOrCreatePrometheusRuleCR(defaultPrometheusRuleName string
 	return prometheusRule, nil
 }
 
-func composePrometheusRule(alertingRules []mdaiv1.AlertingRule, engineName string) []prometheusv1.Rule {
-	prometheusRules := make([]prometheusv1.Rule, 0, len(alertingRules))
-	for _, alertingRule := range alertingRules {
-		prometheusRule := prometheusv1.Rule{
-			Expr:  alertingRule.Expr,
-			Alert: alertingRule.Name,
-			For:   alertingRule.For,
-			Annotations: map[string]string{
-				"alert_name":  alertingRule.Name, // FIXME we need a relationship between alert and variable
-				"engine_name": engineName,
-			},
-			Labels: map[string]string{
-				"severity": alertingRule.Severity,
-			},
-		}
-		prometheusRules = append(prometheusRules, prometheusRule)
+func composePrometheusRule(evaluation mdaiv1.Evaluation, engineName string) []prometheusv1.Rule {
+	prometheusRule := prometheusv1.Rule{
+		Expr:          evaluation.Expr,
+		Alert:         evaluation.Name,
+		For:           evaluation.For,
+		KeepFiringFor: evaluation.KeepFiringFor,
+		Annotations: map[string]string{
+			"alert_name":  evaluation.Name, // FIXME we need a relationship between alert and variable
+			"engine_name": engineName,
+		},
+		Labels: map[string]string{
+			"severity": evaluation.Severity,
+		},
 	}
-	return prometheusRules
+
+	return []prometheusv1.Rule{prometheusRule}
 }
 
 func (c HubAdapter) deletePrometheusRule() error {

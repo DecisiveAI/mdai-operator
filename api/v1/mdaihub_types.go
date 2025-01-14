@@ -41,34 +41,37 @@ type VariableSource struct {
 	// depending on the type some additional fields are needed
 }
 
-type AlertingRule struct {
+type Evaluation struct {
+	// How this evaluation will be referred to elsewhere in the config
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
+	// A valid PromQL query expression
 	// +kubebuilder:validation:Required
 	Expr intstr.IntOrString `json:"expr" yaml:"expr"`
 	// Alerts are considered firing once they have been returned for this long.
 	// +kubebuilder:validation:Optional
 	For *prometheusv1.Duration `json:"for,omitempty" yaml:"for,omitempty"`
-	// Alert will continue firing for this amount of time
+	// KeepFiringFor defines how long an alert will continue firing after the condition that triggered it has cleared.
 	// +kubebuilder:validation:Optional
-	KeepFiringFor *prometheusv1.Duration `json:"keep_firing_for,omitempty" yaml:"keep_firing_for,omitempty"`
+	KeepFiringFor *prometheusv1.NonEmptyDuration `json:"keep_firing_for,omitempty" yaml:"keep_firing_for,omitempty"`
 	// +kubebuilder:validation:Pattern:="^(warning|critical)$"
 	Severity string `json:"severity" yaml:"severity"`
 }
 
 type Trigger struct {
+	// How this Trigger will be referred to elsewhere in the config
 	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	Name string `json:"name" yaml:"name"`
+	// The name of the evaluation that you want to key off of
 	// +kubebuilder:validation:Required
-	TriggerType TriggerType `json:"triggerType"` // prometheus
+	EvaluationName string `json:"evaluationName" yaml:"evaluationName"`
+	// Does this evaluation kick off an action on 'firing' status or 'resolved'? If omitted, the evaluation will only trigger on the 'firing' status.
 	// +kubebuilder:validation:Optional
-	AlertingRuleName string `json:"alertingRule,omitempty"`
-	// Does this evaluation kick off an action on 'firing' status or 'resolved'?
+	// +kubebuilder:validation:Pattern:="^(firing|resolved)$"
+	AlertStatus string `json:"alertStatus,omitempty" yaml:"alertStatus,omitempty"`
+	// Label from the Expr indicating which value(s) the alert payload will forward. Helpful for dictating downstream behavior.
 	// +kubebuilder:validation:Optional
-	AlertStatus string `json:"alertStatus,omitempty" yaml:"alertStatus,omitempty"` // 'firing' | 'resolved'
-	// Label from the Expr indicating which value(s) the alert payload will forward
-	// +kubebuilder:validation:Optional
-	RelevantLabel string `json:"relevantLabel,omitempty" yaml:"relevantLabel,omitempty"`
+	RelevantLabels []string `json:"relevantLabels,omitempty" yaml:"relevantLabels,omitempty"`
 }
 
 type Observer struct {
@@ -78,27 +81,29 @@ type Observer struct {
 
 // MdaiHubSpec defines the desired state of MdaiHub.
 type MdaiHubSpec struct {
-	Alerts    *[]AlertingRule `json:"alerts,omitempty"`
-	Variables *[]Variable     `json:"variables,omitempty"`
-	Observers *[]Observer     `json:"observers,omitempty"`   // watchers configuration (datalyzer)
-	Triggers  *[]Trigger      `json:"evaluations,omitempty"` // triggers configuration (alerting rules)
-	Actions   *[]Action       `json:"events,omitempty"`      // events configuration (update variables through api and operator)
-	EventMap  *EventMap       `json:"eventMap,omitempty"`
+	Variables   *[]Variable   `json:"variables,omitempty"`
+	Observers   *[]Observer   `json:"observers,omitempty"`   // watchers configuration (datalyzer)
+	Evaluations *[]Evaluation `json:"evaluations,omitempty"` // evaluation configuration (alerting rules)
+	Triggers    *[]Trigger    `json:"triggers,omitempty"`    // triggers configuration (alert assessment)
+	Actions     *[]Action     `json:"actions,omitempty"`     // events configuration (update variables through api and operator)
+	EventMap    *EventMap     `json:"eventMap,omitempty"`    // associate triggers with actions
 }
 
-// Keys should be names of Triggers
-// Values should be arrays of names of Actions
+// EventMap Keys should be names of Triggers
+// Values should be arrays of name of Actions
 type EventMap map[string][]string
 
 type Action struct {
+	// How this Action will be referred to elsewhere in the config
 	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	Name string `json:"name" yaml:"name"`
+	// Values depend on the type of the variable named. To be expanded.
 	// +kubebuilder:validation:Required
-	ActionType string `json:"actionType"` // update_variable
+	// +kubebuilder:validation:Pattern:="^(mdai/(add|remove))$"
+	Operation string `json:"operation" yaml:"operation"`
+	// The name of the variable that this Action will affect
 	// +kubebuilder:validation:Required
-	Operation string `json:"operation"` // Depends on variable type
-	// +kubebuilder:validation:Required
-	VariableName string `json:"variableName"`
+	VariableName string `json:"variableName" yaml:"variableName"`
 }
 
 // MdaiHubStatus defines the observed state of MdaiHub.
