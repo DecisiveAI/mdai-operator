@@ -1,12 +1,15 @@
 apiVersion: mdai.mdai.ai/v1
+# Put a brief introduction
 kind: MdaiHub
+# Metadata section for the resource
 metadata:
   labels:
     app.kubernetes.io/name: mdai-operator
     app.kubernetes.io/managed-by: kustomize
   name: mdaihub-sample
 spec:
-  observers:
+# Specification section for the MdaiHub resource
+spec:  observers:
     - name: observer-1
   variables:
     - name: service_list
@@ -14,11 +17,13 @@ spec:
       type: "array"
       delimiter: "|"
       defaultValue: "n/a"
+# An evaluation defines the conditions to check. It monitors according to the definition below yadda yadda. 
   evaluations:
     - name: logBytesOutTooHighBySvc
       expr: '(increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024) by service_name'
       for: 5m
       severity: warning
+# Define triggers (events that occur based on evaluations) 
   triggers:
     - name: serviceLogsExceedThreshold
       evaluationName: logBytesOutTooHighBySvc
@@ -32,6 +37,7 @@ spec:
       relevantLabels:
         - 'service_name'
       evaluationType: prometheus
+# Define triggers (events that occur based on evaluations) and are controlled by variables which you can define. See here for more details. 
   actions:
     - name: addService
       action_type: mdai/update_variable
@@ -41,6 +47,7 @@ spec:
       action_type: mdai/update_variable
       operation: remove
       variable_name: service_list
+# Map triggers to actions. When a trigger is activated, the requisite action is taken.
   eventMap:
     serviceLogsExceedThreshold:
       - addService
