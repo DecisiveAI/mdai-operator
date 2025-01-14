@@ -19,6 +19,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/valkey-io/valkey-go"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -30,12 +32,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"time"
 )
 
 const (
@@ -77,21 +79,21 @@ func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	_, err := r.ReconcileHandler(*NewHubAdapter(ctx, fetchedCR, log, r.Client, r.Recorder, r.Scheme, r.ValKeyClient))
+	_, err := r.ReconcileHandler(ctx, *NewHubAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme, r.ValKeyClient))
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
 	log.Info("-- Finished reconciliation --")
 	if r.ValKeyClient != nil {
-		//TODO make 2 configurable
+		// TODO make 2 configurable
 		log.Info("Rescheduling in 2 minutes for valkey synchronization")
 		return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
 	}
 	return ctrl.Result{}, nil
 }
 
-func (r *MdaiHubReconciler) ReconcileHandler(adapter HubAdapter) (ctrl.Result, error) {
+func (r *MdaiHubReconciler) ReconcileHandler(ctx context.Context, adapter HubAdapter) (ctrl.Result, error) {
 	operations := []ReconcileOperation{
 		adapter.ensureHubDeletionProcessed,
 		adapter.ensureStatusInitialized,
@@ -100,7 +102,7 @@ func (r *MdaiHubReconciler) ReconcileHandler(adapter HubAdapter) (ctrl.Result, e
 		adapter.ensureVariableSynced,
 	}
 	for _, operation := range operations {
-		result, err := operation()
+		result, err := operation(ctx)
 		if err != nil || result.RequeueRequest {
 			return ctrl.Result{RequeueAfter: result.RequeueDelay}, err
 		}
@@ -114,7 +116,7 @@ func (r *MdaiHubReconciler) ReconcileHandler(adapter HubAdapter) (ctrl.Result, e
 	return ctrl.Result{}, nil
 }
 
-type ReconcileOperation func() (OperationResult, error)
+type ReconcileOperation func(context.Context) (OperationResult, error)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -136,23 +138,27 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	combinedPredicate := predicate.And(predicate.GenerationChangedPredicate{}, selectorPredicate, noDeletePredicate)
+	combinedPredicate := predicate.And(selectorPredicate, createPredicate)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&mdaiv1.MdaiHub{}).
 		Watches(
+			// we are watching OpenTelemetryCollector resources to detect if new ones have been created
+			// if new ones are created, we have to provide mdai variables for new collectors
+			// we are not interested in delete or update events for otel collectors
 			&v1beta1.OpenTelemetryCollector{},
 			handler.EnqueueRequestsFromMapFunc(r.requeueByLabels),
 			builder.WithPredicates(combinedPredicate),
 		).
+		WithOptions(controller.Options{MaxConcurrentReconciles: 1}).
 		Named("mdaihub").
 		Complete(r)
 }
 
 func (r *MdaiHubReconciler) initializeValkey() error {
 	// for built-in valkey storage we read the environment variable to get connection string
-	valkeyEndpoint := "127.0.0.1:6379" //"valkey-primary.default.svc.cluster.local:6379" //os.Getenv("VALKEY_ENDPOINT")
-	valkeyPassword := "abc"            //os.Getenv("VALKEY_PASSWORD")
+	valkeyEndpoint := "127.0.0.1:6379" // "valkey-primary.default.svc.cluster.local:6379" //os.Getenv("VALKEY_ENDPOINT")
+	valkeyPassword := "abc"            // os.Getenv("VALKEY_PASSWORD")
 	if valkeyEndpoint == "" || valkeyPassword == "" {
 		log := logger.FromContext(context.Background())
 		log.Info("ValKey client is not enabled; skipping initialization")
@@ -185,21 +191,6 @@ func (r *MdaiHubReconciler) requeueByLabels(ctx context.Context, obj client.Obje
 	}
 	log.Info("OpenTelemetryCollector for MdaiHub found with hubNameFromLabel", "hubNameFromLabel", hubNameFromLabel)
 
-	//nsName := types.NamespacedName{
-	//	Name:      hubNameFromLabel,
-	//	Namespace: otelCollector.Namespace, // TODO Assuming MdaiHub is namespaced
-	//}
-
-	//var mdaiHub mdaiv1.MdaiHub
-	//if err := r.Get(ctx, nsName, &mdaiHub); err != nil {
-	//	if client.IgnoreNotFound(err) != nil {
-	//		log.Error(err, "unable to fetch MdaiHub", "hubNameFromLabel", hubNameFromLabel, "namespace", otelCollector.Namespace)
-	//	} else {
-	//		log.Info("MdaiHub not found; possible misconfiguration", "hubNameFromLabel", hubNameFromLabel, "namespace", otelCollector.Namespace)
-	//	}
-	//	return nil
-	//}
-
 	log.Info("Requeueing MdaiHub triggered by otel collector", "hubNameFromLabel", hubNameFromLabel, "otelCollector", otelCollector.Name)
 
 	return []ctrl.Request{
@@ -212,12 +203,12 @@ func (r *MdaiHubReconciler) requeueByLabels(ctx context.Context, obj client.Obje
 	}
 }
 
-var noDeletePredicate = predicate.Funcs{
+var createPredicate = predicate.Funcs{
 	CreateFunc: func(e event.CreateEvent) bool {
 		return true
 	},
 	UpdateFunc: func(e event.UpdateEvent) bool {
-		return true
+		return false
 	},
 	DeleteFunc: func(e event.DeleteEvent) bool {
 		return false // Skip delete events

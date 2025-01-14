@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/valkey-io/valkey-go"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"reflect"
-	"strings"
-	"time"
 
 	"github.com/go-logr/logr"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -37,6 +37,7 @@ const (
 	ObjectUnchanged ObjectState = false
 
 	mdaiVariablePrefix = "MDAI_"
+	envConfigMapName   = "mdai-variables"
 )
 
 type HubAdapter struct {
@@ -45,14 +46,12 @@ type HubAdapter struct {
 	client       client.Client
 	recorder     record.EventRecorder
 	scheme       *runtime.Scheme
-	context      context.Context
 	valKeyClient *valkey.Client
 }
 
 type ObjectState bool
 
 func NewHubAdapter(
-	ctx context.Context,
 	cr *mdaiv1.MdaiHub,
 	log logr.Logger,
 	client client.Client,
@@ -60,7 +59,6 @@ func NewHubAdapter(
 	scheme *runtime.Scheme,
 	valkeyClient *valkey.Client) *HubAdapter {
 	return &HubAdapter{
-		context:      ctx,
 		mdaiCR:       cr,
 		logger:       log,
 		client:       client,
@@ -70,7 +68,7 @@ func NewHubAdapter(
 	}
 }
 
-func (c HubAdapter) ensureFinalizerInitialized() (OperationResult, error) {
+func (c HubAdapter) ensureFinalizerInitialized(ctx context.Context) (OperationResult, error) {
 	if !controllerutil.ContainsFinalizer(c.mdaiCR, hubFinalizer) {
 		c.logger.Info("Adding Finalizer for Engine")
 		if ok := controllerutil.AddFinalizer(c.mdaiCR, hubFinalizer); !ok {
@@ -78,7 +76,7 @@ func (c HubAdapter) ensureFinalizerInitialized() (OperationResult, error) {
 			return RequeueWithError(errors.New("failed to add finalizer " + hubFinalizer))
 		}
 
-		if err := c.client.Update(c.context, c.mdaiCR); err != nil {
+		if err := c.client.Update(ctx, c.mdaiCR); err != nil {
 			c.logger.Error(err, "Failed to update custom resource to add finalizer")
 			return RequeueWithError(err)
 		}
@@ -87,10 +85,10 @@ func (c HubAdapter) ensureFinalizerInitialized() (OperationResult, error) {
 	return ContinueProcessing()
 }
 
-func (c HubAdapter) ensureStatusInitialized() (OperationResult, error) {
+func (c HubAdapter) ensureStatusInitialized(ctx context.Context) (OperationResult, error) {
 	if len(c.mdaiCR.Status.Conditions) == 0 {
 		meta.SetStatusCondition(&c.mdaiCR.Status.Conditions, metav1.Condition{Type: typeAvailableHub, Status: metav1.ConditionUnknown, Reason: "Reconciling", Message: "Starting reconciliation"})
-		if err := c.client.Status().Update(c.context, c.mdaiCR); err != nil {
+		if err := c.client.Status().Update(ctx, c.mdaiCR); err != nil {
 			c.logger.Error(err, "Failed to update Cluster status")
 			return RequeueWithError(err)
 		}
@@ -101,7 +99,7 @@ func (c HubAdapter) ensureStatusInitialized() (OperationResult, error) {
 }
 
 // FinalizeHub handles the deletion of a hub
-func (c HubAdapter) FinalizeHub() (ObjectState, error) {
+func (c HubAdapter) FinalizeHub(ctx context.Context) (ObjectState, error) {
 	if !controllerutil.ContainsFinalizer(c.mdaiCR, hubFinalizer) {
 		c.logger.Info("No finalizer found")
 		return ObjectModified, nil
@@ -109,25 +107,15 @@ func (c HubAdapter) FinalizeHub() (ObjectState, error) {
 
 	c.logger.Info("Performing Finalizer Operations for Cluster before delete CR")
 
-	// meta.SetStatusCondition(&c.mdaiCR.Status.Conditions, metav1.Condition{
-	//	Type:    typeDegradedEngine,
-	//	Status:  metav1.ConditionUnknown,
-	//	Reason:  "Finalizing",
-	//	Message: fmt.Sprintf("Performing finalizer operations for the custom resource: %s ", c.mdaiCR.Name)})
-	// if err := c.client.Status().Update(c.context, c.mdaiCR); err != nil {
-	//	c.logger.Info("Failed to update Cluster status, will re-try later")
-	//	return ObjectUnchanged, err
-	// }
-
 	c.logger.Info("Here we are doing some real finalization")
 
-	err := c.deletePrometheusRule()
+	err := c.deletePrometheusRule(ctx)
 	if err != nil {
 		c.logger.Info("Failed to delete prometheus rules, will re-try later")
 		return ObjectUnchanged, err
 	}
 
-	if err := c.client.Get(c.context, types.NamespacedName{Name: c.mdaiCR.Name, Namespace: c.mdaiCR.Namespace}, c.mdaiCR); err != nil {
+	if err := c.client.Get(ctx, types.NamespacedName{Name: c.mdaiCR.Name, Namespace: c.mdaiCR.Namespace}, c.mdaiCR); err != nil {
 		if apierrors.IsNotFound(err) {
 			c.logger.Info("Cluster has been deleted, no need to finalize")
 			return ObjectModified, nil
@@ -142,7 +130,7 @@ func (c HubAdapter) FinalizeHub() (ObjectState, error) {
 		Reason:  "Finalizing",
 		Message: fmt.Sprintf("Finalizer operations for custom resource %s name were successfully accomplished", c.mdaiCR.Name),
 	}) {
-		if err := c.client.Status().Update(c.context, c.mdaiCR); err != nil {
+		if err := c.client.Status().Update(ctx, c.mdaiCR); err != nil {
 			if apierrors.IsNotFound(err) {
 				c.logger.Info("Cluster has been deleted, no need to finalize")
 				return ObjectModified, nil
@@ -154,20 +142,20 @@ func (c HubAdapter) FinalizeHub() (ObjectState, error) {
 	}
 
 	c.logger.Info("Removing Finalizer for Cluster after successfully perform the operations")
-	if err := c.EnsureHubFinalizerDeleted(); err != nil {
+	if err := c.EnsureHubFinalizerDeleted(ctx); err != nil {
 		return ObjectUnchanged, err
 	}
 	return ObjectModified, nil
 }
 
 // EnsureHubFinalizerDeleted removes finalizer of a Hub
-func (c HubAdapter) EnsureHubFinalizerDeleted() error {
+func (c HubAdapter) EnsureHubFinalizerDeleted(ctx context.Context) error {
 	c.logger.Info("Deleting Cluster Finalizer")
-	return c.deleteFinalizer(c.mdaiCR, hubFinalizer)
+	return c.deleteFinalizer(ctx, c.mdaiCR, hubFinalizer)
 }
 
 // deleteFinalizer deletes finalizer of a generic CR
-func (c HubAdapter) deleteFinalizer(object client.Object, finalizer string) error {
+func (c HubAdapter) deleteFinalizer(ctx context.Context, object client.Object, finalizer string) error {
 	metadata, err := meta.Accessor(object)
 	if err != nil {
 		c.logger.Error(err, "Failed to delete finalizer", "finalizer", finalizer)
@@ -176,7 +164,7 @@ func (c HubAdapter) deleteFinalizer(object client.Object, finalizer string) erro
 	finalizers := metadata.GetFinalizers()
 	if Contains(finalizers, finalizer) {
 		metadata.SetFinalizers(Filter(finalizers, finalizer))
-		return c.client.Update(c.context, object)
+		return c.client.Update(ctx, object)
 	}
 	return nil
 }
@@ -202,7 +190,7 @@ func Filter(list []string, strToFilter string) (newList []string) {
 }
 
 // EnsurePrometheusRuleSynchronized creates or updates PrometheusFilter CR
-func (c HubAdapter) ensureEvaluationsSynchronized() (OperationResult, error) {
+func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (OperationResult, error) {
 	evals := c.mdaiCR.Spec.Evaluations
 	if evals == nil {
 		c.logger.Info("No evaluation found in the CR, skipping PrometheusRule synchronization")
@@ -216,7 +204,7 @@ func (c HubAdapter) ensureEvaluationsSynchronized() (OperationResult, error) {
 		if eval.EvaluationType == mdaiv1.EvaluationTypePrometheus {
 			c.logger.Info("Evaluation type is Prometheus")
 
-			prometheusRuleCR, err := c.getOrCreatePrometheusRuleCR(defaultPrometheusRuleName)
+			prometheusRuleCR, err := c.getOrCreatePrometheusRuleCR(ctx, defaultPrometheusRuleName)
 			if err != nil {
 				c.logger.Error(err, "Failed to get/create PrometheusRule")
 				return RequeueAfter(time.Second*10, err)
@@ -229,7 +217,7 @@ func (c HubAdapter) ensureEvaluationsSynchronized() (OperationResult, error) {
 
 			prometheusRuleCR.Spec.Groups[0].Rules = composePrometheusRule(*eval.AlertingRules, c.mdaiCR.Name)
 
-			if err = c.client.Update(c.context, prometheusRuleCR); err != nil {
+			if err = c.client.Update(ctx, prometheusRuleCR); err != nil {
 				c.logger.Error(err, "Failed to update PrometheusRule")
 			}
 		}
@@ -238,10 +226,10 @@ func (c HubAdapter) ensureEvaluationsSynchronized() (OperationResult, error) {
 	return ContinueProcessing()
 }
 
-func (c HubAdapter) getOrCreatePrometheusRuleCR(defaultPrometheusRuleName string) (*prometheusv1.PrometheusRule, error) {
+func (c HubAdapter) getOrCreatePrometheusRuleCR(ctx context.Context, defaultPrometheusRuleName string) (*prometheusv1.PrometheusRule, error) {
 	prometheusRule := &prometheusv1.PrometheusRule{}
 	err := c.client.Get(
-		c.context,
+		ctx,
 		client.ObjectKey{Namespace: c.mdaiCR.Namespace, Name: defaultPrometheusRuleName},
 		prometheusRule,
 	)
@@ -261,7 +249,7 @@ func (c HubAdapter) getOrCreatePrometheusRuleCR(defaultPrometheusRuleName string
 				},
 			},
 		}
-		if err := c.client.Create(c.context, prometheusRule); err != nil {
+		if err := c.client.Create(ctx, prometheusRule); err != nil {
 			c.logger.Error(err, "Failed to create PrometheusRule"+defaultPrometheusRuleName, "prometheus_rule_name", defaultPrometheusRuleName)
 			return nil, err
 		}
@@ -296,7 +284,7 @@ func composePrometheusRule(alertingRules []mdaiv1.AlertingRule, engineName strin
 	return prometheusRules
 }
 
-func (c HubAdapter) deletePrometheusRule() error {
+func (c HubAdapter) deletePrometheusRule(ctx context.Context) error {
 	prometheusRuleName := "mdai-" + c.mdaiCR.Name + "-alert-rules"
 	prometheusRule := &prometheusv1.PrometheusRule{
 		ObjectMeta: metav1.ObjectMeta{
@@ -305,7 +293,7 @@ func (c HubAdapter) deletePrometheusRule() error {
 		},
 	}
 
-	err := c.client.Delete(c.context, prometheusRule)
+	err := c.client.Delete(ctx, prometheusRule)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			c.logger.Info("PrometheusRule not found, nothing to delete", "prometheus_rule_name", prometheusRuleName)
@@ -319,7 +307,7 @@ func (c HubAdapter) deletePrometheusRule() error {
 	return nil
 }
 
-func (c HubAdapter) ensureVariableSynced() (OperationResult, error) {
+func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, error) {
 	// current assumption is we have only built-in Valkey storage
 	variables := c.mdaiCR.Spec.Variables
 	if variables == nil {
@@ -340,7 +328,7 @@ func (c HubAdapter) ensureVariableSynced() (OperationResult, error) {
 			valkeyKey := variable.Name
 			if variable.Type == mdaiv1.VariableTypeArray {
 				valueAsSlice, err := valkeyClient.Do(
-					c.context,
+					ctx,
 					valkeyClient.B().Smembers().Key(valkeyKey).Build(),
 				).AsStrSlice()
 
@@ -351,12 +339,14 @@ func (c HubAdapter) ensureVariableSynced() (OperationResult, error) {
 
 				c.logger.Info("Valkey data received", "key", valkeyKey, "valueAsSlice", valueAsSlice)
 
-				if variable.DefaultValue != nil && len(valueAsSlice) == 0 {
-					c.logger.Info("Applying default value to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
-					valueAsSlice = append(valueAsSlice, *variable.DefaultValue)
-				} else {
-					c.logger.Info("No value found in Valkey, skipping", "key", valkeyKey)
-					continue
+				if len(valueAsSlice) == 0 {
+					if variable.DefaultValue != nil {
+						c.logger.Info("Applying default value to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
+						valueAsSlice = append(valueAsSlice, *variable.DefaultValue)
+					} else {
+						c.logger.Info("No value found in Valkey, skipping", "key", valkeyKey)
+						continue
+					}
 				}
 				variableWithDelimiter := strings.Join(valueAsSlice, variable.Delimiter)
 				envVariables = append(
@@ -367,28 +357,30 @@ func (c HubAdapter) ensureVariableSynced() (OperationResult, error) {
 					},
 				)
 			} else if variable.Type == mdaiv1.VariableTypeScalar {
-				value, err := valkeyClient.Do(
-					c.context,
+				valueAsString, err := valkeyClient.Do(
+					ctx,
 					valkeyClient.B().Get().Key(valkeyKey).Build(),
 				).ToString()
 
-				if err != nil && err.Error() == "valkey nil message" {
-					if variable.DefaultValue != nil {
-						c.logger.Info("Applying default value to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
-						value = *variable.DefaultValue
+				if err != nil {
+					if err.Error() == "valkey nil message" {
+						if variable.DefaultValue != nil {
+							c.logger.Info("Applying default valueAsString to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
+							valueAsString = *variable.DefaultValue
+						} else {
+							c.logger.Info("No valueAsString found in Valkey, skipping", "key", valkeyKey)
+							continue
+						}
 					} else {
-						c.logger.Info("No value found in Valkey, skipping", "key", valkeyKey)
-						continue
+						c.logger.Error(err, "Failed to get valueAsString from Valkey", "key", valkeyKey)
+						return RequeueAfter(time.Second*10, err)
 					}
-				} else {
-					c.logger.Error(err, "Failed to get value from Valkey", "key", valkeyKey)
-					return RequeueAfter(time.Second*10, err)
 				}
 
-				c.logger.Info("Valkey data received", "key", valkeyKey, "value", value)
+				c.logger.Info("Valkey data received", "key", valkeyKey, "valueAsString", valueAsString)
 				envVariables = append(envVariables, v1.EnvVar{
 					Name:  transformKeyToVariableName(valkeyKey),
-					Value: value,
+					Value: valueAsString,
 				})
 			}
 		}
@@ -399,51 +391,84 @@ func (c HubAdapter) ensureVariableSynced() (OperationResult, error) {
 		return ContinueProcessing()
 	}
 
-	collectors, err := c.listOtelCollectorsWithLabel(c.context, fmt.Sprintf("%s=%s", LabelMdaiHubName, c.mdaiCR.Name))
+	collectors, err := c.listOtelCollectorsWithLabel(ctx, fmt.Sprintf("%s=%s", LabelMdaiHubName, c.mdaiCR.Name))
 	if err != nil {
 		return OperationResult{}, err
 	}
+
+	// assuming collectors could be running in different namespaces, so we need to update envConfigMap in each namespace
+	namespaces := make(map[string]bool)
 	for _, collector := range collectors {
-		c.logger.Info("Updating environment variables in OpenTelemetry Collector", "name", collector.Name)
-		// insert env variable
-		collectorCopy := collector.DeepCopy()
-		//TODO clean up old env variables with mdai prefix
-		collectorCopy.Spec.Env = upsertEnvVars(collectorCopy.Spec.Env, envVariables)
+		namespaces[collector.Namespace] = true
+	}
 
-		if collector.Spec.Env != nil && reflect.DeepEqual(collector.Spec.Env, collectorCopy.Spec.Env) {
-			c.logger.Info("Environment variables are already up-to-date")
-			continue
-		}
-
-		// trigger update
-		if err := c.client.Update(c.context, collectorCopy); err != nil {
-			c.logger.Error(err, "Failed to update OpenTelemetry Collector", "name", collectorCopy.Name)
+	namespaceToRestart := make(map[string]bool)
+	for namespace := range namespaces {
+		operationResult, err := c.createOrUpdateEnvConfigMap(ctx, envVariables, namespace)
+		if err != nil {
 			return OperationResult{}, err
+		}
+		if operationResult == controllerutil.OperationResultUpdated || operationResult == controllerutil.OperationResultUpdatedStatus {
+			namespaceToRestart[namespace] = true
+		}
+	}
+
+	for _, collector := range collectors {
+		if _, shouldRestart := namespaceToRestart[collector.Namespace]; shouldRestart {
+			c.logger.Info("Triggering restart of OpenTelemetry Collector", "name", collector.Name)
+			collectorCopy := collector.DeepCopy()
+			// trigger restart
+			if collector.Annotations == nil {
+				collector.Annotations = make(map[string]string)
+			}
+			collectorCopy.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+			if err := c.client.Update(ctx, collectorCopy); err != nil {
+				c.logger.Error(err, "Failed to update OpenTelemetry Collector", "name", collectorCopy.Name)
+				return OperationResult{}, err
+			}
 		}
 	}
 
 	return ContinueProcessing()
 }
 
-func transformKeyToVariableName(valkeyKey string) string {
-	return mdaiVariablePrefix + strings.ToUpper(valkeyKey)
+func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envVariables []v1.EnvVar, namespace string) (controllerutil.OperationResult, error) {
+	envMap := envVarsToMap(envVariables)
+	desiredConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      envConfigMapName,
+			Namespace: namespace,
+		},
+		Data: envMap,
+	}
+
+	// Set owner reference if necessary
+	// For example, if the ConfigMap should be owned by a specific Custom Resource
+	// controllerutil.SetControllerReference(owner, desiredConfigMap, scheme)
+
+	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, desiredConfigMap, func() error {
+		desiredConfigMap.Data = envMap
+		return nil
+	})
+	if err != nil {
+		c.logger.Error(err, "Failed to create or update ConfigMap", "name", envConfigMapName, "namespace", namespace)
+		return "", fmt.Errorf("failed to create or update ConfigMap: %w", err)
+	}
+
+	c.logger.Info("Successfully created or updated ConfigMap", "name", envConfigMapName, "namespace", namespace, "operation", operationResult)
+	return operationResult, nil
 }
 
-func upsertEnvVars(existingEnv []v1.EnvVar, newEnv []v1.EnvVar) []v1.EnvVar {
-	envMap := make(map[string]int)
-	for i, env := range existingEnv {
-		envMap[env.Name] = i
+func envVarsToMap(envVars []v1.EnvVar) map[string]string {
+	envMap := make(map[string]string)
+	for _, env := range envVars {
+		envMap[env.Name] = env.Value
 	}
+	return envMap
+}
 
-	for _, env := range newEnv {
-		if idx, exists := envMap[env.Name]; exists {
-			existingEnv[idx].Value = env.Value
-		} else {
-			existingEnv = append(existingEnv, env)
-		}
-	}
-
-	return existingEnv
+func transformKeyToVariableName(valkeyKey string) string {
+	return mdaiVariablePrefix + strings.ToUpper(valkeyKey)
 }
 
 func (c HubAdapter) listOtelCollectorsWithLabel(ctx context.Context, labelSelector string) ([]v1beta1.OpenTelemetryCollector, error) {
@@ -466,10 +491,10 @@ func (c HubAdapter) listOtelCollectorsWithLabel(ctx context.Context, labelSelect
 }
 
 // ensureHubDeletionProcessed deletes Cluster in cases a deletion was triggered
-func (c HubAdapter) ensureHubDeletionProcessed() (OperationResult, error) {
+func (c HubAdapter) ensureHubDeletionProcessed(ctx context.Context) (OperationResult, error) {
 	if !c.mdaiCR.DeletionTimestamp.IsZero() {
 		c.logger.Info("Deleting Cluster:" + c.mdaiCR.Name)
-		crState, err := c.FinalizeHub()
+		crState, err := c.FinalizeHub(ctx)
 		if crState == ObjectUnchanged || err != nil {
 			c.logger.Info("Has to requeue mdai")
 			return RequeueAfter(5*time.Second, err)

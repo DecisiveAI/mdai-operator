@@ -6,6 +6,9 @@ metadata:
   name: gateway-3
   namespace: default
 spec:
+  envFrom:
+    - configMapRef:
+        name: mdai-variables
   config:
     exporters:
       debug:

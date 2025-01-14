@@ -8,7 +8,12 @@ Operator
 - reads variables from ValKey
 - supported two types of variables: array and scalar
 - all mdai environment variables added prefix 'MDAI_' when injected into OTEL collector and changed to upper case
-- injects environmental variables into OTEL collectors that has labels matching hub name
+- injects environmental variables into OTEL collectors through config map that has labels matching hub name. OTEL collector has to be configured to use config map:
+```yaml
+  envFrom:
+    - configMapRef:
+      name: mdai-variabes-hash
+```
 - supports built-in ValKey storage type for variables 
 
 ## Getting Started
@@ -63,7 +68,7 @@ You can apply the samples (examples) from the config/sample:
 ```sh
 kubectl apply -k config/samples/
 ```
-
+Deploy test otel collectors:
 ```sh
 kubectl apply -k test/test-samples/
 ```
@@ -76,6 +81,7 @@ kubectl apply -k test/test-samples/
 ```sh
 kubectl delete -k config/samples/
 ```
+Delete test OTEL collectors:
 ```sh
 kubectl delete -k test/test-samples/
 ```
