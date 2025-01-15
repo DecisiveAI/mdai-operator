@@ -1,3 +1,6 @@
+[![E2E Tests](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test-e2e.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test-e2e.yml)
+[![Tests](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml)
+[![Lint](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml)
 # mdai-operator
 manages MDAI Hub
 ## Description
@@ -8,15 +11,17 @@ Operator
 - Reads variables from ValKey.
 - Requires environment variables with the ValKey endpoint and password to be provided.
 - Supports two types of variables: arrays and scalars.
-- Adds the prefix MDAI_ to all MDAI environment variables when injecting them into the OTEL collector and converts them to uppercase.
-- Injects environment variables into OTEL collectors through a ConfigMap with labels matching the hub name. The OTEL collector must be configured to use the ConfigMap.
-- Variables update is applied by triggering collector's restart
+- Converts to uppercase MDAI environment variables when injecting them into the OTEL collector.
+  Injects environment variables into OTEL collectors through a ConfigMap with labels matching the hub name. The OTEL collector must be configured to use the ConfigMap.
+- The ConfigMap name is the MDAI hub name plus `-variables`
 ```yaml
   envFrom:
     - configMapRef:
-      name: mdai-variabes-hash
+      name: mdaihub-sample-variabes
 ```
-- supports built-in ValKey storage type for variables 
+- Updates to variables are applied by triggering the collector’s restart
+
+- Supports the built-in ValKey storage type for variables 
 
 ## Getting Started
 ### Importing opentelemetry-operator module from private repo
@@ -44,6 +49,14 @@ export VALKEY_PASSWORD=abc
 ```
 
 ### To Deploy on the cluster
+**Generate valkey secret**
+```shell
+kubectl create secret generic valkey-secret \
+  --from-literal=VALKEY_ENDPOINT=valkey-primary.default.svc.cluster.local:6379 \
+  --from-literal=VALKEY_PASSWORD=abc \
+  --namespace=mdai-operator-system \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
 **Build and push your image to the location specified by `IMG`:**
 
 ```sh

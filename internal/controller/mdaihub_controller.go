@@ -58,6 +58,7 @@ type MdaiHubReconciler struct {
 // +kubebuilder:rbac:groups=mdai.mdai.ai,resources=mdaihubs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=opentelemetry.io,resources=opentelemetrycollectors,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=monitoring.coreos.com,resources=prometheusrules,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -87,9 +88,14 @@ func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	log.Info("-- Finished reconciliation --")
 	if r.ValKeyClient != nil {
-		// TODO make 2 configurable
-		log.Info("Rescheduling in 2 minutes for valkey synchronization")
-		return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
+		var timeInterval metav1.Duration
+		if fetchedCR.Spec.Config != nil && fetchedCR.Spec.Config.ReconcileLoopInterval != nil {
+			timeInterval = *fetchedCR.Spec.Config.ReconcileLoopInterval
+		} else {
+			timeInterval = metav1.Duration{Duration: 2 * time.Minute}
+		}
+		log.Info(fmt.Sprintf("Rescheduling in %v for Valkey synchronization", timeInterval))
+		return ctrl.Result{RequeueAfter: timeInterval.Duration}, nil
 	}
 	return ctrl.Result{}, nil
 }

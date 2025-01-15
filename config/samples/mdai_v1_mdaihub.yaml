@@ -6,6 +6,8 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: mdaihub-sample
 spec:
+  config:
+    reconcileLoopInterval: 3m
   variables:
     - name: service_list
       storageType: "mdai-valkey"

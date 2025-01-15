@@ -39,6 +39,15 @@ spec:
           spec:
             description: MdaiHubSpec defines the desired state of MdaiHub.
             properties:
+              config:
+                properties:
+                  reconcileLoopInterval:
+                    default: 2m
+                    description: Interval at which to reconcile the Cluster Configuration,
+                      applied only if built-in ValKey is enabled.
+                    format: duration
+                    type: string
+                type: object
               evaluations:
                 items:
                   properties:

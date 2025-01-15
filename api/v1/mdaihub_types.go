@@ -57,7 +57,7 @@ type Evaluation struct {
 	// +kubebuilder:validation:Required
 	EvaluationType EvaluationType `json:"evaluationType"` // prometheus
 	// +kubebuilder:validation:Optional
-	AlertingRules *[]AlertingRule `json:"alertingRules"`
+	AlertingRules *[]AlertingRule `json:"alertingRules,omitempty"`
 }
 
 type Observer struct {
@@ -65,8 +65,17 @@ type Observer struct {
 	Name string `json:"name"` // TODO: define the kind of observer (datalyzer)
 }
 
+type Config struct {
+	// Interval at which to reconcile the Cluster Configuration, applied only if built-in ValKey is enabled.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:="2m"
+	// +kubebuilder:validation:Format:=duration
+	ReconcileLoopInterval *metav1.Duration `json:"reconcileLoopInterval,omitempty"`
+}
+
 // MdaiHubSpec defines the desired state of MdaiHub.
 type MdaiHubSpec struct {
+	Config      *Config       `json:"config,omitempty"`
 	Variables   *[]Variable   `json:"variables,omitempty"`
 	Observers   *[]Observer   `json:"observers,omitempty"`   // watchers configuration (datalyzer)
 	Evaluations *[]Evaluation `json:"evaluations,omitempty"` // evaluations configuration (alerting rules)

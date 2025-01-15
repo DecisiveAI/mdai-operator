@@ -8,7 +8,7 @@ metadata:
 spec:
   envFrom:
     - configMapRef:
-        name: mdai-variables
+        name: mdaihub-sample-variables
   config:
     exporters:
       debug:
@@ -23,7 +23,7 @@ spec:
       filter/ottl:
         logs:
           log_record:
-            - 'IsMatch(resource.attributes["service.name"], "${env:MDAI_SERVICE_LIST}") and severity_number < SEVERITY_NUMBER_WARN'
+            - 'IsMatch(resource.attributes["service.name"], "${env:SERVICE_LIST}") and severity_number < SEVERITY_NUMBER_WARN'
       batch/mdai_datalyzer:
         send_batch_size: 100
         timeout: 15s

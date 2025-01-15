@@ -36,8 +36,7 @@ const (
 	ObjectModified  ObjectState = true
 	ObjectUnchanged ObjectState = false
 
-	mdaiVariablePrefix = "MDAI_"
-	envConfigMapName   = "mdai-variables"
+	envConfigMapNamePostfix = "-variables"
 )
 
 type HubAdapter struct {
@@ -424,9 +423,9 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 }
 
 func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, namespace string) (controllerutil.OperationResult, error) {
+	envConfigMapName := c.mdaiCR.Name + envConfigMapNamePostfix
 	desiredConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			// TODO make name unique per hub
 			Name:      envConfigMapName,
 			Namespace: namespace,
 		},
@@ -451,7 +450,7 @@ func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[s
 }
 
 func transformKeyToVariableName(valkeyKey string) string {
-	return mdaiVariablePrefix + strings.ToUpper(valkeyKey)
+	return strings.ToUpper(valkeyKey)
 }
 
 func (c HubAdapter) listOtelCollectorsWithLabel(ctx context.Context, labelSelector string) ([]v1beta1.OpenTelemetryCollector, error) {
