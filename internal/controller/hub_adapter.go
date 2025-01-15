@@ -316,11 +316,11 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	}
 
 	if c.valKeyClient == nil {
-		c.logger.Error(nil, "Valkey valkeyClient not initialized, cannot sync variables")
+		c.logger.Info("ValkeyClient not initialized, cannot sync variables")
 		return ContinueProcessing()
 	}
 
-	envVariables := make([]v1.EnvVar, 0)
+	envMap := make(map[string]string)
 	valkeyClient := *c.valKeyClient
 	for _, variable := range *variables {
 		// we should test filter processor when the variable is empty and if breaks it we may recommend to use some placeholder as default value
@@ -349,13 +349,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 					}
 				}
 				variableWithDelimiter := strings.Join(valueAsSlice, variable.Delimiter)
-				envVariables = append(
-					envVariables,
-					v1.EnvVar{
-						Name:  transformKeyToVariableName(valkeyKey),
-						Value: variableWithDelimiter,
-					},
-				)
+				envMap[transformKeyToVariableName(valkeyKey)] = variableWithDelimiter
 			} else if variable.Type == mdaiv1.VariableTypeScalar {
 				valueAsString, err := valkeyClient.Do(
 					ctx,
@@ -378,15 +372,12 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 				}
 
 				c.logger.Info("Valkey data received", "key", valkeyKey, "valueAsString", valueAsString)
-				envVariables = append(envVariables, v1.EnvVar{
-					Name:  transformKeyToVariableName(valkeyKey),
-					Value: valueAsString,
-				})
+				envMap[transformKeyToVariableName(valkeyKey)] = valueAsString
 			}
 		}
 	}
 
-	if len(envVariables) == 0 {
+	if len(envMap) == 0 {
 		c.logger.Info("No variables need to be updated")
 		return ContinueProcessing()
 	}
@@ -404,7 +395,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 
 	namespaceToRestart := make(map[string]bool)
 	for namespace := range namespaces {
-		operationResult, err := c.createOrUpdateEnvConfigMap(ctx, envVariables, namespace)
+		operationResult, err := c.createOrUpdateEnvConfigMap(ctx, envMap, namespace)
 		if err != nil {
 			return OperationResult{}, err
 		}
@@ -432,10 +423,10 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	return ContinueProcessing()
 }
 
-func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envVariables []v1.EnvVar, namespace string) (controllerutil.OperationResult, error) {
-	envMap := envVarsToMap(envVariables)
+func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, namespace string) (controllerutil.OperationResult, error) {
 	desiredConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
+			// TODO make name unique per hub
 			Name:      envConfigMapName,
 			Namespace: namespace,
 		},
@@ -457,14 +448,6 @@ func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envVariables
 
 	c.logger.Info("Successfully created or updated ConfigMap", "name", envConfigMapName, "namespace", namespace, "operation", operationResult)
 	return operationResult, nil
-}
-
-func envVarsToMap(envVars []v1.EnvVar) map[string]string {
-	envMap := make(map[string]string)
-	for _, env := range envVars {
-		envMap[env.Name] = env.Value
-	}
-	return envMap
 }
 
 func transformKeyToVariableName(valkeyKey string) string {

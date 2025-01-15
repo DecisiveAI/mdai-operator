@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
@@ -157,8 +158,8 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *MdaiHubReconciler) initializeValkey() error {
 	// for built-in valkey storage we read the environment variable to get connection string
-	valkeyEndpoint := "127.0.0.1:6379" // "valkey-primary.default.svc.cluster.local:6379" //os.Getenv("VALKEY_ENDPOINT")
-	valkeyPassword := "abc"            // os.Getenv("VALKEY_PASSWORD")
+	valkeyEndpoint := os.Getenv("VALKEY_ENDPOINT")
+	valkeyPassword := os.Getenv("VALKEY_PASSWORD")
 	if valkeyEndpoint == "" || valkeyPassword == "" {
 		log := logger.FromContext(context.Background())
 		log.Info("ValKey client is not enabled; skipping initialization")

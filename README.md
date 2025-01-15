@@ -1,14 +1,16 @@
 # mdai-operator
-// TODO(user): Add simple overview of use/purpose
-
+manages MDAI Hub
 ## Description
 Operator 
-- watches OTEL collectors that has labels matching hub name
-- creates alerting rules for Prometheus operator
-- reads variables from ValKey
-- supported two types of variables: array and scalar
-- all mdai environment variables added prefix 'MDAI_' when injected into OTEL collector and changed to upper case
-- injects environmental variables into OTEL collectors through config map that has labels matching hub name. OTEL collector has to be configured to use config map:
+
+- Monitors OTEL collectors with labels matching the hub name.
+- Creates alerting rules for the Prometheus operator.
+- Reads variables from ValKey.
+- Requires environment variables with the ValKey endpoint and password to be provided.
+- Supports two types of variables: arrays and scalars.
+- Adds the prefix MDAI_ to all MDAI environment variables when injecting them into the OTEL collector and converts them to uppercase.
+- Injects environment variables into OTEL collectors through a ConfigMap with labels matching the hub name. The OTEL collector must be configured to use the ConfigMap.
+- Variables update is applied by triggering collector's restart
 ```yaml
   envFrom:
     - configMapRef:
@@ -33,6 +35,13 @@ export GOPRIVATE=github.com/decisiveai/*
 - docker version 17.03+.
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
+
+### To run locally
+make sure the following env variable is set
+```shell
+export VALKEY_ENDPOINT=127.0.0.1:6379
+export VALKEY_PASSWORD=abc
+```
 
 ### To Deploy on the cluster
 **Build and push your image to the location specified by `IMG`:**
