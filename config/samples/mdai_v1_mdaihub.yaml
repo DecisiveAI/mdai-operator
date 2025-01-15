@@ -8,10 +8,18 @@ metadata:
 spec:
   variables:
     - name: service-list
-      source:
-        type: "valkey"
-      type: "scalar"
-      delimiter: "|"
+      type: set
+      conversions:
+        - type: string
+          function: join
+          arguments:
+            separator: "|"
+  observers:
+    - name: service-bytes                                                                              ─╯
+      image: public.ecr.aws/p3k6k6h3/watcher-observer
+      config:
+        attributes:
+          - "service.name"
   evaluations:
     - name: evaluation-1
       evaluationType: prometheus

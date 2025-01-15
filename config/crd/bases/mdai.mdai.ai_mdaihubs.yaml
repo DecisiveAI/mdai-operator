@@ -90,9 +90,17 @@ spec:
               observers:
                 items:
                   properties:
+                    config:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    image:
+                      type: string
                     name:
                       type: string
                   required:
+                  - config
+                  - image
                   - name
                   type: object
                 type: array
@@ -100,27 +108,36 @@ spec:
                 items:
                   properties:
                     delimiter:
-                      type: string
+                      items:
+                        properties:
+                          arguments:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          function:
+                            type: string
+                          type:
+                            type: string
+                        required:
+                        - arguments
+                        - function
+                        - type
+                        type: object
+                      type: array
                     name:
                       minLength: 0
                       type: string
-                    source:
-                      properties:
-                        type:
-                          enum:
-                          - valkey
-                          type: string
-                      required:
-                      - type
-                      type: object
                     type:
                       enum:
-                      - scalar
+                      - int
+                      - float
+                      - boolean
+                      - string
+                      - set
                       - array
                       type: string
                   required:
                   - name
-                  - source
                   - type
                   type: object
                 type: array

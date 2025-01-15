@@ -22,23 +22,20 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+type Conversion struct {
+	Type      VariableType               `json:"type"`
+	Function  VariableConversionFunction `json:"function"`
+	Arguments map[string]string          `json:"arguments"`
+}
+
 type Variable struct {
 	// +kubebuilder:validation:MinLength=0
 	Name string `json:"name"`
 	// +kubebuilder:validation:Required
-	Source VariableSource `json:"source"`
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=scalar;array
+	// +kubebuilder:validation:Enum:=int;float;boolean;string;set;array
 	Type VariableType `json:"type"`
 	// +kubebuilder:validation:Optional
-	Delimiter string `json:"delimiter,omitempty"`
-}
-
-type VariableSource struct {
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=valkey
-	Type VariableSourceType `json:"type"`
-	// depending on the type some additional fields are needed
+	Conversions []Conversion `json:"delimiter,omitempty"`
 }
 
 type AlertingRule struct {
@@ -66,7 +63,10 @@ type Evaluation struct {
 
 type Observer struct {
 	// +kubebuilder:validation:Required
-	Name string `json:"name"` // TODO: define the kind of observer (datalyzer)
+	Name string `json:"name"`
+	// +kubebuilder:validation:Required
+	Image  string            `json:"image"`
+	Config map[string]string `json:"config"`
 }
 
 // MdaiHubSpec defines the desired state of MdaiHub.
@@ -124,10 +124,16 @@ func init() {
 type EvaluationType string
 type VariableSourceType string
 type VariableType string
+type VariableConversionFunction string
 
 const (
-	EvaluationTypePrometheus EvaluationType     = "prometheus"
-	VariableSourceTypeValkey VariableSourceType = "valkey"
-	VariableTypeScalar       VariableType       = "scalar"
-	VariableTypeArray        VariableType       = "array"
+	EvaluationTypePrometheus EvaluationType             = "prometheus"
+	VariableSourceTypeValkey VariableSourceType         = "valkey"
+	VariableTypeInt          VariableType               = "int"
+	VariableTypeFloat        VariableType               = "float"
+	VariableTypeBoolean      VariableType               = "boolean"
+	VariableTypeString       VariableType               = "string"
+	VariableTypeSet          VariableType               = "set"
+	VariableTypeArray        VariableType               = "array"
+	VariableConversionJoin   VariableConversionFunction = "join"
 )
