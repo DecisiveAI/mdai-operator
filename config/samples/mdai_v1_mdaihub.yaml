@@ -11,7 +11,7 @@ spec:
   variables:
     - name: service_list
       storageType: "mdai-valkey"
-      type: "array"
+      type: "set"
       delimiter: "|"
       defaultValue: "n/a"
     - name: service

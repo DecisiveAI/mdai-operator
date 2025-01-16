@@ -325,14 +325,14 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 		// we should test filter processor when the variable is empty and if breaks it we may recommend to use some placeholder as default value
 		if variable.StorageType == mdaiv1.VariableSourceTypeBultInValkey {
 			valkeyKey := variable.Name
-			if variable.Type == mdaiv1.VariableTypeArray {
+			if variable.Type == mdaiv1.VariableTypeSet {
 				valueAsSlice, err := valkeyClient.Do(
 					ctx,
 					valkeyClient.B().Smembers().Key(valkeyKey).Build(),
 				).AsStrSlice()
 
 				if err != nil {
-					c.logger.Error(err, "Failed to get value from Valkey", "key", valkeyKey)
+					c.logger.Error(err, "Failed to get set value from Valkey", "key", valkeyKey)
 					return RequeueAfter(time.Second*10, err)
 				}
 

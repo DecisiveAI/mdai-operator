@@ -115,7 +115,7 @@ spec:
                     type:
                       enum:
                       - scalar
-                      - array
+                      - set
                       type: string
                   required:
                   - name

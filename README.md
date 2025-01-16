@@ -10,7 +10,7 @@ Operator
 - Creates alerting rules for the Prometheus operator.
 - Reads variables from ValKey.
 - Requires environment variables with the ValKey endpoint and password to be provided.
-- Supports two types of variables: arrays and scalars.
+- Supports two types of variables: set and scalars.
 - Converts to uppercase MDAI environment variables when injecting them into the OTEL collector.
   Injects environment variables into OTEL collectors through a ConfigMap with labels matching the hub name. The OTEL collector must be configured to use the ConfigMap.
 - The ConfigMap name is the MDAI hub name plus `-variables`

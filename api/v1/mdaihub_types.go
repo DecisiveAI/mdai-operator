@@ -29,7 +29,7 @@ type Variable struct {
 	// +kubebuilder:validation:Enum:=mdai-valkey
 	StorageType VariableStorageType `json:"storageType"`
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=scalar;array
+	// +kubebuilder:validation:Enum:=scalar;set
 	Type VariableType `json:"type"`
 	// +kubebuilder:validation:Optional
 	Delimiter string `json:"delimiter,omitempty"`
@@ -134,5 +134,5 @@ const (
 	EvaluationTypePrometheus       EvaluationType      = "prometheus"
 	VariableSourceTypeBultInValkey VariableStorageType = "mdai-valkey"
 	VariableTypeScalar             VariableType        = "scalar"
-	VariableTypeArray              VariableType        = "array"
+	VariableTypeSet                VariableType        = "set"
 )
