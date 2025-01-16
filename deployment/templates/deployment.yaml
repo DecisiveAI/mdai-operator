@@ -24,6 +24,16 @@ spec:
         command:
         - /manager
         env:
+        - name: VALKEY_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              key: VALKEY_ENDPOINT
+              name: valkey-secret
+        - name: VALKEY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: VALKEY_PASSWORD
+              name: valkey-secret
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
         image: {{ .Values.controllerManager.manager.image.repository }}:{{ .Values.controllerManager.manager.image.tag
