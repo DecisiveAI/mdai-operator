@@ -23,8 +23,7 @@ spec:
     - name: service-bytes
       image: public.ecr.aws/p3k6k6h3/watcher-observer
       config:
-        attributes:
-          - "service.name"
+        attributes: "service.name"
 # Evaluations define the conditions to check. Currently, supported Evaluations are only Prometheus Alerts.
   evaluations:
     - name: logBytesOutTooHighBySvc
@@ -46,11 +45,11 @@ spec:
 # Actions are executable instructions. Currently, supported Actions are only variable updates.
   actions:
     - name: addService
-      operation: add
-      variable_name: service_list
+      operation: mdai/add
+      variableName: service_list
     - name: removeService
-      operation: remove
-      variable_name: service_list
+      operation: mdai/remove
+      variableName: service_list
 # Platform is where the above configured constructs are combined to create fully realized Automations. Think of the above constructs as the "what" and this section as the "when" and/or "how"
   platform:
   # Map triggers to actions. When a trigger is activated, the requisite action is taken.
