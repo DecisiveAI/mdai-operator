@@ -174,7 +174,6 @@ spec:
                         type: object
                       type: array
                     name:
-                      minLength: 0
                       type: string
                     type:
                       enum:

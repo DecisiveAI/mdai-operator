@@ -274,21 +274,21 @@ func (in *Platform) DeepCopyInto(out *Platform) {
 	*out = *in
 	if in.EventMap != nil {
 		in, out := &in.EventMap, &out.EventMap
-		*out = new(map[string]*[]string)
+		*out = new(map[TriggerName]*[]ActionName)
 		if **in != nil {
 			in, out := *in, *out
-			*out = make(map[string]*[]string, len(*in))
+			*out = make(map[TriggerName]*[]ActionName, len(*in))
 			for key, val := range *in {
-				var outVal *[]string
+				var outVal *[]ActionName
 				if val == nil {
 					(*out)[key] = nil
 				} else {
 					inVal := (*in)[key]
 					in, out := &inVal, &outVal
-					*out = new([]string)
+					*out = new([]ActionName)
 					if **in != nil {
 						in, out := *in, *out
-						*out = make([]string, len(*in))
+						*out = make([]ActionName, len(*in))
 						copy(*out, *in)
 					}
 				}

@@ -22,26 +22,24 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-type Conversion struct {
-	Type      VariableType               `json:"type"`
-	Function  VariableConversionFunction `json:"function"`
-	Arguments map[string]string          `json:"arguments"`
+type Strategy struct {
+	VariableName VariableName      `json:"type"`
+	Transform    VariableTransform `json:"function"`
+	Arguments    map[string]string `json:"arguments"`
 }
 
 type Variable struct {
-	// +kubebuilder:validation:MinLength=0
-	Name string `json:"name"`
+	// +kubebuilder:validation:Required
+	Name VariableName `json:"name"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum:=int;float;boolean;string;set;array
 	Type VariableType `json:"type"`
-	// +kubebuilder:validation:Optional
-	Conversions []Conversion `json:"conversions,omitempty"`
 }
 
 type Evaluation struct {
 	// How this evaluation will be referred to elsewhere in the config
 	// +kubebuilder:validation:Required
-	Name string `json:"name" yaml:"name"`
+	Name EvaluationName `json:"name" yaml:"name"`
 	// A valid PromQL query expression
 	// +kubebuilder:validation:Required
 	Expr intstr.IntOrString `json:"expr" yaml:"expr"`
@@ -58,10 +56,10 @@ type Evaluation struct {
 type Trigger struct {
 	// How this Trigger will be referred to elsewhere in the config
 	// +kubebuilder:validation:Required
-	Name string `json:"name" yaml:"name"`
+	Name TriggerName `json:"name" yaml:"name"`
 	// The name of the evaluation that you want to key off of
 	// +kubebuilder:validation:Required
-	EvaluationName string `json:"evaluationName" yaml:"evaluationName"`
+	EvaluationName EvaluationName `json:"evaluationName" yaml:"evaluationName"`
 	// Does this evaluation kick off an action on 'firing' status or 'resolved'? If omitted, the evaluation will only trigger on the 'firing' status.
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Pattern:="^(firing|resolved)$"
@@ -93,20 +91,23 @@ type MdaiHubSpec struct {
 type Platform struct {
 	// EventMap Keys should be names of Triggers
 	// Values should be arrays of name of Actions
-	EventMap *map[string]*[]string `json:"eventMap,omitempty"`
+	// +kubebuilder:validation:Optional
+	EventMap *map[TriggerName]*[]ActionName `json:"eventMap,omitempty"`
+	// +kubebuilder:validation:Optional
+	Use []Strategy `json:"use,omitempty"`
 }
 
 type Action struct {
 	// How this Action will be referred to elsewhere in the config
 	// +kubebuilder:validation:Required
-	Name string `json:"name" yaml:"name"`
+	Name ActionName `json:"name" yaml:"name"`
 	// Values depend on the type of the variable named. To be expanded.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern:="^(mdai/(add|remove))$"
 	Operation string `json:"operation" yaml:"operation"`
 	// The name of the variable that this Action will affect
 	// +kubebuilder:validation:Required
-	VariableName string `json:"variableName" yaml:"variableName"`
+	VariableName VariableName `json:"variableName" yaml:"variableName"`
 }
 
 // MdaiHubStatus defines the observed state of MdaiHub.
@@ -148,19 +149,24 @@ func init() {
 	SchemeBuilder.Register(&MdaiHub{}, &MdaiHubList{})
 }
 
+type ActionName string
+type TriggerName string
+type EvaluationName string
+type VariableName string
+
 type TriggerType string
 type VariableSourceType string
 type VariableType string
-type VariableConversionFunction string
+type VariableTransform string
 
 const (
-	TriggerTypePrometheus    TriggerType                = "prometheus"
-	VariableSourceTypeValkey VariableSourceType         = "valkey"
-	VariableTypeInt          VariableType               = "int"
-	VariableTypeFloat        VariableType               = "float"
-	VariableTypeBoolean      VariableType               = "boolean"
-	VariableTypeString       VariableType               = "string"
-	VariableTypeSet          VariableType               = "set"
-	VariableTypeArray        VariableType               = "array"
-	VariableConversionJoin   VariableConversionFunction = "join"
+	TriggerTypePrometheus    TriggerType        = "prometheus"
+	VariableSourceTypeValkey VariableSourceType = "valkey"
+	VariableTypeInt          VariableType       = "int"
+	VariableTypeFloat        VariableType       = "float"
+	VariableTypeBoolean      VariableType       = "boolean"
+	VariableTypeString       VariableType       = "string"
+	VariableTypeSet          VariableType       = "set"
+	VariableTypeArray        VariableType       = "array"
+	VariableTransformJoin    VariableTransform  = "join"
 )
