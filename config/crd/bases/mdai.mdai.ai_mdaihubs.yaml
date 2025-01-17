@@ -115,7 +115,6 @@ spec:
                     name:
                       type: string
                   required:
-                  - image
                   - name
                   type: object
                 type: array
@@ -133,6 +132,7 @@ spec:
                       Values should be arrays of name of Actions
                     type: object
                   use:
+                    description: Use defines how Variables are applied.
                     items:
                       properties:
                         arguments:

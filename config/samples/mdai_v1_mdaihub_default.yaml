@@ -8,7 +8,9 @@ metadata:
 spec:
   variables:
   evaluations:
-  events:
+  triggers:
     - name: event-1
+      evaluationName: "foo"
   observers:
     - name: observer-1
+      image: public.ecr.aws/p3k6k6h3/watcher-observer

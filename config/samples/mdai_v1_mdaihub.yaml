@@ -1,37 +1,63 @@
 apiVersion: mdai.mdai.ai/v1
+# Put a brief introduction
 kind: MdaiHub
+# Metadata section for the resource
 metadata:
   labels:
     app.kubernetes.io/name: mdai-operator
     app.kubernetes.io/managed-by: kustomize
-  name: mdaihub-sample
+  name: mdaihub-dynamic-data-filtering-sample
+# Specification section for the MdaiHub resource
 spec:
   config:
     reconcileLoopInterval: 3m
+  # Variables whose values are managed by MDAI. Typical use is update by Action and converted to environment variables by the MDAI Operator.
   variables:
     - name: service_list
-      storageType: "mdai-valkey"
-      type: "set"
-      delimiter: "|"
-      defaultValue: "n/a"
-    - name: service
-      storageType: "mdai-valkey"
-      type: "scalar"
-  evaluations:
-    - name: evaluation-1
-      evaluationType: prometheus
-      alertingRules:
-        - name: daily
-          alert_query: 'increase(mdai_log_bytes_sent_total{service_name="service1"}[24h]) > 2*1024*1024*1024'
-          for: 10m
-          severity: critical
-          action: toggleFilter
-        - name: hourly
-          alert_query: 'increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024'
-          for: 5m
-          severity: warning
-          action: manageFilter
-  events:
-    - name: event-1
+      type: set
+  # Observers that watch telemetry and contribute metrics to Prometheus. Typical use is to query these metrics in Evaluations.
   observers:
-    - name: observer-1
+    - name: service-bytes
+      image: public.ecr.aws/p3k6k6h3/watcher-observer
+      config:
+        attributes: "service.name"
+  # Evaluations define the conditions to check. Currently, supported Evaluations are only Prometheus Alerts.
+  evaluations:
+    - name: logBytesOutTooHighBySvc
+      expr: '(increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024) by service_name'
+      for: 5m
+      severity: warning
+  # Triggers are atomic events. Currently, supported Triggers are only Prometheus Alert state changes.
+  triggers:
+    - name: serviceLogsExceedThreshold
+      evaluationName: logBytesOutTooHighBySvc
+      alertStatus: 'firing'
+      relevantLabels:
+        - 'service_name'
+    - name: serviceLogsBelowThreshold
+      evaluationName: logBytesOutTooHighBySvc
+      alertStatus: 'resolved'
+      relevantLabels:
+        - 'service_name'
+  # Actions are executable instructions. Currently, supported Actions are only variable updates.
+  actions:
+    - name: addService
+      operation: mdai/add
+      variableName: service_list
+    - name: removeService
+      operation: mdai/remove
+      variableName: service_list
+  # Platform is where the above configured constructs are combined to create fully realized Automations. Think of the above constructs as the "what" and this section as the "when" and/or "how"
+  platform:
+    # Define how Variable constructs above should be applied.
+    use:
+      - variableName: service_list
+        transform: "join"
+        arguments:
+          delimiter: "|"
+    # Map triggers to actions. When a trigger is activated, the requisite action is taken.
+    eventMap:
+      serviceLogsExceedThreshold:
+        - addService
+      serviceLogsBelowThreshold:
+        - removeService

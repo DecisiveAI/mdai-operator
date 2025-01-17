@@ -200,25 +200,16 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 	c.logger.Info("EnsurePrometheusRuleSynchronized")
 
 	for _, eval := range *evals {
-		if eval.EvaluationType == mdaiv1.EvaluationTypePrometheus {
-			c.logger.Info("Evaluation type is Prometheus")
+		prometheusRuleCR, err := c.getOrCreatePrometheusRuleCR(ctx, defaultPrometheusRuleName)
+		if err != nil {
+			c.logger.Error(err, "Failed to get/create PrometheusRule")
+			return RequeueAfter(time.Second*10, err)
+		}
 
-			prometheusRuleCR, err := c.getOrCreatePrometheusRuleCR(ctx, defaultPrometheusRuleName)
-			if err != nil {
-				c.logger.Error(err, "Failed to get/create PrometheusRule")
-				return RequeueAfter(time.Second*10, err)
-			}
+		prometheusRuleCR.Spec.Groups[0].Rules = composePrometheusRule(eval, c.mdaiCR.Name)
 
-			if eval.AlertingRules == nil {
-				c.logger.Info("No alerting rules found in the evaluation, skipping PrometheusRule synchronization")
-				continue
-			}
-
-			prometheusRuleCR.Spec.Groups[0].Rules = composePrometheusRule(*eval.AlertingRules, c.mdaiCR.Name)
-
-			if err = c.client.Update(ctx, prometheusRuleCR); err != nil {
-				c.logger.Error(err, "Failed to update PrometheusRule")
-			}
+		if err = c.client.Update(ctx, prometheusRuleCR); err != nil {
+			c.logger.Error(err, "Failed to update PrometheusRule")
 		}
 	}
 
@@ -262,25 +253,21 @@ func (c HubAdapter) getOrCreatePrometheusRuleCR(ctx context.Context, defaultProm
 	return prometheusRule, nil
 }
 
-func composePrometheusRule(alertingRules []mdaiv1.AlertingRule, engineName string) []prometheusv1.Rule {
-	prometheusRules := make([]prometheusv1.Rule, 0, len(alertingRules))
-	for _, alertingRule := range alertingRules {
-		prometheusRule := prometheusv1.Rule{
-			Expr:  alertingRule.AlertQuery,
-			Alert: alertingRule.Name,
-			For:   alertingRule.For,
-			Annotations: map[string]string{
-				"action":      alertingRule.Action,
-				"alert_name":  alertingRule.Name, // FIXME we need a relationship between alert and variable
-				"engine_name": engineName,
-			},
-			Labels: map[string]string{
-				"severity": alertingRule.Severity,
-			},
-		}
-		prometheusRules = append(prometheusRules, prometheusRule)
+func composePrometheusRule(alertingRule mdaiv1.Evaluation, engineName string) []prometheusv1.Rule {
+	alertName := (string)(alertingRule.Name)
+	prometheusRule := prometheusv1.Rule{
+		Expr:  alertingRule.Expr,
+		Alert: alertName,
+		For:   alertingRule.For,
+		Annotations: map[string]string{
+			"alert_name":  alertName, // FIXME we need a relationship between alert and variable
+			"engine_name": engineName,
+		},
+		Labels: map[string]string{
+			"severity": alertingRule.Severity,
+		},
 	}
-	return prometheusRules
+	return []prometheusv1.Rule{prometheusRule}
 }
 
 func (c HubAdapter) deletePrometheusRule(ctx context.Context) error {
@@ -324,7 +311,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	for _, variable := range *variables {
 		// we should test filter processor when the variable is empty and if breaks it we may recommend to use some placeholder as default value
 		if variable.StorageType == mdaiv1.VariableSourceTypeBultInValkey {
-			valkeyKey := variable.Name
+			valkeyKey := (string)(variable.Name)
 			if variable.Type == mdaiv1.VariableTypeSet {
 				valueAsSlice, err := valkeyClient.Do(
 					ctx,
@@ -347,7 +334,20 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 						continue
 					}
 				}
-				variableWithDelimiter := strings.Join(valueAsSlice, variable.Delimiter)
+
+				delimiter := "|"
+
+				for _, strategy := range *c.mdaiCR.Spec.Platform.Use {
+					if strategy.VariableName == variable.Name {
+						for key, value := range strategy.Arguments {
+							if key == "delimiter" {
+								delimiter = value
+							}
+						}
+					}
+				}
+
+				variableWithDelimiter := strings.Join(valueAsSlice, delimiter)
 				envMap[transformKeyToVariableName(valkeyKey)] = variableWithDelimiter
 			} else if variable.Type == mdaiv1.VariableTypeScalar {
 				valueAsString, err := valkeyClient.Do(

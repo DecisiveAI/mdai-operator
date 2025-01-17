@@ -84,7 +84,7 @@ type Trigger struct {
 type Observer struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	Image  string            `json:"image"`
 	Config map[string]string `json:"config,omitempty"`
 }
@@ -99,13 +99,13 @@ type Config struct {
 
 // MdaiHubSpec defines the desired state of MdaiHub.
 type MdaiHubSpec struct {
-	Config      *Config       `json:"config,omitempty"`
+	Config      Config        `json:"config,omitempty"`
 	Variables   *[]Variable   `json:"variables,omitempty"`
 	Observers   *[]Observer   `json:"observers,omitempty"`   // watchers configuration (datalyzer)
 	Evaluations *[]Evaluation `json:"evaluations,omitempty"` // evaluation configuration (alerting rules)
 	Triggers    *[]Trigger    `json:"triggers,omitempty"`    // triggers configuration (alert assessment)
 	Actions     *[]Action     `json:"actions,omitempty"`     // events configuration (update variables through api and operator)
-	Platform    *Platform     `json:"platform,omitempty"`    // declare the behavior of the constructs
+	Platform    Platform      `json:"platform,omitempty"`    // declare the behavior of the constructs
 }
 
 // Platform is where a user will define the behavior of the constructs that they have configured
@@ -114,8 +114,9 @@ type Platform struct {
 	// Values should be arrays of name of Actions
 	// +kubebuilder:validation:Optional
 	EventMap *map[TriggerName]*[]ActionName `json:"eventMap,omitempty"`
+	// Use defines how Variables are applied.
 	// +kubebuilder:validation:Optional
-	Use []Strategy `json:"use,omitempty"`
+	Use *[]Strategy `json:"use,omitempty"`
 }
 
 type Action struct {
@@ -191,4 +192,5 @@ const (
 	VariableTypeSet                VariableType        = "set"
 	VariableTypeArray              VariableType        = "array"
 	VariableTransformJoin          VariableTransform   = "join"
+	VariableTypeScalar             VariableType        = "scalar"
 )
