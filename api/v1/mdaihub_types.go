@@ -22,36 +22,60 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-type Strategy struct {
-	// The name of the Variable to which this Strategy will be applied
-	// +kubebuilder:validation:Required
-	VariableName *VariableName `json:"variableName" yaml:"variableName"`
-	// How the variable will be transformed before being injected for use.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=join
-	Transform *VariableTransform `json:"transform" yaml:"transform"`
-	// Optional arguments applied to the transformation function
+type VariableOverride struct {
+	// StorageType defaults to "mdai-valkey" if not provided
 	// +kubebuilder:validation:Optional
-	Arguments map[string]string `json:"arguments" yaml:"arguments"`
-}
-
-type Variable struct {
-	// +kubebuilder:validation:Required
-	Name VariableName `json:"name" yaml:"name"`
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=int;float;boolean;string;set;array
-	Type VariableType `json:"type" yaml:"type"`
-	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum:=mdai-valkey
 	StorageType VariableStorageType `json:"storageType" yaml:"storageType"`
 	// +kubebuilder:validation:Optional
 	DefaultValue *string `json:"defaultValue,omitempty" yaml:"defaultValue,omitempty"`
+	// +kubeuilder:validation:Required
+	ExportedVariableName string `json:"exportedVariableName,omitempty" yaml:"exportedVariableName,omitempty"`
+	// +kubebuilder:validation:Optional
+	Serialize string `json:"serialize,omitempty" yaml:"serialize,omitempty"`
+}
+
+type Variable struct {
+	// +kubebuilder:validation:Required
+	StorageKey VariableName `json:"storageKey" yaml:"storageKey"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum:=int;float;boolean;string;set;array
+	Type VariableType `json:"type" yaml:"type"`
+	// StorageType defaults to "mdai-valkey" if not provided
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum:=mdai-valkey
+	StorageType VariableStorageType `json:"storageType" yaml:"storageType"`
+	// +kubebuilder:validation:Optional
+	DefaultValue *string `json:"defaultValue,omitempty" yaml:"defaultValue,omitempty"`
+	// +kubeuilder:validation:Optional
+	ExportedVariableName string `json:"exportedVariableName,omitempty" yaml:"exportedVariableName,omitempty"`
+	// +kubebuilder:validation:Optional
+	Serialize string `json:"serialize,omitempty" yaml:"serialize,omitempty"`
+	// If ExportedVariableName is not present, at least one VariableOverride should be declared
+	// +kubebuilder:validation:Optional
+	With []VariableOverride `json:"with,omitempty" yaml:"with,omitempty"`
+}
+
+type Action struct {
+	// +kubebuilder:validation:Enum:=mdai/variable_update
+	Type string `json:"type" yaml:"type"`
+	// +kubebuilder:validation:Enum:=mdai/add;mdai/remove
+	Operation string `json:"operation" yaml:"operation"`
+}
+
+type PrometheusAlertEvaluationResolveStatus struct {
+	// +kubebuilder:validation:Optional
+	Firing Action `json:"firing" yaml:"firing"`
+	// +kubebuilder:validation:Optional
+	Resolved Action `json:"resolved" yaml:"resolved"`
 }
 
 type Evaluation struct {
 	// How this evaluation will be referred to elsewhere in the config
 	// +kubebuilder:validation:Required
 	Name EvaluationName `json:"name" yaml:"name"`
+	// +kubebuilder:validation:Enum:=mdai/prometheus_alert
+	Type string `json:"type" yaml:"type"`
 	// A valid PromQL query expression
 	// +kubebuilder:validation:Required
 	Expr intstr.IntOrString `json:"expr" yaml:"expr"`
@@ -63,22 +87,17 @@ type Evaluation struct {
 	KeepFiringFor *prometheusv1.NonEmptyDuration `json:"keep_firing_for,omitempty" yaml:"keep_firing_for,omitempty"`
 	// +kubebuilder:validation:Pattern:="^(warning|critical)$"
 	Severity string `json:"severity" yaml:"severity"`
-}
-
-type Trigger struct {
-	// How this Trigger will be referred to elsewhere in the config
-	// +kubebuilder:validation:Required
-	Name TriggerName `json:"name" yaml:"name"`
-	// The name of the evaluation that you want to key off of
-	// +kubebuilder:validation:Required
-	EvaluationName EvaluationName `json:"evaluationName" yaml:"evaluationName"`
-	// Does this evaluation kick off an action on 'firing' status or 'resolved'? If omitted, the evaluation will only trigger on the 'firing' status.
+	// RelevantLabels indicates which part(s) of the alert payload to forward to the Action.
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Pattern:="^(firing|resolved)$"
-	AlertStatus string `json:"alertStatus,omitempty" yaml:"alertStatus,omitempty"`
-	// Label from the Expr indicating which value(s) the alert payload will forward. Helpful for dictating downstream behavior.
+	RelevantLabels []string `json:"relevantLabels" yaml:"relevantLabels"`
+	// Resolve is the action that's taken when this alert fires. It's a shorthand for ResolvedStatus.Firing
 	// +kubebuilder:validation:Optional
-	RelevantLabels []string `json:"relevantLabels,omitempty" yaml:"relevantLabels,omitempty"`
+	Resolve Action `json:"resolve" yaml:"resolve"`
+	// ResolveStatus allows the user to specify actions depending on the state of the evaluation
+	// If Resolve is not provided, ResolveStatus.Firing is required
+	// If both are provided, ResolveStatus will override Resolve
+	// +kubebuilder:validation:Optional
+	ResolvedStatus PrometheusAlertEvaluationResolveStatus `json:"resolvedStatus" yaml:"resolvedStatus"`
 }
 
 type Observer struct {
@@ -101,37 +120,9 @@ type Config struct {
 type MdaiHubSpec struct {
 	// kubebuilder:validation:Optional
 	Config      *Config       `json:"config,omitempty" yaml:"config,omitempty"`
+	Observers   *[]Observer   `json:"observers,omitempty" yaml:"observers,omitempty"`
 	Variables   *[]Variable   `json:"variables,omitempty"`
-	Observers   *[]Observer   `json:"observers,omitempty"`   // watchers configuration (datalyzer)
 	Evaluations *[]Evaluation `json:"evaluations,omitempty"` // evaluation configuration (alerting rules)
-	Triggers    *[]Trigger    `json:"triggers,omitempty"`    // triggers configuration (alert assessment)
-	Actions     *[]Action     `json:"actions,omitempty"`     // events configuration (update variables through api and operator)
-	// kubebuilder:validation:Optional
-	Platform *Platform `json:"platform,omitempty" yaml:"platform,omitempty"` // declare the behavior of the constructs
-}
-
-// Platform is where a user will define the behavior of the constructs that they have configured
-type Platform struct {
-	// EventMap Keys should be names of Triggers
-	// Values should be arrays of name of Actions
-	// +kubebuilder:validation:Optional
-	EventMap *map[TriggerName]*[]ActionName `json:"eventMap,omitempty" yaml:"eventMap,omitempty"`
-	// Use defines how Variables are applied.
-	// +kubebuilder:validation:Optional
-	Use *[]Strategy `json:"use,omitempty" yaml:"use,omitempty"`
-}
-
-type Action struct {
-	// How this Action will be referred to elsewhere in the config
-	// +kubebuilder:validation:Required
-	Name ActionName `json:"name" yaml:"name"`
-	// Values depend on the type of the variable named. To be expanded.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Pattern:="^(mdai/(add|remove))$"
-	Operation string `json:"operation" yaml:"operation"`
-	// The name of the variable that this Action will affect
-	// +kubebuilder:validation:Required
-	VariableName VariableName `json:"variableName" yaml:"variableName"`
 }
 
 // MdaiHubStatus defines the observed state of MdaiHub.

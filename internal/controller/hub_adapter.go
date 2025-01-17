@@ -338,7 +338,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 				delimiter := "|"
 
 				for _, strategy := range *c.mdaiCR.Spec.Platform.Use {
-					if strategy.VariableName == variable.Name {
+					if *strategy.VariableName == variable.Name {
 						for key, value := range strategy.Arguments {
 							if key == "delimiter" {
 								delimiter = value

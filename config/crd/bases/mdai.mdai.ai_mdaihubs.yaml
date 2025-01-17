@@ -39,28 +39,6 @@ spec:
           spec:
             description: MdaiHubSpec defines the desired state of MdaiHub.
             properties:
-              actions:
-                items:
-                  properties:
-                    name:
-                      description: How this Action will be referred to elsewhere in
-                        the config
-                      type: string
-                    operation:
-                      description: Values depend on the type of the variable named.
-                        To be expanded.
-                      pattern: ^(mdai/(add|remove))$
-                      type: string
-                    variableName:
-                      description: The name of the variable that this Action will
-                        affect
-                      type: string
-                  required:
-                  - name
-                  - operation
-                  - variableName
-                  type: object
-                type: array
               config:
                 description: kubebuilder:validation:Optional
                 properties:
@@ -95,13 +73,78 @@ spec:
                       description: How this evaluation will be referred to elsewhere
                         in the config
                       type: string
+                    relevantLabels:
+                      description: RelevantLabels indicates which part(s) of the alert
+                        payload to forward to the Action.
+                      items:
+                        type: string
+                      type: array
+                    resolve:
+                      description: Resolve is the action that's taken when this alert
+                        fires. It's a shorthand for ResolvedStatus.Firing
+                      properties:
+                        operation:
+                          enum:
+                          - mdai/add
+                          - mdai/remove
+                          type: string
+                        type:
+                          enum:
+                          - mdai/variable_update
+                          type: string
+                      required:
+                      - operation
+                      - type
+                      type: object
+                    resolvedStatus:
+                      description: |-
+                        ResolveStatus allows the user to specify actions depending on the state of the evaluation
+                        If Resolve is not provided, ResolveStatus.Firing is required
+                        If both are provided, ResolveStatus will override Resolve
+                      properties:
+                        firing:
+                          properties:
+                            operation:
+                              enum:
+                              - mdai/add
+                              - mdai/remove
+                              type: string
+                            type:
+                              enum:
+                              - mdai/variable_update
+                              type: string
+                          required:
+                          - operation
+                          - type
+                          type: object
+                        resolved:
+                          properties:
+                            operation:
+                              enum:
+                              - mdai/add
+                              - mdai/remove
+                              type: string
+                            type:
+                              enum:
+                              - mdai/variable_update
+                              type: string
+                          required:
+                          - operation
+                          - type
+                          type: object
+                      type: object
                     severity:
                       pattern: ^(warning|critical)$
+                      type: string
+                    type:
+                      enum:
+                      - mdai/prometheus_alert
                       type: string
                   required:
                   - expr
                   - name
                   - severity
+                  - type
                   type: object
                 type: array
               observers:
@@ -119,81 +162,19 @@ spec:
                   - name
                   type: object
                 type: array
-              platform:
-                description: kubebuilder:validation:Optional
-                properties:
-                  eventMap:
-                    additionalProperties:
-                      items:
-                        type: string
-                      type: array
-                    description: |-
-                      EventMap Keys should be names of Triggers
-                      Values should be arrays of name of Actions
-                    type: object
-                  use:
-                    description: Use defines how Variables are applied.
-                    items:
-                      properties:
-                        arguments:
-                          additionalProperties:
-                            type: string
-                          description: Optional arguments applied to the transformation
-                            function
-                          type: object
-                        transform:
-                          description: How the variable will be transformed before
-                            being injected for use.
-                          enum:
-                          - join
-                          type: string
-                        variableName:
-                          description: The name of the Variable to which this Strategy
-                            will be applied
-                          type: string
-                      required:
-                      - transform
-                      - variableName
-                      type: object
-                    type: array
-                type: object
-              triggers:
-                items:
-                  properties:
-                    alertStatus:
-                      description: Does this evaluation kick off an action on 'firing'
-                        status or 'resolved'? If omitted, the evaluation will only
-                        trigger on the 'firing' status.
-                      pattern: ^(firing|resolved)$
-                      type: string
-                    evaluationName:
-                      description: The name of the evaluation that you want to key
-                        off of
-                      type: string
-                    name:
-                      description: How this Trigger will be referred to elsewhere
-                        in the config
-                      type: string
-                    relevantLabels:
-                      description: Label from the Expr indicating which value(s) the
-                        alert payload will forward. Helpful for dictating downstream
-                        behavior.
-                      items:
-                        type: string
-                      type: array
-                  required:
-                  - evaluationName
-                  - name
-                  type: object
-                type: array
               variables:
                 items:
                   properties:
                     defaultValue:
                       type: string
-                    name:
+                    exportedVariableName:
+                      type: string
+                    serialize:
+                      type: string
+                    storageKey:
                       type: string
                     storageType:
+                      description: StorageType defaults to "mdai-valkey" if not provided
                       enum:
                       - mdai-valkey
                       type: string
@@ -206,9 +187,27 @@ spec:
                       - set
                       - array
                       type: string
+                    with:
+                      description: If ExportedVariableName is not present, at least
+                        one VariableOverride should be declared
+                      items:
+                        properties:
+                          defaultValue:
+                            type: string
+                          exportedVariableName:
+                            type: string
+                          serialize:
+                            type: string
+                          storageType:
+                            description: StorageType defaults to "mdai-valkey" if
+                              not provided
+                            enum:
+                            - mdai-valkey
+                            type: string
+                        type: object
+                      type: array
                   required:
-                  - name
-                  - storageType
+                  - storageKey
                   - type
                   type: object
                 type: array
