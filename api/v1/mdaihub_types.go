@@ -25,27 +25,27 @@ import (
 type Strategy struct {
 	// The name of the Variable to which this Strategy will be applied
 	// +kubebuilder:validation:Required
-	VariableName VariableName `json:"type"`
+	VariableName *VariableName `json:"variableName" yaml:"variableName"`
 	// How the variable will be transformed before being injected for use.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=join
-	Transform VariableTransform `json:"function"`
+	Transform *VariableTransform `json:"transform" yaml:"transform"`
 	// Optional arguments applied to the transformation function
 	// +kubebuilder:validation:Optional
-	Arguments map[string]string `json:"arguments"`
+	Arguments map[string]string `json:"arguments" yaml:"arguments"`
 }
 
 type Variable struct {
 	// +kubebuilder:validation:Required
-	Name VariableName `json:"name"`
+	Name VariableName `json:"name" yaml:"name"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum:=int;float;boolean;string;set;array
-	Type VariableType `json:"type"`
+	Type VariableType `json:"type" yaml:"type"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum:=mdai-valkey
-	StorageType VariableStorageType `json:"storageType"`
+	StorageType VariableStorageType `json:"storageType" yaml:"storageType"`
 	// +kubebuilder:validation:Optional
-	DefaultValue *string `json:"defaultValue,omitempty"`
+	DefaultValue *string `json:"defaultValue,omitempty" yaml:"defaultValue,omitempty"`
 }
 
 type Evaluation struct {
@@ -83,10 +83,10 @@ type Trigger struct {
 
 type Observer struct {
 	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	Name string `json:"name" yaml:"name"`
 	// +kubebuilder:validation:Optional
-	Image  string            `json:"image"`
-	Config map[string]string `json:"config,omitempty"`
+	Image  string            `json:"image" yaml:"image"`
+	Config map[string]string `json:"config,omitempty" yaml:"config,omitempty"`
 }
 
 type Config struct {
@@ -94,18 +94,20 @@ type Config struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:="2m"
 	// +kubebuilder:validation:Format:=duration
-	ReconcileLoopInterval *metav1.Duration `json:"reconcileLoopInterval,omitempty"`
+	ReconcileLoopInterval *metav1.Duration `json:"reconcileLoopInterval,omitempty" yaml:"reconcileLoopInterval,omitempty"`
 }
 
 // MdaiHubSpec defines the desired state of MdaiHub.
 type MdaiHubSpec struct {
-	Config      Config        `json:"config,omitempty"`
+	// kubebuilder:validation:Optional
+	Config      *Config       `json:"config,omitempty" yaml:"config,omitempty"`
 	Variables   *[]Variable   `json:"variables,omitempty"`
 	Observers   *[]Observer   `json:"observers,omitempty"`   // watchers configuration (datalyzer)
 	Evaluations *[]Evaluation `json:"evaluations,omitempty"` // evaluation configuration (alerting rules)
 	Triggers    *[]Trigger    `json:"triggers,omitempty"`    // triggers configuration (alert assessment)
 	Actions     *[]Action     `json:"actions,omitempty"`     // events configuration (update variables through api and operator)
-	Platform    Platform      `json:"platform,omitempty"`    // declare the behavior of the constructs
+	// kubebuilder:validation:Optional
+	Platform *Platform `json:"platform,omitempty" yaml:"platform,omitempty"` // declare the behavior of the constructs
 }
 
 // Platform is where a user will define the behavior of the constructs that they have configured
@@ -113,10 +115,10 @@ type Platform struct {
 	// EventMap Keys should be names of Triggers
 	// Values should be arrays of name of Actions
 	// +kubebuilder:validation:Optional
-	EventMap *map[TriggerName]*[]ActionName `json:"eventMap,omitempty"`
+	EventMap *map[TriggerName]*[]ActionName `json:"eventMap,omitempty" yaml:"eventMap,omitempty"`
 	// Use defines how Variables are applied.
 	// +kubebuilder:validation:Optional
-	Use *[]Strategy `json:"use,omitempty"`
+	Use *[]Strategy `json:"use,omitempty" yaml:"use,omitempty"`
 }
 
 type Action struct {

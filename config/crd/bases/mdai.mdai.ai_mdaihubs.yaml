@@ -62,6 +62,7 @@ spec:
                   type: object
                 type: array
               config:
+                description: kubebuilder:validation:Optional
                 properties:
                   reconcileLoopInterval:
                     default: 2m
@@ -119,8 +120,7 @@ spec:
                   type: object
                 type: array
               platform:
-                description: Platform is where a user will define the behavior of
-                  the constructs that they have configured
+                description: kubebuilder:validation:Optional
                 properties:
                   eventMap:
                     additionalProperties:
@@ -141,19 +141,19 @@ spec:
                           description: Optional arguments applied to the transformation
                             function
                           type: object
-                        function:
+                        transform:
                           description: How the variable will be transformed before
                             being injected for use.
                           enum:
                           - join
                           type: string
-                        type:
+                        variableName:
                           description: The name of the Variable to which this Strategy
                             will be applied
                           type: string
                       required:
-                      - function
-                      - type
+                      - transform
+                      - variableName
                       type: object
                     type: array
                 type: object
