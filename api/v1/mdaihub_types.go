@@ -22,47 +22,71 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+type Strategy struct {
+	// The name of the Variable to which this Strategy will be applied
+	// +kubebuilder:validation:Required
+	VariableName VariableName `json:"type"`
+	// How the variable will be transformed before being injected for use.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=join
+	Transform VariableTransform `json:"function"`
+	// Optional arguments applied to the transformation function
+	// +kubebuilder:validation:Optional
+	Arguments map[string]string `json:"arguments"`
+}
+
 type Variable struct {
-	// +kubebuilder:validation:MinLength=0
-	Name string `json:"name"`
+	// +kubebuilder:validation:Required
+	Name VariableName `json:"name"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum:=int;float;boolean;string;set;array
+	Type VariableType `json:"type"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum:=mdai-valkey
 	StorageType VariableStorageType `json:"storageType"`
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=scalar;set
-	Type VariableType `json:"type"`
-	// +kubebuilder:validation:Optional
-	Delimiter string `json:"delimiter,omitempty"`
 	// +kubebuilder:validation:Optional
 	DefaultValue *string `json:"defaultValue,omitempty"`
 }
 
-type AlertingRule struct {
+type Evaluation struct {
+	// How this evaluation will be referred to elsewhere in the config
 	// +kubebuilder:validation:Required
-	Name string `json:"name" yaml:"name"`
+	Name EvaluationName `json:"name" yaml:"name"`
+	// A valid PromQL query expression
 	// +kubebuilder:validation:Required
-	AlertQuery intstr.IntOrString `json:"alert_query" yaml:"alert_query"`
+	Expr intstr.IntOrString `json:"expr" yaml:"expr"`
 	// Alerts are considered firing once they have been returned for this long.
 	// +kubebuilder:validation:Optional
 	For *prometheusv1.Duration `json:"for,omitempty" yaml:"for,omitempty"`
+	// KeepFiringFor defines how long an alert will continue firing after the condition that triggered it has cleared.
+	// +kubebuilder:validation:Optional
+	KeepFiringFor *prometheusv1.NonEmptyDuration `json:"keep_firing_for,omitempty" yaml:"keep_firing_for,omitempty"`
 	// +kubebuilder:validation:Pattern:="^(warning|critical)$"
 	Severity string `json:"severity" yaml:"severity"`
-	// +kubebuilder:validation:Required
-	Action string `json:"action" yaml:"action"`
 }
 
-type Evaluation struct {
+type Trigger struct {
+	// How this Trigger will be referred to elsewhere in the config
 	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	Name TriggerName `json:"name" yaml:"name"`
+	// The name of the evaluation that you want to key off of
 	// +kubebuilder:validation:Required
-	EvaluationType EvaluationType `json:"evaluationType"` // prometheus
+	EvaluationName EvaluationName `json:"evaluationName" yaml:"evaluationName"`
+	// Does this evaluation kick off an action on 'firing' status or 'resolved'? If omitted, the evaluation will only trigger on the 'firing' status.
 	// +kubebuilder:validation:Optional
-	AlertingRules *[]AlertingRule `json:"alertingRules,omitempty"`
+	// +kubebuilder:validation:Pattern:="^(firing|resolved)$"
+	AlertStatus string `json:"alertStatus,omitempty" yaml:"alertStatus,omitempty"`
+	// Label from the Expr indicating which value(s) the alert payload will forward. Helpful for dictating downstream behavior.
+	// +kubebuilder:validation:Optional
+	RelevantLabels []string `json:"relevantLabels,omitempty" yaml:"relevantLabels,omitempty"`
 }
 
 type Observer struct {
 	// +kubebuilder:validation:Required
-	Name string `json:"name"` // TODO: define the kind of observer (datalyzer)
+	Name string `json:"name"`
+	// +kubebuilder:validation:Required
+	Image  string            `json:"image"`
+	Config map[string]string `json:"config,omitempty"`
 }
 
 type Config struct {
@@ -78,13 +102,33 @@ type MdaiHubSpec struct {
 	Config      *Config       `json:"config,omitempty"`
 	Variables   *[]Variable   `json:"variables,omitempty"`
 	Observers   *[]Observer   `json:"observers,omitempty"`   // watchers configuration (datalyzer)
-	Evaluations *[]Evaluation `json:"evaluations,omitempty"` // evaluations configuration (alerting rules)
-	Events      *[]Event      `json:"events,omitempty"`      // events configuration (update variables through api and operator)
+	Evaluations *[]Evaluation `json:"evaluations,omitempty"` // evaluation configuration (alerting rules)
+	Triggers    *[]Trigger    `json:"triggers,omitempty"`    // triggers configuration (alert assessment)
+	Actions     *[]Action     `json:"actions,omitempty"`     // events configuration (update variables through api and operator)
+	Platform    *Platform     `json:"platform,omitempty"`    // declare the behavior of the constructs
 }
 
-type Event struct {
+// Platform is where a user will define the behavior of the constructs that they have configured
+type Platform struct {
+	// EventMap Keys should be names of Triggers
+	// Values should be arrays of name of Actions
+	// +kubebuilder:validation:Optional
+	EventMap *map[TriggerName]*[]ActionName `json:"eventMap,omitempty"`
+	// +kubebuilder:validation:Optional
+	Use []Strategy `json:"use,omitempty"`
+}
+
+type Action struct {
+	// How this Action will be referred to elsewhere in the config
 	// +kubebuilder:validation:Required
-	Name string `json:"name"` // TODO: define the kind of event (update variables through api and operator)
+	Name ActionName `json:"name" yaml:"name"`
+	// Values depend on the type of the variable named. To be expanded.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern:="^(mdai/(add|remove))$"
+	Operation string `json:"operation" yaml:"operation"`
+	// The name of the variable that this Action will affect
+	// +kubebuilder:validation:Required
+	VariableName VariableName `json:"variableName" yaml:"variableName"`
 }
 
 // MdaiHubStatus defines the observed state of MdaiHub.
@@ -126,13 +170,25 @@ func init() {
 	SchemeBuilder.Register(&MdaiHub{}, &MdaiHubList{})
 }
 
-type EvaluationType string
+type ActionName string
+type TriggerName string
+type EvaluationName string
+type VariableName string
+
+type TriggerType string
+type VariableSourceType string
 type VariableStorageType string
 type VariableType string
+type VariableTransform string
 
 const (
-	EvaluationTypePrometheus       EvaluationType      = "prometheus"
+	TriggerTypePrometheus          TriggerType         = "prometheus"
 	VariableSourceTypeBultInValkey VariableStorageType = "mdai-valkey"
-	VariableTypeScalar             VariableType        = "scalar"
+	VariableTypeInt                VariableType        = "int"
+	VariableTypeFloat              VariableType        = "float"
+	VariableTypeBoolean            VariableType        = "boolean"
+	VariableTypeString             VariableType        = "string"
 	VariableTypeSet                VariableType        = "set"
+	VariableTypeArray              VariableType        = "array"
+	VariableTransformJoin          VariableTransform   = "join"
 )

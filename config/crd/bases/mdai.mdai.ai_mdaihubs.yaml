@@ -39,6 +39,28 @@ spec:
           spec:
             description: MdaiHubSpec defines the desired state of MdaiHub.
             properties:
+              actions:
+                items:
+                  properties:
+                    name:
+                      description: How this Action will be referred to elsewhere in
+                        the config
+                      type: string
+                    operation:
+                      description: Values depend on the type of the variable named.
+                        To be expanded.
+                      pattern: ^(mdai/(add|remove))$
+                      type: string
+                    variableName:
+                      description: The name of the variable that this Action will
+                        affect
+                      type: string
+                  required:
+                  - name
+                  - operation
+                  - variableName
+                  type: object
+                type: array
               config:
                 properties:
                   reconcileLoopInterval:
@@ -51,57 +73,116 @@ spec:
               evaluations:
                 items:
                   properties:
-                    alertingRules:
-                      items:
-                        properties:
-                          action:
-                            type: string
-                          alert_query:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            x-kubernetes-int-or-string: true
-                          for:
-                            description: Alerts are considered firing once they have
-                              been returned for this long.
-                            pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
-                            type: string
-                          name:
-                            type: string
-                          severity:
-                            pattern: ^(warning|critical)$
-                            type: string
-                        required:
-                        - action
-                        - alert_query
-                        - name
-                        - severity
-                        type: object
-                      type: array
-                    evaluationType:
+                    expr:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      description: A valid PromQL query expression
+                      x-kubernetes-int-or-string: true
+                    for:
+                      description: Alerts are considered firing once they have been
+                        returned for this long.
+                      pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
+                      type: string
+                    keep_firing_for:
+                      description: KeepFiringFor defines how long an alert will continue
+                        firing after the condition that triggered it has cleared.
+                      minLength: 1
+                      pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
                       type: string
                     name:
+                      description: How this evaluation will be referred to elsewhere
+                        in the config
+                      type: string
+                    severity:
+                      pattern: ^(warning|critical)$
                       type: string
                   required:
-                  - evaluationType
+                  - expr
                   - name
-                  type: object
-                type: array
-              events:
-                items:
-                  properties:
-                    name:
-                      type: string
-                  required:
-                  - name
+                  - severity
                   type: object
                 type: array
               observers:
                 items:
                   properties:
+                    config:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    image:
+                      type: string
                     name:
                       type: string
                   required:
+                  - image
+                  - name
+                  type: object
+                type: array
+              platform:
+                description: Platform is where a user will define the behavior of
+                  the constructs that they have configured
+                properties:
+                  eventMap:
+                    additionalProperties:
+                      items:
+                        type: string
+                      type: array
+                    description: |-
+                      EventMap Keys should be names of Triggers
+                      Values should be arrays of name of Actions
+                    type: object
+                  use:
+                    items:
+                      properties:
+                        arguments:
+                          additionalProperties:
+                            type: string
+                          description: Optional arguments applied to the transformation
+                            function
+                          type: object
+                        function:
+                          description: How the variable will be transformed before
+                            being injected for use.
+                          enum:
+                          - join
+                          type: string
+                        type:
+                          description: The name of the Variable to which this Strategy
+                            will be applied
+                          type: string
+                      required:
+                      - function
+                      - type
+                      type: object
+                    type: array
+                type: object
+              triggers:
+                items:
+                  properties:
+                    alertStatus:
+                      description: Does this evaluation kick off an action on 'firing'
+                        status or 'resolved'? If omitted, the evaluation will only
+                        trigger on the 'firing' status.
+                      pattern: ^(firing|resolved)$
+                      type: string
+                    evaluationName:
+                      description: The name of the evaluation that you want to key
+                        off of
+                      type: string
+                    name:
+                      description: How this Trigger will be referred to elsewhere
+                        in the config
+                      type: string
+                    relevantLabels:
+                      description: Label from the Expr indicating which value(s) the
+                        alert payload will forward. Helpful for dictating downstream
+                        behavior.
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - evaluationName
                   - name
                   type: object
                 type: array
@@ -110,10 +191,7 @@ spec:
                   properties:
                     defaultValue:
                       type: string
-                    delimiter:
-                      type: string
                     name:
-                      minLength: 0
                       type: string
                     storageType:
                       enum:
@@ -121,8 +199,12 @@ spec:
                       type: string
                     type:
                       enum:
-                      - scalar
+                      - int
+                      - float
+                      - boolean
+                      - string
                       - set
+                      - array
                       type: string
                   required:
                   - name
