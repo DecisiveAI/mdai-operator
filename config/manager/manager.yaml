@@ -64,6 +64,17 @@ spec:
           - --leader-elect
           - --health-probe-bind-address=:8081
         image: controller:latest
+        env:
+          - name: VALKEY_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: valkey-secret
+                key: VALKEY_ENDPOINT
+          - name: VALKEY_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: valkey-secret
+                key: VALKEY_PASSWORD
         name: manager
         securityContext:
           allowPrivilegeEscalation: false

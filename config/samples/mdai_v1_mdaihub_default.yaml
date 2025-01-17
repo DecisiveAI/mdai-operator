@@ -1,0 +1,14 @@
+apiVersion: mdai.mdai.ai/v1
+kind: MdaiHub
+metadata:
+  labels:
+    app.kubernetes.io/name: mdai-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: mdaihub-sample-default
+spec:
+  variables:
+  evaluations:
+  events:
+    - name: event-1
+  observers:
+    - name: observer-1

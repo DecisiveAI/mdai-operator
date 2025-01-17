@@ -26,19 +26,15 @@ type Variable struct {
 	// +kubebuilder:validation:MinLength=0
 	Name string `json:"name"`
 	// +kubebuilder:validation:Required
-	Source VariableSource `json:"source"`
+	// +kubebuilder:validation:Enum:=mdai-valkey
+	StorageType VariableStorageType `json:"storageType"`
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=scalar;array
+	// +kubebuilder:validation:Enum:=scalar;set
 	Type VariableType `json:"type"`
 	// +kubebuilder:validation:Optional
 	Delimiter string `json:"delimiter,omitempty"`
-}
-
-type VariableSource struct {
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=valkey
-	Type VariableSourceType `json:"type"`
-	// depending on the type some additional fields are needed
+	// +kubebuilder:validation:Optional
+	DefaultValue *string `json:"defaultValue,omitempty"`
 }
 
 type AlertingRule struct {
@@ -61,7 +57,7 @@ type Evaluation struct {
 	// +kubebuilder:validation:Required
 	EvaluationType EvaluationType `json:"evaluationType"` // prometheus
 	// +kubebuilder:validation:Optional
-	AlertingRules *[]AlertingRule `json:"alertingRules"`
+	AlertingRules *[]AlertingRule `json:"alertingRules,omitempty"`
 }
 
 type Observer struct {
@@ -69,8 +65,17 @@ type Observer struct {
 	Name string `json:"name"` // TODO: define the kind of observer (datalyzer)
 }
 
+type Config struct {
+	// Interval at which to reconcile the Cluster Configuration, applied only if built-in ValKey is enabled.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:="2m"
+	// +kubebuilder:validation:Format:=duration
+	ReconcileLoopInterval *metav1.Duration `json:"reconcileLoopInterval,omitempty"`
+}
+
 // MdaiHubSpec defines the desired state of MdaiHub.
 type MdaiHubSpec struct {
+	Config      *Config       `json:"config,omitempty"`
 	Variables   *[]Variable   `json:"variables,omitempty"`
 	Observers   *[]Observer   `json:"observers,omitempty"`   // watchers configuration (datalyzer)
 	Evaluations *[]Evaluation `json:"evaluations,omitempty"` // evaluations configuration (alerting rules)
@@ -122,12 +127,12 @@ func init() {
 }
 
 type EvaluationType string
-type VariableSourceType string
+type VariableStorageType string
 type VariableType string
 
 const (
-	EvaluationTypePrometheus EvaluationType     = "prometheus"
-	VariableSourceTypeValkey VariableSourceType = "valkey"
-	VariableTypeScalar       VariableType       = "scalar"
-	VariableTypeArray        VariableType       = "array"
+	EvaluationTypePrometheus       EvaluationType      = "prometheus"
+	VariableSourceTypeBultInValkey VariableStorageType = "mdai-valkey"
+	VariableTypeScalar             VariableType        = "scalar"
+	VariableTypeSet                VariableType        = "set"
 )

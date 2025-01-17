@@ -6,12 +6,17 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: mdaihub-sample
 spec:
+  config:
+    reconcileLoopInterval: 3m
   variables:
-    - name: service-list
-      source:
-        type: "valkey"
-      type: "scalar"
+    - name: service_list
+      storageType: "mdai-valkey"
+      type: "set"
       delimiter: "|"
+      defaultValue: "n/a"
+    - name: service
+      storageType: "mdai-valkey"
+      type: "scalar"
   evaluations:
     - name: evaluation-1
       evaluationType: prometheus

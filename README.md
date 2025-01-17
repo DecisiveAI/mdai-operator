@@ -1,8 +1,27 @@
+[![E2E Tests](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test-e2e.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test-e2e.yml)
+[![Tests](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml)
+[![Lint](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml)
 # mdai-operator
-// TODO(user): Add simple overview of use/purpose
-
+manages MDAI Hub
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+Operator 
+
+- Monitors OTEL collectors with labels matching the hub name.
+- Creates alerting rules for the Prometheus operator.
+- Reads variables from ValKey.
+- Requires environment variables with the ValKey endpoint and password to be provided.
+- Supports two types of variables: set and scalars.
+- Converts to uppercase MDAI environment variables when injecting them into the OTEL collector.
+  Injects environment variables into OTEL collectors through a ConfigMap with labels matching the hub name. The OTEL collector must be configured to use the ConfigMap.
+- The ConfigMap name is the MDAI hub name plus `-variables`
+```yaml
+  envFrom:
+    - configMapRef:
+      name: mdaihub-sample-variabes
+```
+- Updates to variables are applied by triggering the collector’s restart
+
+- Supports the built-in ValKey storage type for variables 
 
 ## Getting Started
 ### Importing opentelemetry-operator module from private repo
@@ -22,7 +41,22 @@ export GOPRIVATE=github.com/decisiveai/*
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
 
+### To run locally
+make sure the following env variable is set
+```shell
+export VALKEY_ENDPOINT=127.0.0.1:6379
+export VALKEY_PASSWORD=abc
+```
+
 ### To Deploy on the cluster
+**Generate valkey secret**
+```shell
+kubectl create secret generic valkey-secret \
+  --from-literal=VALKEY_ENDPOINT=valkey-primary.default.svc.cluster.local:6379 \
+  --from-literal=VALKEY_PASSWORD=abc \
+  --namespace=mdai-operator-system \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
 **Build and push your image to the location specified by `IMG`:**
 
 ```sh
@@ -56,6 +90,10 @@ You can apply the samples (examples) from the config/sample:
 ```sh
 kubectl apply -k config/samples/
 ```
+Deploy test otel collectors:
+```sh
+kubectl apply -k test/test-samples/
+```
 
 >**NOTE**: Ensure that the samples has default values to test it out.
 
@@ -64,6 +102,10 @@ kubectl apply -k config/samples/
 
 ```sh
 kubectl delete -k config/samples/
+```
+Delete test OTEL collectors:
+```sh
+kubectl delete -k test/test-samples/
 ```
 
 **Delete the APIs(CRDs) from the cluster:**

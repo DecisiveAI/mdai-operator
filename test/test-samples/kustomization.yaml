@@ -1,5 +1,5 @@
 ## Append samples of your project ##
 resources:
-- mdai_v1_mdaihub.yaml
-- mdai_v1_mdaihub_default.yaml
+  - collector.yaml
+  - collector-not-managed.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

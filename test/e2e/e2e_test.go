@@ -58,6 +58,14 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
+		By("creating a empty secret for the controller-manager")
+		cmd = exec.Command("kubectl", "create", "secret", "generic", "valkey-secret",
+			"--namespace", namespace,
+			"--from-literal=VALKEY_ENDPOINT=",
+			"--from-literal=VALKEY_PASSWORD=")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to create secret")
+
 		By("deploying the controller-manager")
 		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
 		_, err = utils.Run(cmd)
