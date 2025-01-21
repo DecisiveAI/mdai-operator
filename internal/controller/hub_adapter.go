@@ -763,7 +763,7 @@ func (c HubAdapter) buildCollectorConfig() (string, error) {
 			"keys": obs.OtelWatcherConfig.LabelResourceAttributes,
 		}
 
-		dvKey := fmt.Sprintf("datavolume/%s", watcherName)
+		dvKey := "datavolume/" + watcherName
 		dvSpec := map[string]interface{}{
 			"label_resource_attributes": obs.OtelWatcherConfig.LabelResourceAttributes,
 		}
