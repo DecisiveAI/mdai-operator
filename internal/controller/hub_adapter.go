@@ -777,7 +777,7 @@ func (c HubAdapter) buildCollectorConfig() (string, error) {
 
 		filterName := ""
 		if obs.OtelWatcherConfig.Filter != nil {
-			filterName = fmt.Sprintf("filter/%s", watcherName)
+			filterName = "filter/" + watcherName
 			config["processors"].(map[string]interface{})[filterName] = buildFilterProcessorMap(obs.OtelWatcherConfig.Filter)
 		}
 
