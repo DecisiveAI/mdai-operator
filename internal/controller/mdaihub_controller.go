@@ -19,10 +19,11 @@ package controller
 import (
 	"context"
 	"fmt"
-	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
 	"os"
 	"time"
+
+	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/valkey-io/valkey-go"

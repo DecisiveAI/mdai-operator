@@ -5,10 +5,11 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"gopkg.in/yaml.v3"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/valkey-io/valkey-go"
@@ -493,15 +494,13 @@ func (c HubAdapter) ensureHubDeletionProcessed(ctx context.Context) (OperationRe
 
 func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationResult, error) {
 	observers := c.mdaiCR.Spec.Observers
-	//TODO do we need to delete old observers?
+	// TODO do we need to delete old observers?
 
 	if observers == nil {
 		c.logger.Info("No observers found in the CR, skipping observer synchronization")
 		return ContinueProcessing()
 	}
-	// generate configmap
-	//for _, observer := range *observers {
-	//}
+
 	if err := c.createOrUpdateWatcherCollectorConfigMap(ctx); err != nil {
 		return OperationResult{}, err
 	}
@@ -558,9 +557,6 @@ func (c HubAdapter) createOrUpdateWatcherCollectorService(ctx context.Context, n
 	c.logger.Info("Successfully created or updated watcher-collector-service", "namespace", namespace, "operation", operationResult)
 	return nil
 }
-
-////go:embed observers/collector.yaml
-//var collectorYAML string
 
 func (c HubAdapter) createOrUpdateWatcherCollectorConfigMap(ctx context.Context) error {
 	namespace := c.mdaiCR.Namespace
@@ -752,7 +748,7 @@ func (c HubAdapter) buildCollectorConfig() (string, error) {
 		},
 	}
 
-	var dataVolumeReceivers []string
+	var dataVolumeReceivers = make([]string, 0)
 	for _, obs := range *observers {
 		if obs.Type != mdaiv1.ObserverTypeOtelWatcher {
 			continue
