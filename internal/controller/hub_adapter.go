@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"strings"
 	"time"
@@ -41,9 +42,6 @@ const (
 
 	envConfigMapNamePostfix = "-variables"
 )
-
-//go:embed observers/collector.yaml
-var collectorYAML string
 
 type HubAdapter struct {
 	mdaiCR       *mdaiv1.MdaiHub
@@ -561,9 +559,18 @@ func (c HubAdapter) createOrUpdateWatcherCollectorService(ctx context.Context, n
 	return nil
 }
 
+////go:embed observers/collector.yaml
+//var collectorYAML string
+
 func (c HubAdapter) createOrUpdateWatcherCollectorConfigMap(ctx context.Context) error {
 	namespace := c.mdaiCR.Namespace
 	configMapName := "watcher-collector-config"
+
+	collectorYAML, err := c.buildCollectorConfig()
+	if err != nil {
+		return fmt.Errorf("failed to build observer configuration: %w", err)
+	}
+
 	desiredConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configMapName,
@@ -695,4 +702,155 @@ func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context
 	c.logger.Info("Deployment created or updated successfully", "deployment", deployment.Name, "operationResult", operationResult)
 
 	return nil
+}
+
+func (c HubAdapter) buildCollectorConfig() (string, error) {
+	observers := c.mdaiCR.Spec.Observers
+	config := map[string]interface{}{
+		"receivers": map[string]interface{}{
+			"otlp": map[string]interface{}{
+				"protocols": map[string]interface{}{
+					"grpc": map[string]interface{}{
+						"endpoint": "0.0.0.0:4317",
+					},
+				},
+			},
+		},
+		"processors": map[string]interface{}{
+			"batch":             map[string]interface{}{},
+			"deltatocumulative": map[string]interface{}{},
+		},
+		"exporters": map[string]interface{}{
+			"debug": map[string]interface{}{},
+			"prometheus": map[string]interface{}{
+				"endpoint":          "0.0.0.0:8899",
+				"metric_expiration": "180m",
+				"resource_to_telemetry_conversion": map[string]bool{
+					"enabled": true,
+				},
+			},
+		},
+		"connectors": map[string]interface{}{},
+		"service": map[string]interface{}{
+			"telemetry": map[string]interface{}{
+				"metrics": map[string]interface{}{
+					"readers": []interface{}{
+						map[string]interface{}{
+							"pull": map[string]interface{}{
+								"exporter": map[string]interface{}{
+									"prometheus": map[string]interface{}{
+										"host": "'0.0.0.0'",
+										"port": 8888,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			"pipelines": map[string]interface{}{},
+		},
+	}
+
+	var dataVolumeReceivers []string
+	for _, obs := range *observers {
+		if obs.Type != mdaiv1.ObserverTypeOtelWatcher {
+			continue
+		}
+
+		watcherName := obs.Name
+
+		groupByKey := fmt.Sprintf("groupbyattrs/%s", watcherName)
+		config["processors"].(map[string]interface{})[groupByKey] = map[string]interface{}{
+			"keys": obs.OtelWatcherConfig.LabelResourceAttributes,
+		}
+
+		dvKey := fmt.Sprintf("datavolume/%s", watcherName)
+		dvSpec := map[string]interface{}{
+			"label_resource_attributes": obs.OtelWatcherConfig.LabelResourceAttributes,
+		}
+		if obs.OtelWatcherConfig.CountMetricName != nil {
+			dvSpec["count_metric_name"] = *obs.OtelWatcherConfig.CountMetricName
+		}
+		if obs.OtelWatcherConfig.BytesMetricName != nil {
+			dvSpec["bytes_metric_name"] = *obs.OtelWatcherConfig.BytesMetricName
+		}
+		config["connectors"].(map[string]interface{})[dvKey] = dvSpec
+
+		filterName := ""
+		if obs.OtelWatcherConfig.Filter != nil {
+			filterName = fmt.Sprintf("filter/%s", watcherName)
+			config["processors"].(map[string]interface{})[filterName] = buildFilterProcessorMap(obs.OtelWatcherConfig.Filter)
+		}
+
+		pipelineProcessors := []string{}
+		if filterName != "" {
+			pipelineProcessors = append(pipelineProcessors, filterName)
+		}
+		pipelineProcessors = append(pipelineProcessors, "batch", groupByKey)
+
+		logsPipelineName := fmt.Sprintf("logs/%s", watcherName)
+		config["service"].(map[string]interface{})["pipelines"].(map[string]interface{})[logsPipelineName] = map[string]interface{}{
+			"receivers":  []string{"otlp"},
+			"processors": pipelineProcessors,
+			"exporters":  []string{dvKey},
+		}
+
+		dataVolumeReceivers = append(dataVolumeReceivers, dvKey)
+	}
+
+	config["service"].(map[string]interface{})["pipelines"].(map[string]interface{})["metrics/watcheroutput"] = map[string]interface{}{
+		"receivers":  dataVolumeReceivers,
+		"processors": []string{"deltatocumulative"},
+		"exporters":  []string{"prometheus", "debug"},
+	}
+
+	raw, err := yaml.Marshal(config)
+	if err != nil {
+		return "", err
+	}
+
+	return string(raw), nil
+}
+
+func buildFilterProcessorMap(filter *mdaiv1.FilterProcessorConfig) map[string]interface{} {
+	filterMap := map[string]interface{}{}
+
+	if filter.ErrorMode != nil {
+		filterMap["error_mode"] = filter.ErrorMode
+	}
+
+	if filter.Logs != nil && len(filter.Logs.LogConditions) > 0 {
+		filterMap["logs"] = map[string]interface{}{
+			"log_record": filter.Logs.LogConditions,
+		}
+	}
+
+	if filter.Metrics != nil {
+		metricsMap := map[string]interface{}{}
+		if filter.Metrics.MetricConditions != nil && len(*filter.Metrics.MetricConditions) > 0 {
+			metricsMap["metric"] = *filter.Metrics.MetricConditions
+		}
+		if filter.Metrics.DataPointConditions != nil && len(*filter.Metrics.DataPointConditions) > 0 {
+			metricsMap["datapoint"] = *filter.Metrics.DataPointConditions
+		}
+		if len(metricsMap) > 0 {
+			filterMap["metrics"] = metricsMap
+		}
+	}
+
+	if filter.Traces != nil {
+		tracesMap := map[string]interface{}{}
+		if filter.Traces.SpanConditions != nil && len(*filter.Traces.SpanConditions) > 0 {
+			tracesMap["span"] = *filter.Traces.SpanConditions
+		}
+		if filter.Traces.SpanEventConditions != nil && len(*filter.Traces.SpanEventConditions) > 0 {
+			tracesMap["spanevent"] = *filter.Traces.SpanEventConditions
+		}
+		if len(tracesMap) > 0 {
+			filterMap["traces"] = tracesMap
+		}
+	}
+
+	return filterMap
 }
