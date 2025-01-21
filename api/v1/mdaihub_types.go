@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -62,11 +63,55 @@ type Evaluation struct {
 
 type Observer struct {
 	// +kubebuilder:validation:Required
-	Name string `json:"name"` // TODO: define the kind of observer (datalyzer)
+	Name string `json:"name"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum:=otel-watcher
+	Type ObserverType `json:"type"`
+	// +kubebuilder:validation:Optional
+	Image *string `json:"image,omitempty"`
+	// TODO add a webhook validation that at least one type of config is provided
+	// +kubebuilder:validation:Optional
+	OtelWatcherConfig *OtelWatcherConfig `json:"otelWatcherConfig,omitempty"`
+}
+
+type OtelWatcherConfig struct {
+	// +kubebuilder:validation:Required
+	LabelResourceAttributes []string `json:"labelResourceAttributes"`
+	// +kubebuilder:validation:Optional
+	CountMetricName *string `json:"countMetricName,omitempty"`
+	// +kubebuilder:validation:Optional
+	BytesMetricName *string `json:"bytesMetricName,omitempty"`
+	// +kubebuilder:validation:Optional
+	Filter *FilterProcessorConfig `json:"filter,omitempty"`
+}
+
+type FilterProcessorConfig struct {
+	// +kubebuilder:validation:Optional
+	ErrorMode *ottl.ErrorMode `json:"error_mode,omitempty"  yaml:"error_mode,omitempty"`
+	// +kubebuilder:validation:Optional
+	Metrics *MetricFilters `json:"metrics,omitempty" yaml:"metrics,omitempty"`
+	// +kubebuilder:validation:Optional
+	Logs *LogFilters `json:"logs,omitempty" yaml:"logs,omitempty"`
+	// +kubebuilder:validation:Optional
+	Traces *TraceFilters `json:"traces,omitempty" yaml:"traces,omitempty"`
+}
+
+type MetricFilters struct {
+	MetricConditions    *[]string `json:"metric,omitempty" yaml:"metric,omitempty"`
+	DataPointConditions *[]string `json:"datapoint,omitempty" yaml:"datapoint,omitempty"`
+}
+
+type TraceFilters struct {
+	SpanConditions      *[]string `json:"span,omitempty" yaml:"span,omitempty"`
+	SpanEventConditions *[]string `json:"spanevent,omitempty" yaml:"spanevent,omitempty"`
+}
+
+type LogFilters struct {
+	LogConditions []string `json:"log_record" yaml:"log_record"`
 }
 
 type Config struct {
-	// Interval at which to reconcile the Cluster Configuration, applied only if built-in ValKey is enabled.
+	// Interval at which to reconcile the Cluster Configuration, applied only if built-in ValKey is enabled and variables defined for Valkey storage.
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:="2m"
 	// +kubebuilder:validation:Format:=duration
@@ -129,10 +174,12 @@ func init() {
 type EvaluationType string
 type VariableStorageType string
 type VariableType string
+type ObserverType string
 
 const (
 	EvaluationTypePrometheus       EvaluationType      = "prometheus"
 	VariableSourceTypeBultInValkey VariableStorageType = "mdai-valkey"
 	VariableTypeScalar             VariableType        = "scalar"
 	VariableTypeSet                VariableType        = "set"
+	ObserverTypeOtelWatcher        ObserverType        = "otel-watcher"
 )

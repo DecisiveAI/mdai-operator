@@ -2,13 +2,16 @@ package controller
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"strings"
 	"time"
 
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/valkey-io/valkey-go"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -38,6 +41,9 @@ const (
 
 	envConfigMapNamePostfix = "-variables"
 )
+
+//go:embed observers/collector.yaml
+var collectorYAML string
 
 type HubAdapter struct {
 	mdaiCR       *mdaiv1.MdaiHub
@@ -432,9 +438,10 @@ func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[s
 		Data: envMap,
 	}
 
-	// Set owner reference if necessary
-	// For example, if the ConfigMap should be owned by a specific Custom Resource
-	// controllerutil.SetControllerReference(owner, desiredConfigMap, scheme)
+	if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
+		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", envConfigMapName)
+		return "", err
+	}
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, desiredConfigMap, func() error {
 		desiredConfigMap.Data = envMap
@@ -484,4 +491,208 @@ func (c HubAdapter) ensureHubDeletionProcessed(ctx context.Context) (OperationRe
 		return StopProcessing()
 	}
 	return ContinueProcessing()
+}
+
+func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationResult, error) {
+	observers := c.mdaiCR.Spec.Observers
+	//TODO do we need to delete old observers?
+
+	if observers == nil {
+		c.logger.Info("No observers found in the CR, skipping observer synchronization")
+		return ContinueProcessing()
+	}
+	// generate configmap
+	//for _, observer := range *observers {
+	//}
+	if err := c.createOrUpdateWatcherCollectorConfigMap(ctx); err != nil {
+		return OperationResult{}, err
+	}
+
+	// for now assuming one collector holds all observers
+	if err := c.createOrUpdateWatcherCollectorService(ctx, c.mdaiCR.Namespace); err != nil {
+		return OperationResult{}, err
+	}
+	if err := c.createOrUpdateWatcherCollectorDeployment(ctx, c.mdaiCR.Namespace); err != nil {
+		return OperationResult{}, err
+	}
+
+	return ContinueProcessing()
+}
+
+func (c HubAdapter) createOrUpdateWatcherCollectorService(ctx context.Context, namespace string) error {
+	service := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "watcher-collector-service",
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app": "watcher-collector",
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(c.mdaiCR, service, c.scheme); err != nil {
+		c.logger.Error(err, "Failed to set owner reference on Service", "service", service.Name)
+		return err
+	}
+
+	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, service, func() error {
+		service.Spec = v1.ServiceSpec{
+			Selector: map[string]string{
+				"app": "watcher-collector", // FIXME: Replace with the actual app label selector
+			},
+			Ports: []v1.ServicePort{
+				{
+					Name:       "otlp-grpc",
+					Protocol:   v1.ProtocolTCP,
+					Port:       4317,
+					TargetPort: intstr.FromString("otlp-grpc"),
+				},
+			},
+			Type: v1.ServiceTypeClusterIP,
+		}
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to create or update watcher-collector-service: %w", err)
+	}
+
+	c.logger.Info("Successfully created or updated watcher-collector-service", "namespace", namespace, "operation", operationResult)
+	return nil
+}
+
+func (c HubAdapter) createOrUpdateWatcherCollectorConfigMap(ctx context.Context) error {
+	namespace := c.mdaiCR.Namespace
+	configMapName := "watcher-collector-config"
+	desiredConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app": "watcher-collector",
+			},
+		},
+		Data: map[string]string{
+			"collector.yaml": collectorYAML,
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
+		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", configMapName)
+		return err
+	}
+
+	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, desiredConfigMap, func() error {
+		desiredConfigMap.Data["collector.yaml"] = collectorYAML
+		return nil
+	})
+	if err != nil {
+		c.logger.Error(err, "Failed to create or update ConfigMap", "configmap", configMapName)
+		return err
+	}
+
+	c.logger.Info("ConfigMap created or updated successfully", "configmap", configMapName, "operation", operationResult)
+	return nil
+}
+
+func int32Ptr(i int32) *int32 {
+	return &i
+}
+
+func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context, namespace string) error {
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "watcher-collector",
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app": "watcher-collector",
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: int32Ptr(1),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "watcher-collector",
+				},
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app":                         "watcher-collector",
+						"app.kubernetes.io/component": "watcher-collector",
+					},
+					Annotations: map[string]string{
+						"prometheus.io/path":   "/metrics",
+						"prometheus.io/port":   "8899",
+						"prometheus.io/scrape": "true",
+					},
+				},
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  "watcher-collector",
+							Image: "public.ecr.aws/decisiveai/watcher-collector:0.1.0-dev",
+							Ports: []v1.ContainerPort{
+								{
+									ContainerPort: 8888,
+									Name:          "otelcol-metrics",
+								},
+								{
+									ContainerPort: 8899,
+									Name:          "watcher-metrics",
+								},
+								{
+									ContainerPort: 4317,
+									Name:          "otlp-grpc",
+								},
+								{
+									ContainerPort: 4318,
+									Name:          "otlp-http",
+								},
+							},
+							VolumeMounts: []v1.VolumeMount{
+								{
+									Name:      "config-volume",
+									MountPath: "/conf/collector.yaml",
+									SubPath:   "collector.yaml",
+								},
+							},
+							Command: []string{
+								"/mdai-watcher-collector",
+								"--config=/conf/collector.yaml",
+							},
+						},
+					},
+					Volumes: []v1.Volume{
+						{
+							Name: "config-volume",
+							VolumeSource: v1.VolumeSource{
+								ConfigMap: &v1.ConfigMapVolumeSource{
+									LocalObjectReference: v1.LocalObjectReference{
+										Name: "watcher-collector-config",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(c.mdaiCR, deployment, c.scheme); err != nil {
+		c.logger.Error(err, "Failed to set owner reference on Deployment", "deployment", deployment.Name)
+		return err
+	}
+
+	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, deployment, func() error {
+		return nil
+	})
+	if err != nil {
+		c.logger.Error(err, "Failed to create or update Deployment", "deployment", deployment.Name)
+		return err
+	}
+	c.logger.Info("Deployment created or updated successfully", "deployment", deployment.Name, "operationResult", operationResult)
+
+	return nil
 }

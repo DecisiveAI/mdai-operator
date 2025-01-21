@@ -33,5 +33,41 @@ spec:
           action: manageFilter
   events:
     - name: event-1
+
   observers:
-    - name: observer-1
+    - name: watcher1
+      type: otel-watcher
+      image: public.ecr.aws/p3k6k6h3/watcher-observer
+      otelWatcherConfig:
+        labelResourceAttributes:
+          - service.name
+        countMetricName: mdai_watcher_one_count_total
+        bytesMetricName: mdai_watcher_one_bytes_total
+    - name: watcher2
+      type: otel-watcher
+      otelWatcherConfig:
+        labelResourceAttributes:
+            - team
+            - log_level
+        countMetricName: mdai_watcher_two_count_total
+    - name: watcher3
+      type: otel-watcher
+      otelWatcherConfig:
+        labelResourceAttributes:
+            - region
+            - log_level
+        countMetricName: mdai_watcher_three_count_total
+    - name: watcher4
+      type: otel-watcher
+      otelWatcherConfig:
+        labelResourceAttributes:
+            - service.name
+            - team
+            - region
+        countMetricName: mdai_watcher_four_count_total
+        bytesMetricName: mdai_watcher_four_bytes_total
+        filter:
+          error_mode: ignore
+          logs:
+            log_record:
+              - 'attributes["log_level"] == "INFO"'
