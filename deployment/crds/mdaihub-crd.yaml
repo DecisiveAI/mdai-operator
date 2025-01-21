@@ -43,7 +43,8 @@ spec:
                   reconcileLoopInterval:
                     default: 2m
                     description: Interval at which to reconcile the Cluster Configuration,
-                      applied only if built-in ValKey is enabled.
+                      applied only if built-in ValKey is enabled and variables defined
+                      for Valkey storage.
                     format: duration
                     type: string
                 type: object
@@ -98,10 +99,66 @@ spec:
               observers:
                 items:
                   properties:
+                    image:
+                      type: string
                     name:
+                      type: string
+                    otelWatcherConfig:
+                      properties:
+                        bytesMetricName:
+                          type: string
+                        countMetricName:
+                          type: string
+                        filter:
+                          properties:
+                            error_mode:
+                              type: string
+                            logs:
+                              properties:
+                                log_record:
+                                  items:
+                                    type: string
+                                  type: array
+                              required:
+                              - log_record
+                              type: object
+                            metrics:
+                              properties:
+                                datapoint:
+                                  items:
+                                    type: string
+                                  type: array
+                                metric:
+                                  items:
+                                    type: string
+                                  type: array
+                              type: object
+                            traces:
+                              properties:
+                                span:
+                                  items:
+                                    type: string
+                                  type: array
+                                spanevent:
+                                  items:
+                                    type: string
+                                  type: array
+                              type: object
+                          type: object
+                        labelResourceAttributes:
+                          items:
+                            type: string
+                          type: array
+                      required:
+                      - labelResourceAttributes
+                      type: object
+                    type:
+                      enum:
+                      - otel-watcher
                       type: string
                   required:
                   - name
+                  - type
                   type: object
                 type: array
               variables:
