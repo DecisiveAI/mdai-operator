@@ -2,4 +2,5 @@
 resources:
 - mdai_v1_mdaihub.yaml
 - mdai_v1_mdaihub_default.yaml
+- mdai_v1_mdaihub_second.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

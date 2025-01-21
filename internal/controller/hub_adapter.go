@@ -42,6 +42,7 @@ const (
 	ObjectUnchanged ObjectState = false
 
 	envConfigMapNamePostfix = "-variables"
+	watcherConfigMapPostfix = "-watcher-collector-config"
 )
 
 type HubAdapter struct {
@@ -494,13 +495,13 @@ func (c HubAdapter) ensureHubDeletionProcessed(ctx context.Context) (OperationRe
 
 func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationResult, error) {
 	observers := c.mdaiCR.Spec.Observers
-	// TODO do we need to delete old observers?
 
 	if observers == nil {
 		c.logger.Info("No observers found in the CR, skipping observer synchronization")
 		return ContinueProcessing()
 	}
 
+	// for now assuming one collector holds all observers
 	if err := c.createOrUpdateWatcherCollectorConfigMap(ctx); err != nil {
 		return OperationResult{}, err
 	}
@@ -519,10 +520,10 @@ func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationR
 func (c HubAdapter) createOrUpdateWatcherCollectorService(ctx context.Context, namespace string) error {
 	service := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "watcher-collector-service",
+			Name:      c.mdaiCR.Name + "-watcher-collector-service",
 			Namespace: namespace,
 			Labels: map[string]string{
-				"app": "watcher-collector",
+				"app": c.mdaiCR.Name + "-watcher-collector",
 			},
 		},
 	}
@@ -535,7 +536,7 @@ func (c HubAdapter) createOrUpdateWatcherCollectorService(ctx context.Context, n
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, service, func() error {
 		service.Spec = v1.ServiceSpec{
 			Selector: map[string]string{
-				"app": "watcher-collector", // FIXME: Replace with the actual app label selector
+				"app": c.mdaiCR.Name + "-watcher-collector",
 			},
 			Ports: []v1.ServicePort{
 				{
@@ -560,7 +561,7 @@ func (c HubAdapter) createOrUpdateWatcherCollectorService(ctx context.Context, n
 
 func (c HubAdapter) createOrUpdateWatcherCollectorConfigMap(ctx context.Context) error {
 	namespace := c.mdaiCR.Namespace
-	configMapName := "watcher-collector-config"
+	configMapName := c.mdaiCR.Name + watcherConfigMapPostfix
 
 	collectorYAML, err := c.buildCollectorConfig()
 	if err != nil {
@@ -572,7 +573,7 @@ func (c HubAdapter) createOrUpdateWatcherCollectorConfigMap(ctx context.Context)
 			Name:      configMapName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				"app": "watcher-collector",
+				"app": c.mdaiCR.Name + "-watcher-collector",
 			},
 		},
 		Data: map[string]string{
@@ -603,26 +604,27 @@ func int32Ptr(i int32) *int32 {
 }
 
 func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context, namespace string) error {
+	name := c.mdaiCR.Name + "-watcher-collector"
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "watcher-collector",
+			Name:      name,
 			Namespace: namespace,
 			Labels: map[string]string{
-				"app": "watcher-collector",
+				"app": name,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: int32Ptr(1),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": "watcher-collector",
+					"app": name,
 				},
 			},
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app":                         "watcher-collector",
-						"app.kubernetes.io/component": "watcher-collector",
+						"app":                         name,
+						"app.kubernetes.io/component": name,
 					},
 					Annotations: map[string]string{
 						"prometheus.io/path":   "/metrics",
@@ -633,7 +635,7 @@ func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
 						{
-							Name:  "watcher-collector",
+							Name:  name,
 							Image: "public.ecr.aws/decisiveai/watcher-collector:0.1.0-dev",
 							Ports: []v1.ContainerPort{
 								{
@@ -672,7 +674,7 @@ func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context
 							VolumeSource: v1.VolumeSource{
 								ConfigMap: &v1.ConfigMapVolumeSource{
 									LocalObjectReference: v1.LocalObjectReference{
-										Name: "watcher-collector-config",
+										Name: c.mdaiCR.Name + watcherConfigMapPostfix,
 									},
 								},
 							},
