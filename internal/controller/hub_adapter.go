@@ -758,7 +758,7 @@ func (c HubAdapter) buildCollectorConfig() (string, error) {
 
 		watcherName := obs.Name
 
-		groupByKey := fmt.Sprintf("groupbyattrs/%s", watcherName)
+		groupByKey := "groupbyattrs/" + watcherName
 		config["processors"].(map[string]interface{})[groupByKey] = map[string]interface{}{
 			"keys": obs.OtelWatcherConfig.LabelResourceAttributes,
 		}
