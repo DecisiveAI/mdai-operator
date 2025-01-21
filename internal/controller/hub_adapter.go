@@ -787,7 +787,7 @@ func (c HubAdapter) buildCollectorConfig() (string, error) {
 		}
 		pipelineProcessors = append(pipelineProcessors, "batch", groupByKey)
 
-		logsPipelineName := fmt.Sprintf("logs/%s", watcherName)
+		logsPipelineName := "logs/" + watcherName
 		config["service"].(map[string]interface{})["pipelines"].(map[string]interface{})[logsPipelineName] = map[string]interface{}{
 			"receivers":  []string{"otlp"},
 			"processors": pipelineProcessors,
