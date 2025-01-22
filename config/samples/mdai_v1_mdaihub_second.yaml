@@ -4,10 +4,11 @@ metadata:
   labels:
     app.kubernetes.io/name: mdai-operator
     app.kubernetes.io/managed-by: kustomize
-  name: mdaihub-sample
+  name: mdaihub-second
 spec:
   config:
-    reconcileLoopInterval: 3m
+    reconcileLoopInterval: 2m
+
   variables:
     - name: service_list
       storageType: "mdai-valkey"
@@ -17,6 +18,7 @@ spec:
     - name: service
       storageType: "mdai-valkey"
       type: "scalar"
+
   evaluations:
     - name: evaluation-1
       evaluationType: prometheus
@@ -51,13 +53,6 @@ spec:
             - log_level
         countMetricName: mdai_watcher_two_count_total
     - name: watcher3
-      type: otel-watcher
-      otelWatcherConfig:
-        labelResourceAttributes:
-            - region
-            - log_level
-        countMetricName: mdai_watcher_three_count_total
-    - name: watcher4
       type: otel-watcher
       otelWatcherConfig:
         labelResourceAttributes:

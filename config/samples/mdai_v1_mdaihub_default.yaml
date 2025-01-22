@@ -7,8 +7,3 @@ metadata:
   name: mdaihub-sample-default
 spec:
   variables:
-  evaluations:
-  events:
-    - name: event-1
-  observers:
-    - name: observer-1

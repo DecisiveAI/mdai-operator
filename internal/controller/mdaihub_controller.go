@@ -22,6 +22,9 @@ import (
 	"os"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
+
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/valkey-io/valkey-go"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -59,6 +62,8 @@ type MdaiHubReconciler struct {
 // +kubebuilder:rbac:groups=opentelemetry.io,resources=opentelemetrycollectors,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=monitoring.coreos.com,resources=prometheusrules,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="apps",resources=deployments,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -87,7 +92,7 @@ func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	log.Info("-- Finished reconciliation --")
-	if r.ValKeyClient != nil {
+	if r.ValKeyClient != nil && r.isValkeyVariableConfigured(fetchedCR) {
 		var timeInterval metav1.Duration
 		if fetchedCR.Spec.Config != nil && fetchedCR.Spec.Config.ReconcileLoopInterval != nil {
 			timeInterval = *fetchedCR.Spec.Config.ReconcileLoopInterval
@@ -100,6 +105,20 @@ func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	return ctrl.Result{}, nil
 }
 
+func (r *MdaiHubReconciler) isValkeyVariableConfigured(fetchedCR *mdaiv1.MdaiHub) bool {
+	if fetchedCR.Spec.Config == nil || fetchedCR.Spec.Variables == nil {
+		return false
+	}
+
+	for _, variable := range *fetchedCR.Spec.Variables {
+		if variable.StorageType == mdaiv1.VariableSourceTypeBultInValkey {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (r *MdaiHubReconciler) ReconcileHandler(ctx context.Context, adapter HubAdapter) (ctrl.Result, error) {
 	operations := []ReconcileOperation{
 		adapter.ensureHubDeletionProcessed,
@@ -107,6 +126,7 @@ func (r *MdaiHubReconciler) ReconcileHandler(ctx context.Context, adapter HubAda
 		adapter.ensureFinalizerInitialized,
 		adapter.ensureEvaluationsSynchronized,
 		adapter.ensureVariableSynced,
+		adapter.ensureObserversSynchronized,
 	}
 	for _, operation := range operations {
 		result, err := operation(ctx)
@@ -149,6 +169,9 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&mdaiv1.MdaiHub{}).
+		Owns(&v1.ConfigMap{}).
+		Owns(&v1.Service{}).
+		Owns(&appsv1.Deployment{}).
 		Watches(
 			// we are watching OpenTelemetryCollector resources to detect if new ones have been created
 			// if new ones are created, we have to provide mdai variables for new collectors
