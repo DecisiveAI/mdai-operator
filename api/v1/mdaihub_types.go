@@ -183,16 +183,17 @@ func init() {
 	SchemeBuilder.Register(&MdaiHub{}, &MdaiHubList{})
 }
 
-type ActionName string
-type TriggerName string
-type EvaluationName string
-type VariableName string
-
-type TriggerType string
-type VariableSourceType string
-type VariableStorageType string
-type VariableType string
-type VariableTransform string
+type (
+       ActionName          string
+       TriggerName         string
+       EvaluationName      string
+       VariableName        string
+       TriggerType         string
+       VariableSourceType  string
+       VariableStorageType string
+       VariableType        string
+       VariableTransform   string
+)
 
 const (
 	TriggerTypePrometheus          TriggerType         = "prometheus"
