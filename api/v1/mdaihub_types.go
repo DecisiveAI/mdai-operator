@@ -27,7 +27,7 @@ type VariableWith struct {
 	// +kubeuilder:validation:Required
 	ExportedVariableName string `json:"exportedVariableName,omitempty" yaml:"exportedVariableName,omitempty"`
 	// +kubebuilder:validation:Optional
-	Transformer VariableTransformer `json:"transformer,omitempty" yaml:"transformer,omitempty"`
+	Transformer *VariableTransformer `json:"transformer,omitempty" yaml:"transformer,omitempty"`
 }
 
 type JoinFunction struct {
@@ -50,12 +50,12 @@ type Variable struct {
 	// StorageType defaults to "mdai-valkey" if not provided
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Enum:=mdai-valkey
-	StorageType VariableStorageType `json:"storageType" yaml:"storageType"`
+	StorageType *VariableStorageType `json:"storageType" yaml:"storageType"`
 	// +kubebuilder:validation:Optional
 	DefaultValue *string `json:"defaultValue,omitempty" yaml:"defaultValue,omitempty"`
 	// If ExportedVariableName is not present, at least one VariableWith should be declared
 	// +kubebuilder:validation:Optional
-	With []VariableWith `json:"with,omitempty" yaml:"with,omitempty"`
+	With *[]VariableWith `json:"with,omitempty" yaml:"with,omitempty"`
 }
 
 type Action struct {
@@ -67,9 +67,9 @@ type Action struct {
 
 type PrometheusAlertEvaluationStatus struct {
 	// +kubebuilder:validation:Optional
-	Firing Action `json:"firing" yaml:"firing"`
+	Firing *Action `json:"firing" yaml:"firing"`
 	// +kubebuilder:validation:Optional
-	Resolved Action `json:"resolved" yaml:"resolved"`
+	Resolved *Action `json:"resolved" yaml:"resolved"`
 }
 
 type Evaluation struct {
@@ -91,15 +91,15 @@ type Evaluation struct {
 	Severity string `json:"severity" yaml:"severity"`
 	// RelevantLabels indicates which part(s) of the alert payload to forward to the Action.
 	// +kubebuilder:validation:Optional
-	RelevantLabels []string `json:"relevantLabels" yaml:"relevantLabels"`
+	RelevantLabels *[]string `json:"relevantLabels" yaml:"relevantLabels"`
 	// Resolve is the action that's taken when this alert fires. It's a shorthand for Status.Firing
 	// +kubebuilder:validation:Optional
-	Resolve Action `json:"resolve" yaml:"resolve"`
+	Resolve *Action `json:"resolve" yaml:"resolve"`
 	// Status allows the user to specify actions depending on the state of the evaluation
 	// If Resolve is not provided, Status.Firing is required
 	// If both are provided, Status will override Resolve
 	// +kubebuilder:validation:Optional
-	Status PrometheusAlertEvaluationStatus `json:"status" yaml:"status"`
+	Status *PrometheusAlertEvaluationStatus `json:"status" yaml:"status"`
 }
 
 type ObserverLogsFilter struct {
@@ -111,14 +111,14 @@ type ObserverFilter struct {
 	// +kubebuilder:validation:Required
 	ErrorMode string `json:"error_mode" yaml:"error_mode"`
 	// +kubebuilder:validation:Optional
-	Logs ObserverLogsFilter `json:"logs" yaml:"logs"`
+	Logs *ObserverLogsFilter `json:"logs" yaml:"logs"`
 }
 
 type Observer struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
 	// +kubebuilder:validation:Optional
-	Image string `json:"image" yaml:"image"`
+	Image *string `json:"image" yaml:"image"`
 	// +kubebuilder:validation:Required
 	LabelResourceAttributes []string `json:"label_resource_attributes" yaml:"label_resource_attributes"`
 	// +kubebuilder:validation:Optional
