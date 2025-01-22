@@ -169,7 +169,6 @@ spec:
                     delimiter:
                       type: string
                     name:
-                      minLength: 0
                       type: string
                     storageType:
                       enum:

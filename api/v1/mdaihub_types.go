@@ -24,7 +24,7 @@ import (
 )
 
 type Variable struct {
-	// +kubebuilder:validation:MinLength=0
+	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum:=mdai-valkey

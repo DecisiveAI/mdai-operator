@@ -94,6 +94,11 @@ Deploy test otel collectors:
 ```sh
 kubectl apply -k test/test-samples/
 ```
+### Testing
+Add watcher scrape config to Prometheus:
+```shell
+helm upgrade prometheus prometheus-community/kube-prometheus-stack -f test/test-samples/custom-values.yaml
+```
 
 >**NOTE**: Ensure that the samples has default values to test it out.
 

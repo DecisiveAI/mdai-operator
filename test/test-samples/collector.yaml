@@ -16,7 +16,7 @@ spec:
         sampling_thereafter: 100
         verbosity: detailed
       otlp/mdai_datalyzer:
-        endpoint: datalyzer-service:4317
+        endpoint: mdaihub-sample-watcher-collector-service:4317
         tls:
           insecure: true
     processors:
