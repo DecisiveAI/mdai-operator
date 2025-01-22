@@ -254,7 +254,7 @@ func (c HubAdapter) getOrCreatePrometheusRuleCR(ctx context.Context, defaultProm
 }
 
 func composePrometheusRule(alertingRule mdaiv1.Evaluation, engineName string) []prometheusv1.Rule {
-	alertName := (string)(alertingRule.Name)
+	alertName := string(alertingRule.Name)
 	prometheusRule := prometheusv1.Rule{
 		Expr:  alertingRule.Expr,
 		Alert: alertName,
