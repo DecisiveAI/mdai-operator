@@ -17,19 +17,33 @@ spec:
       defaultValue: "n/a"
       with:
         - exportedVariableName: "SERVICE_LIST_REGEX"
-          serialize: join("|")
+          transformer:
+            join:
+              delimiter: "|"
         - exportedVariableName: "SERVICE_LIST_CSV"
-          serialize: join(",")
+          transformer:
+            join:
+              delimiter: ","
       # below properties are optional
       type: set
       storageType: "mdai-valkey"
 
   # Observers that watch telemetry and contribute metrics to Prometheus. Typical use is to query these metrics in Evaluations.
   observers:
-    - name: service-bytes
+    - name: service-bytes-watcher1
       image: public.ecr.aws/p3k6k6h3/watcher-observer
-      config:
-        attributes: "service.name"
+      label_resource_attributes:
+      - service.name
+      - team
+      - region
+      count_metric_name: mdai_watcher_four_count_total
+      bytes_metric_name: mdai_watcher_four_bytes_total
+      filter:
+        error_mode: ignore
+        logs:
+          log_record:
+            - 'attributes["log_level"] == "INFO"'
+
   # Evaluations define the conditions to check. Currently, supported Evaluations are only Prometheus Alerts.
   evaluations:
     - name: logBytesOutTooHighBySvc

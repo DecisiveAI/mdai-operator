@@ -150,15 +150,36 @@ spec:
               observers:
                 items:
                   properties:
-                    config:
-                      additionalProperties:
-                        type: string
+                    bytes_metric_name:
+                      type: string
+                    count_metric_name:
+                      type: string
+                    filter:
+                      properties:
+                        error_mode:
+                          type: string
+                        logs:
+                          properties:
+                            log_record:
+                              items:
+                                type: string
+                              type: array
+                          required:
+                          - log_record
+                          type: object
+                      required:
+                      - error_mode
                       type: object
                     image:
                       type: string
+                    label_resource_attributes:
+                      items:
+                        type: string
+                      type: array
                     name:
                       type: string
                   required:
+                  - label_resource_attributes
                   - name
                   type: object
                 type: array
@@ -166,10 +187,6 @@ spec:
                 items:
                   properties:
                     defaultValue:
-                      type: string
-                    exportedVariableName:
-                      type: string
-                    serialize:
                       type: string
                     storageKey:
                       type: string
@@ -189,21 +206,21 @@ spec:
                       type: string
                     with:
                       description: If ExportedVariableName is not present, at least
-                        one VariableOverride should be declared
+                        one VariableWith should be declared
                       items:
                         properties:
-                          defaultValue:
-                            type: string
                           exportedVariableName:
                             type: string
-                          serialize:
-                            type: string
-                          storageType:
-                            description: StorageType defaults to "mdai-valkey" if
-                              not provided
-                            enum:
-                            - mdai-valkey
-                            type: string
+                          transformer:
+                            properties:
+                              join:
+                                properties:
+                                  delimiter:
+                                    type: string
+                                required:
+                                - delimiter
+                                type: object
+                            type: object
                         type: object
                       type: array
                   required:

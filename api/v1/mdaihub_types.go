@@ -22,17 +22,21 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-type VariableOverride struct {
-	// StorageType defaults to "mdai-valkey" if not provided
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Enum:=mdai-valkey
-	StorageType VariableStorageType `json:"storageType" yaml:"storageType"`
-	// +kubebuilder:validation:Optional
-	DefaultValue *string `json:"defaultValue,omitempty" yaml:"defaultValue,omitempty"`
+type VariableWith struct {
 	// +kubeuilder:validation:Required
 	ExportedVariableName string `json:"exportedVariableName,omitempty" yaml:"exportedVariableName,omitempty"`
 	// +kubebuilder:validation:Optional
-	Serialize string `json:"serialize,omitempty" yaml:"serialize,omitempty"`
+	Transformer VariableTransformer `json:"transformer,omitempty" yaml:"transformer,omitempty"`
+}
+
+type JoinFunction struct {
+	// +kubebuilder:validation:Required
+	Delimiter string `json:"delimiter" yaml:"delimiter"`
+}
+
+type VariableTransformer struct {
+	// +kubebuilder:validation:Optional
+	Join *JoinFunction `json:"join,omitempty" yaml:"join,omitempty"`
 }
 
 type Variable struct {
@@ -47,13 +51,9 @@ type Variable struct {
 	StorageType VariableStorageType `json:"storageType" yaml:"storageType"`
 	// +kubebuilder:validation:Optional
 	DefaultValue *string `json:"defaultValue,omitempty" yaml:"defaultValue,omitempty"`
-	// +kubeuilder:validation:Optional
-	ExportedVariableName string `json:"exportedVariableName,omitempty" yaml:"exportedVariableName,omitempty"`
+	// If ExportedVariableName is not present, at least one VariableWith should be declared
 	// +kubebuilder:validation:Optional
-	Serialize string `json:"serialize,omitempty" yaml:"serialize,omitempty"`
-	// If ExportedVariableName is not present, at least one VariableOverride should be declared
-	// +kubebuilder:validation:Optional
-	With []VariableOverride `json:"with,omitempty" yaml:"with,omitempty"`
+	With []VariableWith `json:"with,omitempty" yaml:"with,omitempty"`
 }
 
 type Action struct {
@@ -100,12 +100,31 @@ type Evaluation struct {
 	ResolvedStatus PrometheusAlertEvaluationResolveStatus `json:"resolvedStatus" yaml:"resolvedStatus"`
 }
 
+type ObserverLogsFilter struct {
+	// +kubebuilder:validation:Required
+	LogRecord []string `json:"log_record" yaml:"log_record"`
+}
+
+type ObserverFilter struct {
+	// +kubebuilder:validation:Required
+	ErrorMode string `json:"error_mode" yaml:"error_mode"`
+	// +kubebuilder:validation:Optional
+	Logs ObserverLogsFilter `json:"logs" yaml:"logs"`
+}
+
 type Observer struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
 	// +kubebuilder:validation:Optional
-	Image  string            `json:"image" yaml:"image"`
-	Config map[string]string `json:"config,omitempty" yaml:"config,omitempty"`
+	Image string `json:"image" yaml:"image"`
+	// +kubebuilder:validation:Required
+	LabelResourceAttributes []string `json:"label_resource_attributes" yaml:"label_resource_attributes"`
+	// +kubebuilder:validation:Optional
+	CountMetricName string `json:"count_metric_name,omitempty" yaml:"count_metric_name,omitempty"`
+	// +kubebuilder:validation:Optional
+	BytesMetricName string `json:"bytes_metric_name,omitempty" yaml:"bytes_metric_name,omitempty"`
+	// +kubebuilder:validation:Optional
+	Filter ObserverFilter `json:"filter,omitempty" yaml:"filter,omitempty"`
 }
 
 type Config struct {
