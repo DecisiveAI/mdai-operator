@@ -23,6 +23,7 @@ import (
 )
 
 type VariableWith struct {
+	// +kubeuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubeuilder:validation:Required
 	ExportedVariableName string `json:"exportedVariableName,omitempty" yaml:"exportedVariableName,omitempty"`
 	// +kubebuilder:validation:Optional
@@ -40,8 +41,9 @@ type VariableTransformer struct {
 }
 
 type Variable struct {
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubebuilder:validation:Required
-	StorageKey VariableName `json:"storageKey" yaml:"storageKey"`
+	StorageKey string `json:"storageKey" yaml:"storageKey"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum:=int;float;boolean;string;set;array
 	Type VariableType `json:"type" yaml:"type"`
@@ -184,15 +186,14 @@ func init() {
 }
 
 type (
-       ActionName          string
-       TriggerName         string
-       EvaluationName      string
-       VariableName        string
-       TriggerType         string
-       VariableSourceType  string
-       VariableStorageType string
-       VariableType        string
-       VariableTransform   string
+	ActionName          string
+	TriggerName         string
+	EvaluationName      string
+	TriggerType         string
+	VariableSourceType  string
+	VariableStorageType string
+	VariableType        string
+	VariableTransform   string
 )
 
 const (
