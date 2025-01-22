@@ -120,11 +120,11 @@ type Observer struct {
 	// +kubebuilder:validation:Required
 	LabelResourceAttributes []string `json:"label_resource_attributes" yaml:"label_resource_attributes"`
 	// +kubebuilder:validation:Optional
-	CountMetricName string `json:"count_metric_name,omitempty" yaml:"count_metric_name,omitempty"`
+	CountMetricName *string `json:"count_metric_name,omitempty" yaml:"count_metric_name,omitempty"`
 	// +kubebuilder:validation:Optional
-	BytesMetricName string `json:"bytes_metric_name,omitempty" yaml:"bytes_metric_name,omitempty"`
+	BytesMetricName *string `json:"bytes_metric_name,omitempty" yaml:"bytes_metric_name,omitempty"`
 	// +kubebuilder:validation:Optional
-	Filter ObserverFilter `json:"filter,omitempty" yaml:"filter,omitempty"`
+	Filter *ObserverFilter `json:"filter,omitempty" yaml:"filter,omitempty"`
 }
 
 type Config struct {
