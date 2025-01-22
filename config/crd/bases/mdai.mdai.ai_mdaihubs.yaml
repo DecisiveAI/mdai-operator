@@ -81,7 +81,7 @@ spec:
                       type: array
                     resolve:
                       description: Resolve is the action that's taken when this alert
-                        fires. It's a shorthand for ResolvedStatus.Firing
+                        fires. It's a shorthand for Status.Firing
                       properties:
                         operation:
                           enum:
@@ -96,11 +96,14 @@ spec:
                       - operation
                       - type
                       type: object
-                    resolvedStatus:
+                    severity:
+                      pattern: ^(warning|critical)$
+                      type: string
+                    status:
                       description: |-
-                        ResolveStatus allows the user to specify actions depending on the state of the evaluation
-                        If Resolve is not provided, ResolveStatus.Firing is required
-                        If both are provided, ResolveStatus will override Resolve
+                        Status allows the user to specify actions depending on the state of the evaluation
+                        If Resolve is not provided, Status.Firing is required
+                        If both are provided, Status will override Resolve
                       properties:
                         firing:
                           properties:
@@ -133,9 +136,6 @@ spec:
                           - type
                           type: object
                       type: object
-                    severity:
-                      pattern: ^(warning|critical)$
-                      type: string
                     type:
                       enum:
                       - mdai/prometheus_alert

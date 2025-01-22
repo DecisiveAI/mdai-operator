@@ -63,7 +63,7 @@ type Action struct {
 	Operation string `json:"operation" yaml:"operation"`
 }
 
-type PrometheusAlertEvaluationResolveStatus struct {
+type PrometheusAlertEvaluationStatus struct {
 	// +kubebuilder:validation:Optional
 	Firing Action `json:"firing" yaml:"firing"`
 	// +kubebuilder:validation:Optional
@@ -90,14 +90,14 @@ type Evaluation struct {
 	// RelevantLabels indicates which part(s) of the alert payload to forward to the Action.
 	// +kubebuilder:validation:Optional
 	RelevantLabels []string `json:"relevantLabels" yaml:"relevantLabels"`
-	// Resolve is the action that's taken when this alert fires. It's a shorthand for ResolvedStatus.Firing
+	// Resolve is the action that's taken when this alert fires. It's a shorthand for Status.Firing
 	// +kubebuilder:validation:Optional
 	Resolve Action `json:"resolve" yaml:"resolve"`
-	// ResolveStatus allows the user to specify actions depending on the state of the evaluation
-	// If Resolve is not provided, ResolveStatus.Firing is required
-	// If both are provided, ResolveStatus will override Resolve
+	// Status allows the user to specify actions depending on the state of the evaluation
+	// If Resolve is not provided, Status.Firing is required
+	// If both are provided, Status will override Resolve
 	// +kubebuilder:validation:Optional
-	ResolvedStatus PrometheusAlertEvaluationResolveStatus `json:"resolvedStatus" yaml:"resolvedStatus"`
+	Status PrometheusAlertEvaluationStatus `json:"status" yaml:"status"`
 }
 
 type ObserverLogsFilter struct {
