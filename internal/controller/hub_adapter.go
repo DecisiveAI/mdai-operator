@@ -317,7 +317,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	for _, variable := range *variables {
 		// we should test filter processor when the variable is empty and if breaks it we may recommend to use some placeholder as default value
 		if *variable.StorageType == mdaiv1.VariableSourceTypeBultInValkey {
-			valkeyKey := string(variable.StorageKey)
+			valkeyKey := variable.StorageKey
 			if variable.Type == mdaiv1.VariableTypeSet {
 				valueAsSlice, err := valkeyClient.Do(
 					ctx,
