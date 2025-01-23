@@ -6,11 +6,3 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: mdaihub-sample-default
 spec:
-  variables:
-  evaluations:
-  triggers:
-    - name: event-1
-      evaluationName: "foo"
-  observers:
-    - name: observer-1
-      image: public.ecr.aws/p3k6k6h3/watcher-observer

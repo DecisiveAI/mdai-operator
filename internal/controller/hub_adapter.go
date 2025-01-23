@@ -2,13 +2,18 @@ package controller
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
+	"k8s.io/apimachinery/pkg/util/intstr"
+
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/valkey-io/valkey-go"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -37,6 +42,7 @@ const (
 	ObjectUnchanged ObjectState = false
 
 	envConfigMapNamePostfix = "-variables"
+	watcherConfigMapPostfix = "-watcher-collector-config"
 )
 
 type HubAdapter struct {
@@ -346,7 +352,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 						envMap[transformKeyToVariableName(exportedVariableName)] = variableWithDelimiter
 					}
 				}
-			} else if variable.Type == mdaiv1.VariableTypeScalar {
+			} else if variable.Type == mdaiv1.VariableTypeString {
 				valueAsString, err := valkeyClient.Do(
 					ctx,
 					valkeyClient.B().Get().Key(valkeyKey).Build(),
@@ -429,9 +435,10 @@ func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[s
 		Data: envMap,
 	}
 
-	// Set owner reference if necessary
-	// For example, if the ConfigMap should be owned by a specific Custom Resource
-	// controllerutil.SetControllerReference(owner, desiredConfigMap, scheme)
+	if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
+		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", envConfigMapName)
+		return "", err
+	}
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, desiredConfigMap, func() error {
 		desiredConfigMap.Data = envMap
@@ -481,4 +488,298 @@ func (c HubAdapter) ensureHubDeletionProcessed(ctx context.Context) (OperationRe
 		return StopProcessing()
 	}
 	return ContinueProcessing()
+}
+
+func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationResult, error) {
+	observers := c.mdaiCR.Spec.Observers
+
+	if observers == nil {
+		c.logger.Info("No observers found in the CR, skipping observer synchronization")
+		return ContinueProcessing()
+	}
+
+	// for now assuming one collector holds all observers
+	if err := c.createOrUpdateWatcherCollectorConfigMap(ctx); err != nil {
+		return OperationResult{}, err
+	}
+
+	// for now assuming one collector holds all observers
+	if err := c.createOrUpdateWatcherCollectorService(ctx, c.mdaiCR.Namespace); err != nil {
+		return OperationResult{}, err
+	}
+	if err := c.createOrUpdateWatcherCollectorDeployment(ctx, c.mdaiCR.Namespace); err != nil {
+		return OperationResult{}, err
+	}
+
+	return ContinueProcessing()
+}
+
+func (c HubAdapter) createOrUpdateWatcherCollectorService(ctx context.Context, namespace string) error {
+	service := &v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      c.mdaiCR.Name + "-watcher-collector-service",
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app": c.mdaiCR.Name + "-watcher-collector",
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(c.mdaiCR, service, c.scheme); err != nil {
+		c.logger.Error(err, "Failed to set owner reference on Service", "service", service.Name)
+		return err
+	}
+
+	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, service, func() error {
+		service.Spec = v1.ServiceSpec{
+			Selector: map[string]string{
+				"app": c.mdaiCR.Name + "-watcher-collector",
+			},
+			Ports: []v1.ServicePort{
+				{
+					Name:       "otlp-grpc",
+					Protocol:   v1.ProtocolTCP,
+					Port:       4317,
+					TargetPort: intstr.FromString("otlp-grpc"),
+				},
+			},
+			Type: v1.ServiceTypeClusterIP,
+		}
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to create or update watcher-collector-service: %w", err)
+	}
+
+	c.logger.Info("Successfully created or updated watcher-collector-service", "namespace", namespace, "operation", operationResult)
+	return nil
+}
+
+func (c HubAdapter) createOrUpdateWatcherCollectorConfigMap(ctx context.Context) error {
+	namespace := c.mdaiCR.Namespace
+	configMapName := c.mdaiCR.Name + watcherConfigMapPostfix
+
+	collectorYAML, err := c.buildCollectorConfig()
+	if err != nil {
+		return fmt.Errorf("failed to build observer configuration: %w", err)
+	}
+
+	desiredConfigMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app": c.mdaiCR.Name + "-watcher-collector",
+			},
+		},
+		Data: map[string]string{
+			"collector.yaml": collectorYAML,
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
+		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", configMapName)
+		return err
+	}
+
+	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, desiredConfigMap, func() error {
+		desiredConfigMap.Data["collector.yaml"] = collectorYAML
+		return nil
+	})
+	if err != nil {
+		c.logger.Error(err, "Failed to create or update ConfigMap", "configmap", configMapName)
+		return err
+	}
+
+	c.logger.Info("ConfigMap created or updated successfully", "configmap", configMapName, "operation", operationResult)
+	return nil
+}
+
+func int32Ptr(i int32) *int32 {
+	return &i
+}
+
+func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context, namespace string) error {
+	name := c.mdaiCR.Name + "-watcher-collector"
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app": name,
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: int32Ptr(1),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": name,
+				},
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app":                         name,
+						"app.kubernetes.io/component": name,
+					},
+					Annotations: map[string]string{
+						"prometheus.io/path":   "/metrics",
+						"prometheus.io/port":   "8899",
+						"prometheus.io/scrape": "true",
+					},
+				},
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  name,
+							Image: "public.ecr.aws/decisiveai/watcher-collector:0.1.0-dev",
+							Ports: []v1.ContainerPort{
+								{
+									ContainerPort: 8888,
+									Name:          "otelcol-metrics",
+								},
+								{
+									ContainerPort: 8899,
+									Name:          "watcher-metrics",
+								},
+								{
+									ContainerPort: 4317,
+									Name:          "otlp-grpc",
+								},
+								{
+									ContainerPort: 4318,
+									Name:          "otlp-http",
+								},
+							},
+							VolumeMounts: []v1.VolumeMount{
+								{
+									Name:      "config-volume",
+									MountPath: "/conf/collector.yaml",
+									SubPath:   "collector.yaml",
+								},
+							},
+							Command: []string{
+								"/mdai-watcher-collector",
+								"--config=/conf/collector.yaml",
+							},
+						},
+					},
+					Volumes: []v1.Volume{
+						{
+							Name: "config-volume",
+							VolumeSource: v1.VolumeSource{
+								ConfigMap: &v1.ConfigMapVolumeSource{
+									LocalObjectReference: v1.LocalObjectReference{
+										Name: c.mdaiCR.Name + watcherConfigMapPostfix,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := controllerutil.SetControllerReference(c.mdaiCR, deployment, c.scheme); err != nil {
+		c.logger.Error(err, "Failed to set owner reference on Deployment", "deployment", deployment.Name)
+		return err
+	}
+
+	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, deployment, func() error {
+		return nil
+	})
+	if err != nil {
+		c.logger.Error(err, "Failed to create or update Deployment", "deployment", deployment.Name)
+		return err
+	}
+	c.logger.Info("Deployment created or updated successfully", "deployment", deployment.Name, "operationResult", operationResult)
+
+	return nil
+}
+
+//go:embed config/base_collector.yaml
+var baseCollectorYAML string
+
+func (c HubAdapter) buildCollectorConfig() (string, error) {
+	observers := c.mdaiCR.Spec.Observers
+
+	var config map[string]any
+	if err := yaml.Unmarshal([]byte(baseCollectorYAML), &config); err != nil {
+		c.logger.Error(err, "Failed to unmarshal base collector config")
+		return "", err
+	}
+
+	var dataVolumeReceivers = make([]string, 0)
+	for _, obs := range *observers {
+		observerName := obs.Name
+
+		groupByKey := "groupbyattrs/" + observerName
+		config["processors"].(map[string]any)[groupByKey] = map[string]any{
+			"keys": obs.LabelResourceAttributes,
+		}
+
+		dvKey := "datavolume/" + observerName
+		dvSpec := map[string]any{
+			"label_resource_attributes": obs.LabelResourceAttributes,
+		}
+		if obs.CountMetricName != nil {
+			dvSpec["count_metric_name"] = *obs.CountMetricName
+		}
+		if obs.BytesMetricName != nil {
+			dvSpec["bytes_metric_name"] = *obs.BytesMetricName
+		}
+		config["connectors"].(map[string]any)[dvKey] = dvSpec
+
+		filterName := ""
+		if obs.Filter != nil {
+			filterName = "filter/" + observerName
+			config["processors"].(map[string]any)[filterName] = buildFilterProcessorMap(obs.Filter)
+		}
+
+		var pipelineProcessors []string
+		if filterName != "" {
+			pipelineProcessors = append(pipelineProcessors, filterName)
+		}
+		pipelineProcessors = append(pipelineProcessors, "batch", groupByKey)
+
+		logsPipelineName := "logs/" + observerName
+		config["service"].(map[string]any)["pipelines"].(map[string]any)[logsPipelineName] = map[string]any{
+			"receivers":  []string{"otlp"},
+			"processors": pipelineProcessors,
+			"exporters":  []string{dvKey},
+		}
+
+		dataVolumeReceivers = append(dataVolumeReceivers, dvKey)
+	}
+
+	config["service"].(map[string]any)["pipelines"].(map[string]any)["metrics/observeroutput"] = map[string]any{
+		"receivers":  dataVolumeReceivers,
+		"processors": []string{"deltatocumulative"},
+		"exporters":  []string{"prometheus", "debug"},
+	}
+
+	raw, err := yaml.Marshal(config)
+	if err != nil {
+		return "", err
+	}
+
+	return string(raw), nil
+}
+
+func buildFilterProcessorMap(filter *mdaiv1.ObserverFilter) map[string]any {
+	filterMap := map[string]any{}
+
+	if filter.ErrorMode != nil {
+		filterMap["error_mode"] = filter.ErrorMode
+	}
+
+	if filter.Logs != nil && len(filter.Logs.LogRecord) > 0 {
+		filterMap["logs"] = map[string]any{
+			"log_record": filter.Logs.LogRecord,
+		}
+	}
+
+	return filterMap
 }

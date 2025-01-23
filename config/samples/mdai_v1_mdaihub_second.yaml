@@ -1,0 +1,68 @@
+apiVersion: mdai.mdai.ai/v1
+kind: MdaiHub
+metadata:
+  labels:
+    app.kubernetes.io/name: mdai-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: mdaihub-second
+spec:
+  config:
+    reconcileLoopInterval: 2m
+
+  variables:
+    - name: service_list
+      storageType: "mdai-valkey"
+      type: "set"
+      delimiter: "|"
+      defaultValue: "n/a"
+    - name: service
+      storageType: "mdai-valkey"
+      type: "scalar"
+
+  evaluations:
+    - name: evaluation-1
+      evaluationType: prometheus
+      alertingRules:
+        - name: daily
+          alert_query: 'increase(mdai_log_bytes_sent_total{service_name="service1"}[24h]) > 2*1024*1024*1024'
+          for: 10m
+          severity: critical
+          action: toggleFilter
+        - name: hourly
+          alert_query: 'increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024'
+          for: 5m
+          severity: warning
+          action: manageFilter
+  events:
+    - name: event-1
+
+  observers:
+    - name: watcher1
+      type: otel-watcher
+      image: public.ecr.aws/p3k6k6h3/watcher-observer
+      otelWatcherConfig:
+        labelResourceAttributes:
+          - service.name
+        countMetricName: mdai_watcher_one_count_total
+        bytesMetricName: mdai_watcher_one_bytes_total
+    - name: watcher2
+      type: otel-watcher
+      otelWatcherConfig:
+        labelResourceAttributes:
+            - team
+            - log_level
+        countMetricName: mdai_watcher_two_count_total
+    - name: watcher3
+      type: otel-watcher
+      otelWatcherConfig:
+        labelResourceAttributes:
+            - service.name
+            - team
+            - region
+        countMetricName: mdai_watcher_four_count_total
+        bytesMetricName: mdai_watcher_four_bytes_total
+        filter:
+          error_mode: ignore
+          logs:
+            log_record:
+              - 'attributes["log_level"] == "INFO"'

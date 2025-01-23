@@ -115,8 +115,8 @@ type ObserverLogsFilter struct {
 }
 
 type ObserverFilter struct {
-	// +kubebuilder:validation:Required
-	ErrorMode string `json:"error_mode" yaml:"error_mode"`
+	// +kubebuilder:validation:Optional
+	ErrorMode *string `json:"error_mode" yaml:"error_mode"`
 	// +kubebuilder:validation:Optional
 	Logs *ObserverLogsFilter `json:"logs" yaml:"logs"`
 }
@@ -137,7 +137,7 @@ type Observer struct {
 }
 
 type Config struct {
-	// Interval at which to reconcile the Cluster Configuration, applied only if built-in ValKey is enabled.
+	// Interval at which to reconcile the Cluster Configuration, applied only if built-in ValKey is enabled and variables defined for Valkey storage.
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:="2m"
 	// +kubebuilder:validation:Format:=duration
@@ -215,7 +215,4 @@ const (
 	VariableTypeBoolean            VariableType        = "boolean"
 	VariableTypeString             VariableType        = "string"
 	VariableTypeSet                VariableType        = "set"
-	VariableTypeArray              VariableType        = "array"
-	VariableTransformJoin          VariableTransform   = "join"
-	VariableTypeScalar             VariableType        = "scalar"
 )

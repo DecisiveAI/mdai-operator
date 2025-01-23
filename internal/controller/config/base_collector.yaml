@@ -1,0 +1,30 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+
+processors:
+  batch: {}
+  deltatocumulative: {}
+
+exporters:
+  debug: {}
+  prometheus:
+    endpoint: "0.0.0.0:8899"
+    metric_expiration: "180m"
+    resource_to_telemetry_conversion:
+      enabled: true
+
+connectors: {}
+
+service:
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: "0.0.0.0"
+                port: 8888
+  pipelines: {}

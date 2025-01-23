@@ -51,7 +51,8 @@ spec:
                   reconcileLoopInterval:
                     default: 2m
                     description: Interval at which to reconcile the Cluster Configuration,
-                      applied only if built-in ValKey is enabled.
+                      applied only if built-in ValKey is enabled and variables defined
+                      for Valkey storage.
                     format: duration
                     type: string
                 type: object
@@ -181,8 +182,6 @@ spec:
                           required:
                           - log_record
                           type: object
-                      required:
-                      - error_mode
                       type: object
                     image:
                       type: string
