@@ -100,6 +100,9 @@ type Evaluation struct {
 	// If both are provided, Status will override Resolve
 	// +kubebuilder:validation:Optional
 	Status *PrometheusAlertEvaluationStatus `json:"status" yaml:"status"`
+	// Specify the interval at which this evaluation is assessed in the Prometheus infrastructure.
+	// +kubebuilder:validation:Format:=duration
+	Interval *metav1.Duration `json:"interval,omitempty" yaml:"interval,omitempty"`
 }
 
 type ObserverLogsFilter struct {
@@ -135,6 +138,10 @@ type Config struct {
 	// +kubebuilder:default:="2m"
 	// +kubebuilder:validation:Format:=duration
 	ReconcileLoopInterval *metav1.Duration `json:"reconcileLoopInterval,omitempty" yaml:"reconcileLoopInterval,omitempty"`
+	// Specify the interval at which all evaluations are assessed in the Prometheus infrastructure.
+	// Evaluations with explicit `Interval`s will override this value
+	// +kubebuilder:validation:Optional
+	EvaluationInterval prometheusv1.Duration `json:"evaluation_interval,omitempty" yaml:"evaluation_interval,omitempty"`
 }
 
 // MdaiHubSpec defines the desired state of MdaiHub.
