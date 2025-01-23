@@ -53,16 +53,20 @@ type Variable struct {
 	StorageType *VariableStorageType `json:"storageType" yaml:"storageType"`
 	// +kubebuilder:validation:Optional
 	DefaultValue *string `json:"defaultValue,omitempty" yaml:"defaultValue,omitempty"`
-	// If ExportedVariableName is not present, at least one VariableWith should be declared
 	// +kubebuilder:validation:Optional
 	With *[]VariableWith `json:"with,omitempty" yaml:"with,omitempty"`
 }
 
-type Action struct {
-	// +kubebuilder:validation:Enum:=mdai/variable_update
-	Type string `json:"type" yaml:"type"`
-	// +kubebuilder:validation:Enum:=mdai/add;mdai/remove
+type VariableUpdate struct {
+	// +kubebuilder:validation:Required
+	VariableRef string `json:"variableRef" yaml:"variableRef"`
+	// +kubebuilder:validation:Enum:=mdai/add_element;mdai/remove_element
 	Operation string `json:"operation" yaml:"operation"`
+}
+
+type Action struct {
+	// +kubebuilder:validation:Optional
+	VariableUpdate *VariableUpdate `json:"variableUpdate" yaml:"variableUpdate"`
 }
 
 type PrometheusAlertEvaluationStatus struct {

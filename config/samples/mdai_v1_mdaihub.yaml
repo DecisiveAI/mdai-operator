@@ -52,11 +52,13 @@ spec:
       severity: warning
       status:
         firing:
-          type: mdai/variable_update
-          operation: mdai/add
+          variableUpdate:
+            variableRef: service_list
+            operation: mdai/add_element
         resolved:
-          type: mdai/variable_update
-          operation: mdai/remove
+          variableUpdate:
+            variableRef: service_list
+            operation: mdai/remove_element
       # Optional below here
       for: 5m
       keep_firing_for: 10m
