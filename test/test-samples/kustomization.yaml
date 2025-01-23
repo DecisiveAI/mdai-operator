@@ -1,5 +1,6 @@
 ## Append samples of your project ##
 resources:
-  - collector.yaml
-  - collector-not-managed.yaml
+#  - collector.yaml
+  - collector-fluentd.yaml
+#  - collector-not-managed.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

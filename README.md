@@ -50,6 +50,11 @@ export VALKEY_PASSWORD=abc
 
 ### To Deploy on the cluster
 **Generate valkey secret**
+
+```shell
+helm install valkey oci://registry-1.docker.io/bitnamicharts/valkey --set auth.password=abc
+```
+
 ```shell
 kubectl create secret generic valkey-secret \
   --from-literal=VALKEY_ENDPOINT=valkey-primary.default.svc.cluster.local:6379 \
@@ -91,11 +96,24 @@ You can apply the samples (examples) from the config/sample:
 kubectl apply -k config/samples/
 ```
 Deploy test otel collectors:
+
+> Requires cert manager and OTEL operator installed
+> ```sh
+> kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.1/cert-manager.yaml
+> kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releases/latest/download/opentelemetry-operator.yaml
+> ```
+
 ```sh
 kubectl apply -k test/test-samples/
 ```
 ### Testing
 Add watcher scrape config to Prometheus:
+
+> Requires Prom Kube Stack to be installed
+> ```sh
+> helm install prometheus prometheus-community/kube-prometheus-stack
+> ```
+
 ```shell
 helm upgrade prometheus prometheus-community/kube-prometheus-stack -f test/test-samples/custom-values.yaml
 ```

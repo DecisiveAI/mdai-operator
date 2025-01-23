@@ -1,6 +1,11 @@
+# Adds namespace to all resources.
+namespace: mdai
+
 ## Append samples of your project ##
 resources:
-- mdai_v1_mdaihub.yaml
-- mdai_v1_mdaihub_default.yaml
-- mdai_v1_mdaihub_second.yaml
+#- mdai_v1_mdaihub.yaml
+#- mdai_v1_mdaihub_default.yaml
+#- mdai_v1_mdaihub_second.yaml
+- mdai_v1_mdaihub_fluentd.yaml
+- watcher_service_fluentd.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
