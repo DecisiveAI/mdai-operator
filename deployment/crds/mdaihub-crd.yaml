@@ -164,9 +164,9 @@ spec:
               observers:
                 items:
                   properties:
-                    bytes_metric_name:
+                    bytesMetricName:
                       type: string
-                    count_metric_name:
+                    countMetricName:
                       type: string
                     filter:
                       properties:
@@ -184,14 +184,14 @@ spec:
                       type: object
                     image:
                       type: string
-                    label_resource_attributes:
+                    labelResourceAttributes:
                       items:
                         type: string
                       type: array
                     name:
                       type: string
                   required:
-                  - label_resource_attributes
+                  - labelResourceAttributes
                   - name
                   type: object
                 type: array
@@ -204,6 +204,7 @@ spec:
                       pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                       type: string
                     storageType:
+                      default: mdai-valkey
                       description: StorageType defaults to "mdai-valkey" if not provided
                       enum:
                       - mdai-valkey

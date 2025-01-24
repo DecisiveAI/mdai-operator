@@ -32,12 +32,12 @@ spec:
   observers:
     - name: service-bytes-watcher1
       image: public.ecr.aws/p3k6k6h3/watcher-observer
-      label_resource_attributes:
+      labelResourceAttributes:
       - service.name
       - team
       - region
-      count_metric_name: mdai_watcher_four_count_total
-      bytes_metric_name: mdai_watcher_four_bytes_total
+      countMetricName: mdai_watcher_four_count_total
+      bytesMetricName: mdai_watcher_four_bytes_total
       filter:
         error_mode: ignore
         logs:

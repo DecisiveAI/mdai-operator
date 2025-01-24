@@ -128,11 +128,11 @@ type Observer struct {
 	// +kubebuilder:validation:Optional
 	Image *string `json:"image" yaml:"image"`
 	// +kubebuilder:validation:Required
-	LabelResourceAttributes []string `json:"label_resource_attributes" yaml:"label_resource_attributes"`
+	LabelResourceAttributes []string `json:"labelResourceAttributes" yaml:"labelResourceAttributes"`
 	// +kubebuilder:validation:Optional
-	CountMetricName *string `json:"count_metric_name,omitempty" yaml:"count_metric_name,omitempty"`
+	CountMetricName *string `json:"countMetricName,omitempty" yaml:"countMetricName,omitempty"`
 	// +kubebuilder:validation:Optional
-	BytesMetricName *string `json:"bytes_metric_name,omitempty" yaml:"bytes_metric_name,omitempty"`
+	BytesMetricName *string `json:"bytesMetricName,omitempty" yaml:"bytesMetricName,omitempty"`
 	// +kubebuilder:validation:Optional
 	Filter *ObserverFilter `json:"filter,omitempty" yaml:"filter,omitempty"`
 }
