@@ -331,17 +331,21 @@ alertmanager:
       - target_matchers:
           - 'alertname = InfoInhibitor'
     route:
-      group_by: ['namespace']
+      group_by: ["alertname"]
       group_wait: 30s
       group_interval: 5m
       repeat_interval: 12h
-      receiver: 'null'
+      receiver: 'event-handler'
       routes:
-      - receiver: 'null'
-        matchers:
-          - alertname = "Watchdog"
+        - matchers:
+            - alertname = "Watchdog"
+          receiver: 'null'
     receivers:
-    - name: 'null'
+      - name: 'null'
+      - name: 'event-handler'
+        webhook_configs:
+          - url: 'http://mdai-api.mdai.svc.cluster.local:8081/alerts'
+            send_resolved: true
     templates:
     - '/etc/alertmanager/config/*.tmpl'
 
