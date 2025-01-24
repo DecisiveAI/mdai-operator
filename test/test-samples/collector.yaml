@@ -2,7 +2,7 @@ apiVersion: opentelemetry.io/v1beta1
 kind: OpenTelemetryCollector
 metadata:
   labels:
-    mdaihub-name: mdaihub-sample
+    mdaihub-name: mdaihub-dynamic-data-filtering-sample
   name: gateway-3
   namespace: default
 spec:
