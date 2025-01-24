@@ -781,5 +781,7 @@ func buildFilterProcessorMap(filter *mdaiv1.ObserverFilter) map[string]any {
 		}
 	}
 
+	// TODO: Add metrics and trace filters
+
 	return filterMap
 }

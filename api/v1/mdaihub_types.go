@@ -122,6 +122,8 @@ type ObserverFilter struct {
 	Logs *ObserverLogsFilter `json:"logs" yaml:"logs"`
 }
 
+// TODO: Add metrics and trace filters
+
 type Observer struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
