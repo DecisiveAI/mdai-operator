@@ -39,7 +39,14 @@ spec:
             description: MdaiHubSpec defines the desired state of MdaiHub.
             properties:
               config:
+                description: kubebuilder:validation:Optional
                 properties:
+                  evaluation_interval:
+                    description: |-
+                      Specify the interval at which all evaluations are assessed in the Prometheus infrastructure.
+                      Evaluations with explicit `Interval`s will override this value
+                    pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
+                    type: string
                   reconcileLoopInterval:
                     default: 2m
                     description: Interval at which to reconcile the Cluster Configuration,
@@ -51,114 +58,141 @@ spec:
               evaluations:
                 items:
                   properties:
-                    alertingRules:
+                    expr:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      description: A valid PromQL query expression
+                      x-kubernetes-int-or-string: true
+                    for:
+                      description: Alerts are considered firing once they have been
+                        returned for this long.
+                      pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
+                      type: string
+                    interval:
+                      description: Specify the interval at which this evaluation is
+                        assessed in the Prometheus infrastructure.
+                      format: duration
+                      type: string
+                    keep_firing_for:
+                      description: KeepFiringFor defines how long an alert will continue
+                        firing after the condition that triggered it has cleared.
+                      minLength: 1
+                      pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
+                      type: string
+                    name:
+                      description: How this evaluation will be referred to elsewhere
+                        in the config
+                      type: string
+                    relevantLabels:
+                      description: RelevantLabels indicates which part(s) of the alert
+                        payload to forward to the Action.
                       items:
-                        properties:
-                          action:
-                            type: string
-                          alert_query:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            x-kubernetes-int-or-string: true
-                          for:
-                            description: Alerts are considered firing once they have
-                              been returned for this long.
-                            pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
-                            type: string
-                          name:
-                            type: string
-                          severity:
-                            pattern: ^(warning|critical)$
-                            type: string
-                        required:
-                        - action
-                        - alert_query
-                        - name
-                        - severity
-                        type: object
+                        type: string
                       type: array
-                    evaluationType:
+                    resolve:
+                      description: Resolve is the action that's taken when this alert
+                        fires. It's a shorthand for Status.Firing
+                      properties:
+                        variableUpdate:
+                          properties:
+                            operation:
+                              enum:
+                              - mdai/add_element
+                              - mdai/remove_element
+                              type: string
+                            variableRef:
+                              type: string
+                          required:
+                          - operation
+                          - variableRef
+                          type: object
+                      type: object
+                    severity:
+                      pattern: ^(warning|critical)$
                       type: string
-                    name:
+                    status:
+                      description: |-
+                        Status allows the user to specify actions depending on the state of the evaluation
+                        If Resolve is not provided, Status.Firing is required
+                        If both are provided, Status will override Resolve
+                      properties:
+                        firing:
+                          properties:
+                            variableUpdate:
+                              properties:
+                                operation:
+                                  enum:
+                                  - mdai/add_element
+                                  - mdai/remove_element
+                                  type: string
+                                variableRef:
+                                  type: string
+                              required:
+                              - operation
+                              - variableRef
+                              type: object
+                          type: object
+                        resolved:
+                          properties:
+                            variableUpdate:
+                              properties:
+                                operation:
+                                  enum:
+                                  - mdai/add_element
+                                  - mdai/remove_element
+                                  type: string
+                                variableRef:
+                                  type: string
+                              required:
+                              - operation
+                              - variableRef
+                              type: object
+                          type: object
+                      type: object
+                    type:
+                      enum:
+                      - mdai/prometheus_alert
                       type: string
                   required:
-                  - evaluationType
+                  - expr
                   - name
-                  type: object
-                type: array
-              events:
-                items:
-                  properties:
-                    name:
-                      type: string
-                  required:
-                  - name
+                  - severity
+                  - type
                   type: object
                 type: array
               observers:
                 items:
                   properties:
+                    bytesMetricName:
+                      type: string
+                    countMetricName:
+                      type: string
+                    filter:
+                      properties:
+                        error_mode:
+                          type: string
+                        logs:
+                          properties:
+                            log_record:
+                              items:
+                                type: string
+                              type: array
+                          required:
+                          - log_record
+                          type: object
+                      type: object
                     image:
                       type: string
+                    labelResourceAttributes:
+                      items:
+                        type: string
+                      type: array
                     name:
                       type: string
-                    otelWatcherConfig:
-                      properties:
-                        bytesMetricName:
-                          type: string
-                        countMetricName:
-                          type: string
-                        filter:
-                          properties:
-                            error_mode:
-                              type: string
-                            logs:
-                              properties:
-                                log_record:
-                                  items:
-                                    type: string
-                                  type: array
-                              required:
-                              - log_record
-                              type: object
-                            metrics:
-                              properties:
-                                datapoint:
-                                  items:
-                                    type: string
-                                  type: array
-                                metric:
-                                  items:
-                                    type: string
-                                  type: array
-                              type: object
-                            traces:
-                              properties:
-                                span:
-                                  items:
-                                    type: string
-                                  type: array
-                                spanevent:
-                                  items:
-                                    type: string
-                                  type: array
-                              type: object
-                          type: object
-                        labelResourceAttributes:
-                          items:
-                            type: string
-                          type: array
-                      required:
-                      - labelResourceAttributes
-                      type: object
-                    type:
-                      enum:
-                      - otel-watcher
-                      type: string
                   required:
+                  - labelResourceAttributes
                   - name
-                  - type
                   type: object
                 type: array
               variables:
@@ -166,22 +200,43 @@ spec:
                   properties:
                     defaultValue:
                       type: string
-                    delimiter:
-                      type: string
-                    name:
+                    storageKey:
+                      pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                       type: string
                     storageType:
+                      default: mdai-valkey
+                      description: StorageType defaults to "mdai-valkey" if not provided
                       enum:
                       - mdai-valkey
                       type: string
                     type:
                       enum:
-                      - scalar
+                      - int
+                      - float
+                      - boolean
+                      - string
                       - set
+                      - array
                       type: string
+                    with:
+                      items:
+                        properties:
+                          exportedVariableName:
+                            type: string
+                          transformer:
+                            properties:
+                              join:
+                                properties:
+                                  delimiter:
+                                    type: string
+                                required:
+                                - delimiter
+                                type: object
+                            type: object
+                        type: object
+                      type: array
                   required:
-                  - name
-                  - storageType
+                  - storageKey
                   - type
                   type: object
                 type: array

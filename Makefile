@@ -168,6 +168,7 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+UNAME := $(shell uname -s)
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.5.0
@@ -218,6 +219,13 @@ helmify: $(HELMIFY) ## Download helmify locally if necessary.
 $(HELMIFY): $(LOCALBIN)
 	test -s $(LOCALBIN)/helmify || GOBIN=$(LOCALBIN) go install github.com/arttor/helmify/cmd/helmify@latest
 
+ifeq ($(UNAME), Linux)
+helm: manifests kustomize helmify
+	$(KUSTOMIZE) build config/default | $(HELMIFY) -crd-dir deployment
+	sed -i "s/^name: .*/name: mdai-operator/; s/^description: .*/description: MDAI Operator Helm Chart/" deployment/Chart.yaml
+
+else
 helm: manifests kustomize helmify
 	$(KUSTOMIZE) build config/default | $(HELMIFY) -crd-dir deployment
 	sed -i '' "s/^name: .*/name: mdai-operator/; s/^description: .*/description: MDAI Operator Helm Chart/" deployment/Chart.yaml
+endif

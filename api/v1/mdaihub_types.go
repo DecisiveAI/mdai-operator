@@ -17,97 +17,126 @@ limitations under the License.
 package v1
 
 import (
-	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-type Variable struct {
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=mdai-valkey
-	StorageType VariableStorageType `json:"storageType"`
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=scalar;set
-	Type VariableType `json:"type"`
+type VariableWith struct {
+	// +kubeuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
+	// +kubeuilder:validation:Required
+	ExportedVariableName string `json:"exportedVariableName,omitempty" yaml:"exportedVariableName,omitempty"`
 	// +kubebuilder:validation:Optional
-	Delimiter string `json:"delimiter,omitempty"`
-	// +kubebuilder:validation:Optional
-	DefaultValue *string `json:"defaultValue,omitempty"`
+	Transformer *VariableTransformer `json:"transformer,omitempty" yaml:"transformer,omitempty"`
 }
 
-type AlertingRule struct {
+type JoinFunction struct {
 	// +kubebuilder:validation:Required
-	Name string `json:"name" yaml:"name"`
-	// +kubebuilder:validation:Required
-	AlertQuery intstr.IntOrString `json:"alert_query" yaml:"alert_query"`
-	// Alerts are considered firing once they have been returned for this long.
+	Delimiter string `json:"delimiter" yaml:"delimiter"`
+}
+
+type VariableTransformer struct {
 	// +kubebuilder:validation:Optional
-	For *prometheusv1.Duration `json:"for,omitempty" yaml:"for,omitempty"`
-	// +kubebuilder:validation:Pattern:="^(warning|critical)$"
-	Severity string `json:"severity" yaml:"severity"`
+	Join *JoinFunction `json:"join,omitempty" yaml:"join,omitempty"`
+}
+
+type Variable struct {
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubebuilder:validation:Required
-	Action string `json:"action" yaml:"action"`
+	StorageKey string `json:"storageKey" yaml:"storageKey"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum:=int;float;boolean;string;set;array
+	Type VariableType `json:"type" yaml:"type"`
+	// StorageType defaults to "mdai-valkey" if not provided
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="mdai-valkey"
+	// +kubebuilder:validation:Enum:=mdai-valkey
+	StorageType *VariableStorageType `json:"storageType" yaml:"storageType"`
+	// +kubebuilder:validation:Optional
+	DefaultValue *string `json:"defaultValue,omitempty" yaml:"defaultValue,omitempty"`
+	// +kubebuilder:validation:Optional
+	With *[]VariableWith `json:"with,omitempty" yaml:"with,omitempty"`
+}
+
+type VariableUpdate struct {
+	// +kubebuilder:validation:Required
+	VariableRef string `json:"variableRef" yaml:"variableRef"`
+	// +kubebuilder:validation:Enum:=mdai/add_element;mdai/remove_element
+	Operation string `json:"operation" yaml:"operation"`
+}
+
+type Action struct {
+	// +kubebuilder:validation:Optional
+	VariableUpdate *VariableUpdate `json:"variableUpdate" yaml:"variableUpdate"`
+}
+
+type PrometheusAlertEvaluationStatus struct {
+	// +kubebuilder:validation:Optional
+	Firing *Action `json:"firing" yaml:"firing"`
+	// +kubebuilder:validation:Optional
+	Resolved *Action `json:"resolved" yaml:"resolved"`
 }
 
 type Evaluation struct {
+	// How this evaluation will be referred to elsewhere in the config
 	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	Name EvaluationName `json:"name" yaml:"name"`
+	// +kubebuilder:validation:Enum:=mdai/prometheus_alert
+	Type string `json:"type" yaml:"type"`
+	// A valid PromQL query expression
 	// +kubebuilder:validation:Required
-	EvaluationType EvaluationType `json:"evaluationType"` // prometheus
+	Expr intstr.IntOrString `json:"expr" yaml:"expr"`
+	// Alerts are considered firing once they have been returned for this long.
 	// +kubebuilder:validation:Optional
-	AlertingRules *[]AlertingRule `json:"alertingRules,omitempty"`
+	For *prometheusv1.Duration `json:"for,omitempty" yaml:"for,omitempty"`
+	// KeepFiringFor defines how long an alert will continue firing after the condition that triggered it has cleared.
+	// +kubebuilder:validation:Optional
+	KeepFiringFor *prometheusv1.NonEmptyDuration `json:"keep_firing_for,omitempty" yaml:"keep_firing_for,omitempty"`
+	// +kubebuilder:validation:Pattern:="^(warning|critical)$"
+	Severity string `json:"severity" yaml:"severity"`
+	// RelevantLabels indicates which part(s) of the alert payload to forward to the Action.
+	// +kubebuilder:validation:Optional
+	RelevantLabels *[]string `json:"relevantLabels" yaml:"relevantLabels"`
+	// Resolve is the action that's taken when this alert fires. It's a shorthand for Status.Firing
+	// +kubebuilder:validation:Optional
+	Resolve *Action `json:"resolve" yaml:"resolve"`
+	// Status allows the user to specify actions depending on the state of the evaluation
+	// If Resolve is not provided, Status.Firing is required
+	// If both are provided, Status will override Resolve
+	// +kubebuilder:validation:Optional
+	Status *PrometheusAlertEvaluationStatus `json:"status" yaml:"status"`
+	// Specify the interval at which this evaluation is assessed in the Prometheus infrastructure.
+	// +kubebuilder:validation:Format:=duration
+	Interval *metav1.Duration `json:"interval,omitempty" yaml:"interval,omitempty"`
 }
+
+type ObserverLogsFilter struct {
+	// +kubebuilder:validation:Required
+	LogRecord []string `json:"log_record" yaml:"log_record"`
+}
+
+type ObserverFilter struct {
+	// +kubebuilder:validation:Optional
+	ErrorMode *string `json:"error_mode" yaml:"error_mode"`
+	// +kubebuilder:validation:Optional
+	Logs *ObserverLogsFilter `json:"logs" yaml:"logs"`
+}
+
+// TODO: Add metrics and trace filters
 
 type Observer struct {
 	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	Name string `json:"name" yaml:"name"`
+	// +kubebuilder:validation:Optional
+	Image *string `json:"image" yaml:"image"`
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=otel-watcher
-	Type ObserverType `json:"type"`
+	LabelResourceAttributes []string `json:"labelResourceAttributes" yaml:"labelResourceAttributes"`
 	// +kubebuilder:validation:Optional
-	Image *string `json:"image,omitempty"`
-	// TODO add a webhook validation that at least one type of config is provided
+	CountMetricName *string `json:"countMetricName,omitempty" yaml:"countMetricName,omitempty"`
 	// +kubebuilder:validation:Optional
-	OtelWatcherConfig *OtelWatcherConfig `json:"otelWatcherConfig,omitempty"`
-}
-
-type OtelWatcherConfig struct {
-	// +kubebuilder:validation:Required
-	LabelResourceAttributes []string `json:"labelResourceAttributes"`
+	BytesMetricName *string `json:"bytesMetricName,omitempty" yaml:"bytesMetricName,omitempty"`
 	// +kubebuilder:validation:Optional
-	CountMetricName *string `json:"countMetricName,omitempty"`
-	// +kubebuilder:validation:Optional
-	BytesMetricName *string `json:"bytesMetricName,omitempty"`
-	// +kubebuilder:validation:Optional
-	Filter *FilterProcessorConfig `json:"filter,omitempty"`
-}
-
-type FilterProcessorConfig struct {
-	// +kubebuilder:validation:Optional
-	ErrorMode *ottl.ErrorMode `json:"error_mode,omitempty"  yaml:"error_mode,omitempty"`
-	// +kubebuilder:validation:Optional
-	Metrics *MetricFilters `json:"metrics,omitempty" yaml:"metrics,omitempty"`
-	// +kubebuilder:validation:Optional
-	Logs *LogFilters `json:"logs,omitempty" yaml:"logs,omitempty"`
-	// +kubebuilder:validation:Optional
-	Traces *TraceFilters `json:"traces,omitempty" yaml:"traces,omitempty"`
-}
-
-type MetricFilters struct {
-	MetricConditions    *[]string `json:"metric,omitempty" yaml:"metric,omitempty"`
-	DataPointConditions *[]string `json:"datapoint,omitempty" yaml:"datapoint,omitempty"`
-}
-
-type TraceFilters struct {
-	SpanConditions      *[]string `json:"span,omitempty" yaml:"span,omitempty"`
-	SpanEventConditions *[]string `json:"spanevent,omitempty" yaml:"spanevent,omitempty"`
-}
-
-type LogFilters struct {
-	LogConditions []string `json:"log_record" yaml:"log_record"`
+	Filter *ObserverFilter `json:"filter,omitempty" yaml:"filter,omitempty"`
 }
 
 type Config struct {
@@ -115,21 +144,20 @@ type Config struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default:="2m"
 	// +kubebuilder:validation:Format:=duration
-	ReconcileLoopInterval *metav1.Duration `json:"reconcileLoopInterval,omitempty"`
+	ReconcileLoopInterval *metav1.Duration `json:"reconcileLoopInterval,omitempty" yaml:"reconcileLoopInterval,omitempty"`
+	// Specify the interval at which all evaluations are assessed in the Prometheus infrastructure.
+	// Evaluations with explicit `Interval`s will override this value
+	// +kubebuilder:validation:Optional
+	EvaluationInterval prometheusv1.Duration `json:"evaluation_interval,omitempty" yaml:"evaluation_interval,omitempty"`
 }
 
 // MdaiHubSpec defines the desired state of MdaiHub.
 type MdaiHubSpec struct {
-	Config      *Config       `json:"config,omitempty"`
+	// kubebuilder:validation:Optional
+	Config      *Config       `json:"config,omitempty" yaml:"config,omitempty"`
+	Observers   *[]Observer   `json:"observers,omitempty" yaml:"observers,omitempty"`
 	Variables   *[]Variable   `json:"variables,omitempty"`
-	Observers   *[]Observer   `json:"observers,omitempty"`   // watchers configuration (datalyzer)
-	Evaluations *[]Evaluation `json:"evaluations,omitempty"` // evaluations configuration (alerting rules)
-	Events      *[]Event      `json:"events,omitempty"`      // events configuration (update variables through api and operator)
-}
-
-type Event struct {
-	// +kubebuilder:validation:Required
-	Name string `json:"name"` // TODO: define the kind of event (update variables through api and operator)
+	Evaluations *[]Evaluation `json:"evaluations,omitempty"` // evaluation configuration (alerting rules)
 }
 
 // MdaiHubStatus defines the observed state of MdaiHub.
@@ -171,15 +199,23 @@ func init() {
 	SchemeBuilder.Register(&MdaiHub{}, &MdaiHubList{})
 }
 
-type EvaluationType string
-type VariableStorageType string
-type VariableType string
-type ObserverType string
+type (
+	ActionName          string
+	TriggerName         string
+	EvaluationName      string
+	TriggerType         string
+	VariableSourceType  string
+	VariableStorageType string
+	VariableType        string
+	VariableTransform   string
+)
 
 const (
-	EvaluationTypePrometheus       EvaluationType      = "prometheus"
+	TriggerTypePrometheus          TriggerType         = "prometheus"
 	VariableSourceTypeBultInValkey VariableStorageType = "mdai-valkey"
-	VariableTypeScalar             VariableType        = "scalar"
+	VariableTypeInt                VariableType        = "int"
+	VariableTypeFloat              VariableType        = "float"
+	VariableTypeBoolean            VariableType        = "boolean"
+	VariableTypeString             VariableType        = "string"
 	VariableTypeSet                VariableType        = "set"
-	ObserverTypeOtelWatcher        ObserverType        = "otel-watcher"
 )

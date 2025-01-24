@@ -206,25 +206,16 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 	c.logger.Info("EnsurePrometheusRuleSynchronized")
 
 	for _, eval := range *evals {
-		if eval.EvaluationType == mdaiv1.EvaluationTypePrometheus {
-			c.logger.Info("Evaluation type is Prometheus")
+		prometheusRuleCR, err := c.getOrCreatePrometheusRuleCR(ctx, defaultPrometheusRuleName)
+		if err != nil {
+			c.logger.Error(err, "Failed to get/create PrometheusRule")
+			return RequeueAfter(time.Second*10, err)
+		}
 
-			prometheusRuleCR, err := c.getOrCreatePrometheusRuleCR(ctx, defaultPrometheusRuleName)
-			if err != nil {
-				c.logger.Error(err, "Failed to get/create PrometheusRule")
-				return RequeueAfter(time.Second*10, err)
-			}
+		prometheusRuleCR.Spec.Groups[0].Rules = composePrometheusRule(eval, c.mdaiCR.Name)
 
-			if eval.AlertingRules == nil {
-				c.logger.Info("No alerting rules found in the evaluation, skipping PrometheusRule synchronization")
-				continue
-			}
-
-			prometheusRuleCR.Spec.Groups[0].Rules = composePrometheusRule(*eval.AlertingRules, c.mdaiCR.Name)
-
-			if err = c.client.Update(ctx, prometheusRuleCR); err != nil {
-				c.logger.Error(err, "Failed to update PrometheusRule")
-			}
+		if err = c.client.Update(ctx, prometheusRuleCR); err != nil {
+			c.logger.Error(err, "Failed to update PrometheusRule")
 		}
 	}
 
@@ -268,25 +259,21 @@ func (c HubAdapter) getOrCreatePrometheusRuleCR(ctx context.Context, defaultProm
 	return prometheusRule, nil
 }
 
-func composePrometheusRule(alertingRules []mdaiv1.AlertingRule, engineName string) []prometheusv1.Rule {
-	prometheusRules := make([]prometheusv1.Rule, 0, len(alertingRules))
-	for _, alertingRule := range alertingRules {
-		prometheusRule := prometheusv1.Rule{
-			Expr:  alertingRule.AlertQuery,
-			Alert: alertingRule.Name,
-			For:   alertingRule.For,
-			Annotations: map[string]string{
-				"action":      alertingRule.Action,
-				"alert_name":  alertingRule.Name, // FIXME we need a relationship between alert and variable
-				"engine_name": engineName,
-			},
-			Labels: map[string]string{
-				"severity": alertingRule.Severity,
-			},
-		}
-		prometheusRules = append(prometheusRules, prometheusRule)
+func composePrometheusRule(alertingRule mdaiv1.Evaluation, engineName string) []prometheusv1.Rule {
+	alertName := string(alertingRule.Name)
+	prometheusRule := prometheusv1.Rule{
+		Expr:  alertingRule.Expr,
+		Alert: alertName,
+		For:   alertingRule.For,
+		Annotations: map[string]string{
+			"alert_name":  alertName, // FIXME we need a relationship between alert and variable
+			"engine_name": engineName,
+		},
+		Labels: map[string]string{
+			"severity": alertingRule.Severity,
+		},
 	}
-	return prometheusRules
+	return []prometheusv1.Rule{prometheusRule}
 }
 
 func (c HubAdapter) deletePrometheusRule(ctx context.Context) error {
@@ -329,8 +316,8 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	valkeyClient := *c.valKeyClient
 	for _, variable := range *variables {
 		// we should test filter processor when the variable is empty and if breaks it we may recommend to use some placeholder as default value
-		if variable.StorageType == mdaiv1.VariableSourceTypeBultInValkey {
-			valkeyKey := variable.Name
+		if *variable.StorageType == mdaiv1.VariableSourceTypeBultInValkey {
+			valkeyKey := variable.StorageKey
 			if variable.Type == mdaiv1.VariableTypeSet {
 				valueAsSlice, err := valkeyClient.Do(
 					ctx,
@@ -353,9 +340,19 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 						continue
 					}
 				}
-				variableWithDelimiter := strings.Join(valueAsSlice, variable.Delimiter)
-				envMap[transformKeyToVariableName(valkeyKey)] = variableWithDelimiter
-			} else if variable.Type == mdaiv1.VariableTypeScalar {
+
+				for _, with := range *variable.With {
+					exportedVariableName := with.ExportedVariableName
+					transformer := with.Transformer
+
+					join := transformer.Join
+					if join != nil {
+						delimiter := join.Delimiter
+						variableWithDelimiter := strings.Join(valueAsSlice, delimiter)
+						envMap[transformKeyToVariableName(exportedVariableName)] = variableWithDelimiter
+					}
+				}
+			} else if variable.Type == mdaiv1.VariableTypeString {
 				valueAsString, err := valkeyClient.Do(
 					ctx,
 					valkeyClient.B().Get().Key(valkeyKey).Build(),
@@ -716,33 +713,29 @@ func (c HubAdapter) buildCollectorConfig() (string, error) {
 
 	var dataVolumeReceivers = make([]string, 0)
 	for _, obs := range *observers {
-		if obs.Type != mdaiv1.ObserverTypeOtelWatcher {
-			continue
-		}
+		observerName := obs.Name
 
-		watcherName := obs.Name
-
-		groupByKey := "groupbyattrs/" + watcherName
+		groupByKey := "groupbyattrs/" + observerName
 		config["processors"].(map[string]any)[groupByKey] = map[string]any{
-			"keys": obs.OtelWatcherConfig.LabelResourceAttributes,
+			"keys": obs.LabelResourceAttributes,
 		}
 
-		dvKey := "datavolume/" + watcherName
+		dvKey := "datavolume/" + observerName
 		dvSpec := map[string]any{
-			"label_resource_attributes": obs.OtelWatcherConfig.LabelResourceAttributes,
+			"label_resource_attributes": obs.LabelResourceAttributes,
 		}
-		if obs.OtelWatcherConfig.CountMetricName != nil {
-			dvSpec["count_metric_name"] = *obs.OtelWatcherConfig.CountMetricName
+		if obs.CountMetricName != nil {
+			dvSpec["count_metric_name"] = *obs.CountMetricName
 		}
-		if obs.OtelWatcherConfig.BytesMetricName != nil {
-			dvSpec["bytes_metric_name"] = *obs.OtelWatcherConfig.BytesMetricName
+		if obs.BytesMetricName != nil {
+			dvSpec["bytes_metric_name"] = *obs.BytesMetricName
 		}
 		config["connectors"].(map[string]any)[dvKey] = dvSpec
 
 		filterName := ""
-		if obs.OtelWatcherConfig.Filter != nil {
-			filterName = "filter/" + watcherName
-			config["processors"].(map[string]any)[filterName] = buildFilterProcessorMap(obs.OtelWatcherConfig.Filter)
+		if obs.Filter != nil {
+			filterName = "filter/" + observerName
+			config["processors"].(map[string]any)[filterName] = buildFilterProcessorMap(obs.Filter)
 		}
 
 		var pipelineProcessors []string
@@ -751,7 +744,7 @@ func (c HubAdapter) buildCollectorConfig() (string, error) {
 		}
 		pipelineProcessors = append(pipelineProcessors, "batch", groupByKey)
 
-		logsPipelineName := "logs/" + watcherName
+		logsPipelineName := "logs/" + observerName
 		config["service"].(map[string]any)["pipelines"].(map[string]any)[logsPipelineName] = map[string]any{
 			"receivers":  []string{"otlp"},
 			"processors": pipelineProcessors,
@@ -761,7 +754,7 @@ func (c HubAdapter) buildCollectorConfig() (string, error) {
 		dataVolumeReceivers = append(dataVolumeReceivers, dvKey)
 	}
 
-	config["service"].(map[string]any)["pipelines"].(map[string]any)["metrics/watcheroutput"] = map[string]any{
+	config["service"].(map[string]any)["pipelines"].(map[string]any)["metrics/observeroutput"] = map[string]any{
 		"receivers":  dataVolumeReceivers,
 		"processors": []string{"deltatocumulative"},
 		"exporters":  []string{"prometheus", "debug"},
@@ -775,44 +768,20 @@ func (c HubAdapter) buildCollectorConfig() (string, error) {
 	return string(raw), nil
 }
 
-func buildFilterProcessorMap(filter *mdaiv1.FilterProcessorConfig) map[string]any {
+func buildFilterProcessorMap(filter *mdaiv1.ObserverFilter) map[string]any {
 	filterMap := map[string]any{}
 
 	if filter.ErrorMode != nil {
 		filterMap["error_mode"] = filter.ErrorMode
 	}
 
-	if filter.Logs != nil && len(filter.Logs.LogConditions) > 0 {
+	if filter.Logs != nil && len(filter.Logs.LogRecord) > 0 {
 		filterMap["logs"] = map[string]any{
-			"log_record": filter.Logs.LogConditions,
+			"log_record": filter.Logs.LogRecord,
 		}
 	}
 
-	if filter.Metrics != nil {
-		metricsMap := map[string]any{}
-		if filter.Metrics.MetricConditions != nil && len(*filter.Metrics.MetricConditions) > 0 {
-			metricsMap["metric"] = *filter.Metrics.MetricConditions
-		}
-		if filter.Metrics.DataPointConditions != nil && len(*filter.Metrics.DataPointConditions) > 0 {
-			metricsMap["datapoint"] = *filter.Metrics.DataPointConditions
-		}
-		if len(metricsMap) > 0 {
-			filterMap["metrics"] = metricsMap
-		}
-	}
-
-	if filter.Traces != nil {
-		tracesMap := map[string]any{}
-		if filter.Traces.SpanConditions != nil && len(*filter.Traces.SpanConditions) > 0 {
-			tracesMap["span"] = *filter.Traces.SpanConditions
-		}
-		if filter.Traces.SpanEventConditions != nil && len(*filter.Traces.SpanEventConditions) > 0 {
-			tracesMap["spanevent"] = *filter.Traces.SpanEventConditions
-		}
-		if len(tracesMap) > 0 {
-			filterMap["traces"] = tracesMap
-		}
-	}
+	// TODO: Add metrics and trace filters
 
 	return filterMap
 }

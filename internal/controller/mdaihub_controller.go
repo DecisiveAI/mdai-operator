@@ -111,7 +111,7 @@ func (r *MdaiHubReconciler) isValkeyVariableConfigured(fetchedCR *mdaiv1.MdaiHub
 	}
 
 	for _, variable := range *fetchedCR.Spec.Variables {
-		if variable.StorageType == mdaiv1.VariableSourceTypeBultInValkey {
+		if *variable.StorageType == mdaiv1.VariableSourceTypeBultInValkey {
 			return true
 		}
 	}

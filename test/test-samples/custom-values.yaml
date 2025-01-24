@@ -4017,7 +4017,7 @@ prometheus:
         relabel_configs:
           - source_labels: [ __meta_kubernetes_pod_label_app_kubernetes_io_component, __meta_kubernetes_pod_annotation_prometheus_io_scrape, __meta_kubernetes_pod_container_port_number ]
             separator: ;
-            regex: mdaihub-sample-watcher-collector;true;8899
+            regex: mdaihub-dynamic-data-filtering-sample-watcher-collector;true;8899
             action: keep
     # - job_name: kube-etcd
     #   kubernetes_sd_configs:
