@@ -49,6 +49,7 @@ type Variable struct {
 	Type VariableType `json:"type" yaml:"type"`
 	// StorageType defaults to "mdai-valkey" if not provided
 	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="mdai-valkey"
 	// +kubebuilder:validation:Enum:=mdai-valkey
 	StorageType *VariableStorageType `json:"storageType" yaml:"storageType"`
 	// +kubebuilder:validation:Optional
