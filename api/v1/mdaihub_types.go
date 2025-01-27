@@ -97,7 +97,7 @@ type Evaluation struct {
 	// RelevantLabels indicates which part(s) of the alert payload to forward to the Action.
 	// +kubebuilder:validation:Optional
 	RelevantLabels *[]string `json:"relevantLabels" yaml:"relevantLabels"`
-	// Resolve is the action that's taken when this alert fires. It's a shorthand for Status.Firing
+	// Resolve is the action that's taken when this alert fires. It's a shorthand for Status.Firing. DEPRECATED: Use Status.Firing instead!
 	// +kubebuilder:validation:Optional
 	Resolve *Action `json:"resolve" yaml:"resolve"`
 	// Status allows the user to specify actions depending on the state of the evaluation
