@@ -12,7 +12,7 @@ Operator
 - Requires environment variables with the ValKey endpoint and password to be provided.
 - Supports two types of variables: set and scalars.
 - Converts to uppercase MDAI environment variables when injecting them into the OTEL collector.
-  Injects environment variables into OTEL collectors through a ConfigMap with labels matching the hub name. The OTEL collector must be configured to use the ConfigMap.
+  Injects environment variables into OTEL collectors through a ConfigMap with labels matching the hub name. The OTEL collector must be configured to use the ConfigMap. Operator is not responsible for removing this ConfigMap.
 - The ConfigMap name is the MDAI hub name plus `-variables`
 ```yaml
   envFrom:
@@ -90,11 +90,16 @@ You can apply the samples (examples) from the config/sample:
 ```sh
 kubectl apply -k config/samples/
 ```
+### Testing
+Create namespace for OTEL collector
+```shell
+kubectl create namespace otel
+```
 Deploy test otel collectors:
 ```sh
 kubectl apply -k test/test-samples/
 ```
-### Testing
+
 Add watcher scrape config to Prometheus:
 ```shell
 helm upgrade prometheus prometheus-community/kube-prometheus-stack -f test/test-samples/custom-values.yaml

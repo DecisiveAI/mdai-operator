@@ -30,7 +30,22 @@ spec:
 
   # Observers that watch telemetry and contribute metrics to Prometheus. Typical use is to query these metrics in Evaluations.
   observers:
-    - name: service-bytes-watcher1
+    - name: watcher1
+      labelResourceAttributes:
+        - service.name
+      countMetricName: mdai_watcher_one_count_total
+      bytesMetricName: mdai_watcher_one_bytes_total
+    - name: watcher2
+      labelResourceAttributes:
+      - team
+      - log_level
+      countMetricName: mdai_watcher_two_count_total
+    - name: watcher3
+      labelResourceAttributes:
+      - region
+      - log_level
+      bytesMetricName: mdai_watcher_three_count_total
+    - name: watcher4
       image: public.ecr.aws/p3k6k6h3/watcher-observer
       labelResourceAttributes:
       - service.name

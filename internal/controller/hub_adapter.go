@@ -2,7 +2,9 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -432,21 +434,15 @@ func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[s
 			Name:      envConfigMapName,
 			Namespace: namespace,
 		},
-		Data: envMap,
 	}
-
-	if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", envConfigMapName)
-		return "", err
-	}
-
+	// we are not setting an owner reference here as we want to allow config maps being deployed across namespaces
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, desiredConfigMap, func() error {
 		desiredConfigMap.Data = envMap
 		return nil
 	})
 	if err != nil {
 		c.logger.Error(err, "Failed to create or update ConfigMap", "name", envConfigMapName, "namespace", namespace)
-		return "", fmt.Errorf("failed to create or update ConfigMap: %w", err)
+		return controllerutil.OperationResultNone, fmt.Errorf("failed to create or update ConfigMap: %w", err)
 	}
 
 	c.logger.Info("Successfully created or updated ConfigMap", "name", envConfigMapName, "namespace", namespace, "operation", operationResult)
@@ -499,7 +495,8 @@ func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationR
 	}
 
 	// for now assuming one collector holds all observers
-	if err := c.createOrUpdateWatcherCollectorConfigMap(ctx); err != nil {
+	hash, err := c.createOrUpdateWatcherCollectorConfigMap(ctx)
+	if err != nil {
 		return OperationResult{}, err
 	}
 
@@ -507,7 +504,7 @@ func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationR
 	if err := c.createOrUpdateWatcherCollectorService(ctx, c.mdaiCR.Namespace); err != nil {
 		return OperationResult{}, err
 	}
-	if err := c.createOrUpdateWatcherCollectorDeployment(ctx, c.mdaiCR.Namespace); err != nil {
+	if err := c.createOrUpdateWatcherCollectorDeployment(ctx, c.mdaiCR.Namespace, hash); err != nil {
 		return OperationResult{}, err
 	}
 
@@ -515,25 +512,30 @@ func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationR
 }
 
 func (c HubAdapter) createOrUpdateWatcherCollectorService(ctx context.Context, namespace string) error {
+	name := c.mdaiCR.Name + "-watcher-collector-service"
+	appLabel := c.mdaiCR.Name + "-watcher-collector"
+
 	service := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.mdaiCR.Name + "-watcher-collector-service",
+			Name:      name,
 			Namespace: namespace,
-			Labels: map[string]string{
-				"app": c.mdaiCR.Name + "-watcher-collector",
-			},
 		},
 	}
 
 	if err := controllerutil.SetControllerReference(c.mdaiCR, service, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on Service", "service", service.Name)
+		c.logger.Error(err, "Failed to set owner reference on Service", "service", name)
 		return err
 	}
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, service, func() error {
+		if service.Labels == nil {
+			service.Labels = make(map[string]string)
+		}
+		service.Labels["app"] = appLabel
+
 		service.Spec = v1.ServiceSpec{
 			Selector: map[string]string{
-				"app": c.mdaiCR.Name + "-watcher-collector",
+				"app": appLabel,
 			},
 			Ports: []v1.ServicePort{
 				{
@@ -552,17 +554,17 @@ func (c HubAdapter) createOrUpdateWatcherCollectorService(ctx context.Context, n
 		return fmt.Errorf("failed to create or update watcher-collector-service: %w", err)
 	}
 
-	c.logger.Info("Successfully created or updated watcher-collector-service", "namespace", namespace, "operation", operationResult)
+	c.logger.Info("Successfully created or updated watcher-collector-service", "service", name, "namespace", namespace, "operation", operationResult)
 	return nil
 }
 
-func (c HubAdapter) createOrUpdateWatcherCollectorConfigMap(ctx context.Context) error {
+func (c HubAdapter) createOrUpdateWatcherCollectorConfigMap(ctx context.Context) (string, error) {
 	namespace := c.mdaiCR.Namespace
 	configMapName := c.mdaiCR.Name + watcherConfigMapPostfix
 
 	collectorYAML, err := c.buildCollectorConfig()
 	if err != nil {
-		return fmt.Errorf("failed to build observer configuration: %w", err)
+		return "", fmt.Errorf("failed to build observer configuration: %w", err)
 	}
 
 	desiredConfigMap := &v1.ConfigMap{
@@ -577,10 +579,9 @@ func (c HubAdapter) createOrUpdateWatcherCollectorConfigMap(ctx context.Context)
 			"collector.yaml": collectorYAML,
 		},
 	}
-
 	if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
 		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", configMapName)
-		return err
+		return "", err
 	}
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, desiredConfigMap, func() error {
@@ -589,96 +590,33 @@ func (c HubAdapter) createOrUpdateWatcherCollectorConfigMap(ctx context.Context)
 	})
 	if err != nil {
 		c.logger.Error(err, "Failed to create or update ConfigMap", "configmap", configMapName)
-		return err
+		return "", err
 	}
 
 	c.logger.Info("ConfigMap created or updated successfully", "configmap", configMapName, "operation", operationResult)
-	return nil
+	return getConfigMapSHA(*desiredConfigMap)
 }
 
 func int32Ptr(i int32) *int32 {
 	return &i
 }
 
-func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context, namespace string) error {
+func getConfigMapSHA(config v1.ConfigMap) (string, error) {
+	data, err := json.Marshal(config)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return fmt.Sprintf("%x", sum), nil
+}
+
+func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context, namespace string, hash string) error {
 	name := c.mdaiCR.Name + "-watcher-collector"
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
-			Labels: map[string]string{
-				"app": name,
-			},
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: int32Ptr(1),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": name,
-				},
-			},
-			Template: v1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"app":                         name,
-						"app.kubernetes.io/component": name,
-					},
-					Annotations: map[string]string{
-						"prometheus.io/path":   "/metrics",
-						"prometheus.io/port":   "8899",
-						"prometheus.io/scrape": "true",
-					},
-				},
-				Spec: v1.PodSpec{
-					Containers: []v1.Container{
-						{
-							Name:  name,
-							Image: "public.ecr.aws/decisiveai/watcher-collector:0.1.0-dev",
-							Ports: []v1.ContainerPort{
-								{
-									ContainerPort: 8888,
-									Name:          "otelcol-metrics",
-								},
-								{
-									ContainerPort: 8899,
-									Name:          "watcher-metrics",
-								},
-								{
-									ContainerPort: 4317,
-									Name:          "otlp-grpc",
-								},
-								{
-									ContainerPort: 4318,
-									Name:          "otlp-http",
-								},
-							},
-							VolumeMounts: []v1.VolumeMount{
-								{
-									Name:      "config-volume",
-									MountPath: "/conf/collector.yaml",
-									SubPath:   "collector.yaml",
-								},
-							},
-							Command: []string{
-								"/mdai-watcher-collector",
-								"--config=/conf/collector.yaml",
-							},
-						},
-					},
-					Volumes: []v1.Volume{
-						{
-							Name: "config-volume",
-							VolumeSource: v1.VolumeSource{
-								ConfigMap: &v1.ConfigMapVolumeSource{
-									LocalObjectReference: v1.LocalObjectReference{
-										Name: c.mdaiCR.Name + watcherConfigMapPostfix,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
 		},
 	}
 
@@ -688,6 +626,69 @@ func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context
 	}
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, deployment, func() error {
+		if deployment.Labels == nil {
+			deployment.Labels = make(map[string]string)
+		}
+		deployment.Labels["app"] = name
+		deployment.Spec.Replicas = int32Ptr(1)
+		if deployment.Spec.Selector == nil {
+			deployment.Spec.Selector = &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": name},
+			}
+		} else {
+			deployment.Spec.Selector.MatchLabels["app"] = name
+		}
+		if deployment.Spec.Template.Labels == nil {
+			deployment.Spec.Template.Labels = make(map[string]string)
+		}
+		deployment.Spec.Template.Labels["app"] = name
+		deployment.Spec.Template.Labels["app.kubernetes.io/component"] = name
+
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = make(map[string]string)
+		}
+		deployment.Spec.Template.Annotations["prometheus.io/path"] = "/metrics"
+		deployment.Spec.Template.Annotations["prometheus.io/port"] = "8899"
+		deployment.Spec.Template.Annotations["prometheus.io/scrape"] = "true"
+		deployment.Spec.Template.Annotations["mdai-collector-config/sha256"] = hash
+		deployment.Spec.Template.Spec = v1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Name:  name,
+					Image: "public.ecr.aws/decisiveai/watcher-collector:0.1.0-dev",
+					Ports: []v1.ContainerPort{
+						{ContainerPort: 8888, Name: "otelcol-metrics"},
+						{ContainerPort: 8899, Name: "watcher-metrics"},
+						{ContainerPort: 4317, Name: "otlp-grpc"},
+						{ContainerPort: 4318, Name: "otlp-http"},
+					},
+					VolumeMounts: []v1.VolumeMount{
+						{
+							Name:      "config-volume",
+							MountPath: "/conf/collector.yaml",
+							SubPath:   "collector.yaml",
+						},
+					},
+					Command: []string{
+						"/mdai-watcher-collector",
+						"--config=/conf/collector.yaml",
+					},
+				},
+			},
+			Volumes: []v1.Volume{
+				{
+					Name: "config-volume",
+					VolumeSource: v1.VolumeSource{
+						ConfigMap: &v1.ConfigMapVolumeSource{
+							LocalObjectReference: v1.LocalObjectReference{
+								Name: c.mdaiCR.Name + watcherConfigMapPostfix,
+							},
+						},
+					},
+				},
+			},
+		}
+
 		return nil
 	})
 	if err != nil {
