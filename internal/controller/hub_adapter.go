@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -212,7 +213,7 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 			return RequeueAfter(time.Second*10, err)
 		}
 
-		prometheusRuleCR.Spec.Groups[0].Rules = composePrometheusRule(eval, c.mdaiCR.Name)
+		prometheusRuleCR.Spec.Groups[0].Rules = c.composePrometheusRule(eval, c.mdaiCR.Name)
 
 		if err = c.client.Update(ctx, prometheusRuleCR); err != nil {
 			c.logger.Error(err, "Failed to update PrometheusRule")
@@ -259,15 +260,26 @@ func (c HubAdapter) getOrCreatePrometheusRuleCR(ctx context.Context, defaultProm
 	return prometheusRule, nil
 }
 
-func composePrometheusRule(alertingRule mdaiv1.Evaluation, engineName string) []prometheusv1.Rule {
+func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation, engineName string) []prometheusv1.Rule {
 	alertName := string(alertingRule.Name)
+	relevantLabelsJson, err := json.Marshal(*alertingRule.RelevantLabels)
+	if err != nil {
+		c.logger.Error(err, "Failed to compose relevant labels for eval", "name", alertName, "relevantLabels", *alertingRule.RelevantLabels)
+	}
+	actionContextJson, err := json.Marshal(alertingRule.Status)
+	if err != nil {
+		c.logger.Error(err, "Failed to compose action context for eval", "name", alertName, "status", *alertingRule.Status)
+	}
 	prometheusRule := prometheusv1.Rule{
 		Expr:  alertingRule.Expr,
 		Alert: alertName,
 		For:   alertingRule.For,
 		Annotations: map[string]string{
-			"alert_name":  alertName, // FIXME we need a relationship between alert and variable
-			"engine_name": engineName,
+			"alert_name":      alertName, // FIXME we need a relationship between alert and variable
+			"engine_name":     engineName,
+			"relevant_labels": string(relevantLabelsJson),
+			"action_context":  string(actionContextJson),
+			"current_value":   "{{ $value | printf \"%.2f\" }}",
 		},
 		Labels: map[string]string{
 			"severity": alertingRule.Severity,
