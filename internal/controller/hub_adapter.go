@@ -632,12 +632,9 @@ func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context
 		deployment.Labels["app"] = name
 		deployment.Spec.Replicas = int32Ptr(1)
 		if deployment.Spec.Selector == nil {
-			deployment.Spec.Selector = &metav1.LabelSelector{
-				MatchLabels: map[string]string{"app": name},
-			}
-		} else {
-			deployment.Spec.Selector.MatchLabels["app"] = name
+			deployment.Spec.Selector = &metav1.LabelSelector{}
 		}
+		deployment.Spec.Selector.MatchLabels["app"] = name
 		if deployment.Spec.Template.Labels == nil {
 			deployment.Spec.Template.Labels = make(map[string]string)
 		}
