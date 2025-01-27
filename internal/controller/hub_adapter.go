@@ -263,19 +263,22 @@ func (c HubAdapter) getOrCreatePrometheusRuleCR(ctx context.Context, defaultProm
 func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation, engineName string) []prometheusv1.Rule {
 	alertName := string(alertingRule.Name)
 	relevantLabelsJson, err := json.Marshal(*alertingRule.RelevantLabels)
+	
 	if err != nil {
 		c.logger.Error(err, "Failed to compose relevant labels for eval", "name", alertName, "relevantLabels", *alertingRule.RelevantLabels)
 	}
+
 	actionContextJson, err := json.Marshal(alertingRule.Status)
 	if err != nil {
 		c.logger.Error(err, "Failed to compose action context for eval", "name", alertName, "status", *alertingRule.Status)
 	}
+
 	prometheusRule := prometheusv1.Rule{
 		Expr:  alertingRule.Expr,
 		Alert: alertName,
 		For:   alertingRule.For,
 		Annotations: map[string]string{
-			"alert_name":      alertName, // FIXME we need a relationship between alert and variable
+			"alert_name":      alertName,
 			"engine_name":     engineName,
 			"relevant_labels": string(relevantLabelsJson),
 			"action_context":  string(actionContextJson),
