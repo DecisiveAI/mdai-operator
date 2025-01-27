@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"os"
 	"time"
 
@@ -91,7 +92,14 @@ func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	log.Info("-- Finished reconciliation --")
+	meta.SetStatusCondition(&fetchedCR.Status.Conditions, metav1.Condition{Type: typeAvailableHub,
+		Status: metav1.ConditionTrue, Reason: "Reconciling",
+		Message: fmt.Sprintf("mdai hub (%s) reconciled successfully", fetchedCR.Name)})
+	if err := r.Status().Update(ctx, fetchedCR); err != nil {
+		log.Error(err, "Failed to update mdai hub status")
+		return ctrl.Result{}, err
+	}
+
 	if r.ValKeyClient != nil && r.isValkeyVariableConfigured(fetchedCR) {
 		var timeInterval metav1.Duration
 		if fetchedCR.Spec.Config != nil && fetchedCR.Spec.Config.ReconcileLoopInterval != nil {
@@ -99,9 +107,11 @@ func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		} else {
 			timeInterval = metav1.Duration{Duration: 2 * time.Minute}
 		}
-		log.Info(fmt.Sprintf("Rescheduling in %v for Valkey synchronization", timeInterval))
+		log.Info("-- Finished reconciliation --")
+		log.Info(fmt.Sprintf("-- Rescheduling in %v for Valkey synchronization --", timeInterval))
 		return ctrl.Result{RequeueAfter: timeInterval.Duration}, nil
 	}
+	log.Info("-- Finished reconciliation --")
 	return ctrl.Result{}, nil
 }
 
@@ -137,8 +147,6 @@ func (r *MdaiHubReconciler) ReconcileHandler(ctx context.Context, adapter HubAda
 			return ctrl.Result{}, nil
 		}
 	}
-
-	// TODO final status update?
 
 	return ctrl.Result{}, nil
 }
