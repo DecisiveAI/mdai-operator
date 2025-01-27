@@ -1,0 +1,70 @@
+apiVersion: mdai.mdai.ai/v1
+kind: MdaiHub
+metadata:
+  labels:
+    app.kubernetes.io/name: mdai-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: mdaihub-sample
+spec:
+  config:
+    reconcileLoopInterval: 2m
+
+  variables:
+    - storageKey: service_list
+      defaultValue: "n/a"
+      with:
+        - exportedVariableName: "SERVICE_LIST_REGEX"
+          transformer:
+            join:
+              delimiter: "|"
+        - exportedVariableName: "SERVICE_LIST_CSV"
+          transformer:
+            join:
+              delimiter: ","
+      # below properties are optional
+      type: set
+      storageType: "mdai-valkey"
+
+  evaluations:
+    - name: hourly
+      type: mdai/prometheus_alert
+      expr: 'increase(bytes_sent_by_service_total[1h]) > 5*1024*1024'
+      severity: warning
+      status:
+        firing:
+          variableUpdate:
+            variableRef: service_list
+            operation: mdai/add_element
+        resolved:
+          variableUpdate:
+            variableRef: service_list
+            operation: mdai/remove_element
+      # Optional below here
+      for: 5m
+      keep_firing_for: 10m
+      relevantLabels:
+        - "service_name"
+
+  observers:
+    - name: watcher1
+      image: watcher-observer
+      labelResourceAttributes:
+        - service.name
+      countMetricName: items_received_by_service_total
+      bytesMetricName: bytes_received_by_service_total
+      filter:
+        error_mode: ignore
+        logs:
+          log_record:
+            - 'resource.attributes["watcher_direction"] != "received"'
+    - name: watcher2
+      image: watcher-observer
+      labelResourceAttributes:
+        - service.name
+      countMetricName: items_sent_by_service_total
+      bytesMetricName: bytes_sent_by_service_total
+      filter:
+        error_mode: ignore
+        logs:
+          log_record:
+            - 'resource.attributes["watcher_direction"] != "exported"'
