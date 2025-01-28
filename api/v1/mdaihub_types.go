@@ -53,7 +53,7 @@ type Variable struct {
 	StorageKey string `json:"storageKey" yaml:"storageKey"`
 	// Type Data type for the managed variable value
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=int;float;boolean;string;set;array
+	// +kubebuilder:validation:Enum:=string;set
 	Type VariableType `json:"type" yaml:"type"`
 	// StorageType defaults to "mdai-valkey" if not provided
 	// +kubebuilder:validation:Optional
