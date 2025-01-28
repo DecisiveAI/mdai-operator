@@ -81,16 +81,16 @@ type VariableUpdate struct {
 type Action struct {
 	// VariableUpdate Modify the value of a managed variable.
 	// +kubebuilder:validation:Optional
-	VariableUpdate *VariableUpdate `json:"variableUpdate" yaml:"variableUpdate"`
+	VariableUpdate *VariableUpdate `json:"variableUpdate,omitempty" yaml:"variableUpdate,omitempty"`
 }
 
 type PrometheusAlertEvaluationStatus struct {
 	// Firing Action performed when the Prometheus Alert status changes to "firing"
 	// +kubebuilder:validation:Optional
-	Firing *Action `json:"firing" yaml:"firing"`
+	Firing *Action `json:"firing,omitempty" yaml:"firing,omitempty"`
 	// Resolved Action performed when the Prometheus Alert status changes to "resolved"
 	// +kubebuilder:validation:Optional
-	Resolved *Action `json:"resolved" yaml:"resolved"`
+	Resolved *Action `json:"resolved,omitempty" yaml:"resolved,omitempty"`
 }
 
 type Evaluation struct {
