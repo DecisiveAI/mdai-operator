@@ -101,7 +101,7 @@ type Evaluation struct {
 	// If Resolve is not provided, Status.Firing is required
 	// If both are provided, OnStatus will override Resolve
 	// +kubebuilder:validation:Optional
-	OnStatus *PrometheusAlertEvaluationStatus `json:"status" yaml:"status"`
+	OnStatus *PrometheusAlertEvaluationStatus `json:"onStatus" yaml:"onStatus"`
 	// Specify the interval at which this evaluation is assessed in the Prometheus infrastructure.
 	// +kubebuilder:validation:Format:=duration
 	Interval *metav1.Duration `json:"interval,omitempty" yaml:"interval,omitempty"`
