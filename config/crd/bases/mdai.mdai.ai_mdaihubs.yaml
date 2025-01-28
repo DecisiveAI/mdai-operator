@@ -92,8 +92,9 @@ spec:
                         type: string
                       type: array
                     resolve:
-                      description: Resolve is the action that's taken when this alert
-                        fires. It's a shorthand for Status.Firing
+                      description: 'Resolve is the action that''s taken when this
+                        alert fires. It''s a shorthand for Status.Firing. DEPRECATED:
+                        Use Status.Firing instead!'
                       properties:
                         variableUpdate:
                           properties:
