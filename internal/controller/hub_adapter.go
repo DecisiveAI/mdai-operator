@@ -197,12 +197,6 @@ func Filter(list []string, strToFilter string) (newList []string) {
 
 // EnsurePrometheusRuleSynchronized creates or updates PrometheusFilter CR
 func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (OperationResult, error) {
-	evals := c.mdaiCR.Spec.Evaluations
-	if evals == nil {
-		c.logger.Info("No evaluation found in the CR, skipping PrometheusRule synchronization")
-		return ContinueProcessing()
-	}
-
 	defaultPrometheusRuleName := "mdai-" + c.mdaiCR.Name + "-alert-rules"
 	c.logger.Info("EnsurePrometheusRuleSynchronized")
 
@@ -212,10 +206,22 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 		return RequeueAfter(time.Second*10, err)
 	}
 
+	evals := c.mdaiCR.Spec.Evaluations
+	if evals == nil {
+		if len(prometheusRuleCR.Spec.Groups[0].Rules) != 0 {
+			c.logger.Info("Rules removed from CR but still exist in prometheus, removing existing rules")
+		} else {
+			c.logger.Info("No evaluation found in the CR, skipping PrometheusRule synchronization")
+			return ContinueProcessing()
+		}
+	}
+
 	rules := []prometheusv1.Rule{}
-	for _, eval := range *evals {
-		rule := c.composePrometheusRule(eval, c.mdaiCR.Name)
-		rules = append(rules, rule)
+	if evals != nil {
+		for _, eval := range *evals {
+			rule := c.composePrometheusRule(eval, c.mdaiCR.Name)
+			rules = append(rules, rule)
+		}
 	}
 	prometheusRuleCR.Spec.Groups[0].Rules = rules
 	if err = c.client.Update(ctx, prometheusRuleCR); err != nil {
