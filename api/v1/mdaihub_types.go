@@ -215,9 +215,10 @@ func init() {
 }
 
 type (
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
+	// +kubebuilder:validation:MinLength=1
 	ActionName          string
 	EvaluationName      string
-	TriggerType         string
 	VariableSourceType  string
 	VariableStorageType string
 	VariableType        string
@@ -225,7 +226,6 @@ type (
 )
 
 const (
-	TriggerTypePrometheus          TriggerType         = "prometheus"
 	VariableSourceTypeBultInValkey VariableStorageType = "mdai-valkey"
 	VariableTypeInt                VariableType        = "int"
 	VariableTypeFloat              VariableType        = "float"
