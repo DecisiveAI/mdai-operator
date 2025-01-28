@@ -210,19 +210,21 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 	if evals == nil {
 		if len(prometheusRuleCR.Spec.Groups[0].Rules) != 0 {
 			c.logger.Info("Rules removed from CR but still exist in prometheus, removing existing rules")
+			if err := c.deletePrometheusRule(ctx); err != nil {
+				c.logger.Error(err, "Failed to remove existing rules")
+			}
 		} else {
 			c.logger.Info("No evaluation found in the CR, skipping PrometheusRule synchronization")
-			return ContinueProcessing()
 		}
+		return ContinueProcessing()
 	}
 
 	rules := []prometheusv1.Rule{}
-	if evals != nil {
-		for _, eval := range *evals {
-			rule := c.composePrometheusRule(eval, c.mdaiCR.Name)
-			rules = append(rules, rule)
-		}
+	for _, eval := range *evals {
+		rule := c.composePrometheusRule(eval, c.mdaiCR.Name)
+		rules = append(rules, rule)
 	}
+
 	prometheusRuleCR.Spec.Groups[0].Rules = rules
 	if err = c.client.Update(ctx, prometheusRuleCR); err != nil {
 		c.logger.Error(err, "Failed to update PrometheusRule")
