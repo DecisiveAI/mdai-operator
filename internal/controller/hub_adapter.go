@@ -288,10 +288,10 @@ func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation) promet
 		},
 	}
 
-	if alertingRule.Status != nil {
-		actionContextJson, err := json.Marshal(alertingRule.Status)
+	if alertingRule.OnStatus != nil {
+		actionContextJson, err := json.Marshal(alertingRule.OnStatus)
 		if err != nil {
-			c.logger.Error(err, "Failed to compose action context for eval", "name", alertName, "status", *alertingRule.Status)
+			c.logger.Error(err, "Failed to compose action context for eval", "name", alertName, "status", *alertingRule.OnStatus)
 		}
 		prometheusRule.Annotations["action_context"] = string(actionContextJson)
 	}

@@ -85,39 +85,9 @@ spec:
                       description: How this evaluation will be referred to elsewhere
                         in the config
                       type: string
-                    relevantLabels:
-                      description: RelevantLabels indicates which part(s) of the alert
-                        payload to forward to the Action.
-                      items:
-                        type: string
-                      type: array
-                    resolve:
-                      description: 'Resolve is the action that''s taken when this
-                        alert fires. It''s a shorthand for Status.Firing. DEPRECATED:
-                        Use Status.Firing instead!'
-                      properties:
-                        variableUpdate:
-                          properties:
-                            operation:
-                              enum:
-                              - mdai/add_element
-                              - mdai/remove_element
-                              type: string
-                            variableRef:
-                              type: string
-                          required:
-                          - operation
-                          - variableRef
-                          type: object
-                      type: object
-                    severity:
-                      pattern: ^(warning|critical)$
-                      type: string
-                    status:
-                      description: |-
-                        Status allows the user to specify actions depending on the state of the evaluation
-                        If Resolve is not provided, Status.Firing is required
-                        If both are provided, Status will override Resolve
+                    onStatus:
+                      description: OnStatus allows the user to specify actions depending
+                        on the state of the evaluation
                       properties:
                         firing:
                           properties:
@@ -152,6 +122,15 @@ spec:
                               type: object
                           type: object
                       type: object
+                    relevantLabels:
+                      description: RelevantLabels indicates which part(s) of the alert
+                        payload to forward to the Action.
+                      items:
+                        type: string
+                      type: array
+                    severity:
+                      pattern: ^(warning|critical)$
+                      type: string
                     type:
                       enum:
                       - mdai/prometheus_alert

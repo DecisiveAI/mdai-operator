@@ -65,7 +65,7 @@ spec:
       type: mdai/prometheus_alert
       expr: 'increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024'
       severity: warning
-      status:
+      onStatus:
         firing:
           variableUpdate:
             variableRef: service_list
