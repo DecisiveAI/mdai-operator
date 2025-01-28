@@ -95,6 +95,8 @@ type PrometheusAlertEvaluationStatus struct {
 
 type Evaluation struct {
 	// Name How this evaluation will be referred to elsewhere in the config. Also, the name applied to the Prometheus Alert
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
+	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
 	// +kubebuilder:validation:Enum:=mdai/prometheus_alert
@@ -215,10 +217,6 @@ func init() {
 }
 
 type (
-	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
-	// +kubebuilder:validation:MinLength=1
-	ActionName          string
-	EvaluationName      string
 	VariableSourceType  string
 	VariableStorageType string
 	VariableType        string
