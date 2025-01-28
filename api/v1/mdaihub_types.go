@@ -67,14 +67,14 @@ type VariableUpdate struct {
 
 type Action struct {
 	// +kubebuilder:validation:Optional
-	VariableUpdate *VariableUpdate `json:"variableUpdate" yaml:"variableUpdate"`
+	VariableUpdate *VariableUpdate `json:"variableUpdate,omitempty" yaml:"variableUpdate,omitempty"`
 }
 
 type PrometheusAlertEvaluationStatus struct {
 	// +kubebuilder:validation:Optional
-	Firing *Action `json:"firing" yaml:"firing"`
+	Firing *Action `json:"firing,omitempty" yaml:"firing,omitempty"`
 	// +kubebuilder:validation:Optional
-	Resolved *Action `json:"resolved" yaml:"resolved"`
+	Resolved *Action `json:"resolved,omitempty" yaml:"resolved,omitempty"`
 }
 
 type Evaluation struct {
@@ -96,10 +96,10 @@ type Evaluation struct {
 	Severity string `json:"severity" yaml:"severity"`
 	// RelevantLabels indicates which part(s) of the alert payload to forward to the Action.
 	// +kubebuilder:validation:Optional
-	RelevantLabels *[]string `json:"relevantLabels" yaml:"relevantLabels"`
+	RelevantLabels *[]string `json:"relevantLabels,omitempty" yaml:"relevantLabels,omitempty"`
 	// OnStatus allows the user to specify actions depending on the state of the evaluation
 	// +kubebuilder:validation:Optional
-	OnStatus *PrometheusAlertEvaluationStatus `json:"onStatus" yaml:"onStatus"`
+	OnStatus *PrometheusAlertEvaluationStatus `json:"onStatus,omitempty" yaml:"onStatus,omitempty"`
 	// Specify the interval at which this evaluation is assessed in the Prometheus infrastructure.
 	// +kubebuilder:validation:Format:=duration
 	Interval *metav1.Duration `json:"interval,omitempty" yaml:"interval,omitempty"`
