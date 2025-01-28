@@ -219,9 +219,9 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 		return ContinueProcessing()
 	}
 
-	rules := []prometheusv1.Rule{}
+	rules := make([]prometheusv1.Rule{}, 0, len(*evals))
 	for _, eval := range *evals {
-		rule := c.composePrometheusRule(eval, c.mdaiCR.Name)
+		rule := c.composePrometheusRule(eval)
 		rules = append(rules, rule)
 	}
 
@@ -270,7 +270,7 @@ func (c HubAdapter) getOrCreatePrometheusRuleCR(ctx context.Context, defaultProm
 	return prometheusRule, nil
 }
 
-func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation, engineName string) prometheusv1.Rule {
+func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation) prometheusv1.Rule {
 	alertName := string(alertingRule.Name)
 
 	prometheusRule := prometheusv1.Rule{
@@ -279,7 +279,7 @@ func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation, engine
 		For:   alertingRule.For,
 		Annotations: map[string]string{
 			"alert_name":    alertName,
-			"engine_name":   engineName,
+			"engine_name":   c.mdaiCR.Name,
 			"current_value": "{{ $value | printf \"%.2f\" }}",
 		},
 		Labels: map[string]string{
