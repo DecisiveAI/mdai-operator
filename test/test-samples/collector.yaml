@@ -4,7 +4,7 @@ metadata:
   labels:
     mdaihub-name: mdaihub-dynamic-data-filtering-sample
   name: gateway-3
-  namespace: default
+  namespace: otel
 spec:
   envFrom:
     - configMapRef:
@@ -16,7 +16,7 @@ spec:
         sampling_thereafter: 100
         verbosity: detailed
       otlp/mdai_datalyzer:
-        endpoint: mdaihub-dynamic-data-filtering-sample-watcher-collector-service:4317
+        endpoint: mdaihub-dynamic-data-filtering-sample-watcher-collector-service.default.svc.cluster.local:4317
         tls:
           insecure: true
     processors:
