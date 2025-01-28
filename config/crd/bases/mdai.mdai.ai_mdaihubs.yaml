@@ -86,10 +86,8 @@ spec:
                         in the config
                       type: string
                     onStatus:
-                      description: |-
-                        OnStatus allows the user to specify actions depending on the state of the evaluation
-                        If Resolve is not provided, Status.Firing is required
-                        If both are provided, OnStatus will override Resolve
+                      description: OnStatus allows the user to specify actions depending
+                        on the state of the evaluation
                       properties:
                         firing:
                           properties:

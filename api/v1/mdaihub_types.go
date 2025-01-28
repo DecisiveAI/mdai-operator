@@ -98,8 +98,6 @@ type Evaluation struct {
 	// +kubebuilder:validation:Optional
 	RelevantLabels *[]string `json:"relevantLabels" yaml:"relevantLabels"`
 	// OnStatus allows the user to specify actions depending on the state of the evaluation
-	// If Resolve is not provided, Status.Firing is required
-	// If both are provided, OnStatus will override Resolve
 	// +kubebuilder:validation:Optional
 	OnStatus *PrometheusAlertEvaluationStatus `json:"onStatus" yaml:"onStatus"`
 	// Specify the interval at which this evaluation is assessed in the Prometheus infrastructure.
