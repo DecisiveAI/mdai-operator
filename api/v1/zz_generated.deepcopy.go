@@ -89,13 +89,8 @@ func (in *Evaluation) DeepCopyInto(out *Evaluation) {
 			copy(*out, *in)
 		}
 	}
-	if in.Resolve != nil {
-		in, out := &in.Resolve, &out.Resolve
-		*out = new(Action)
-		(*in).DeepCopyInto(*out)
-	}
-	if in.Status != nil {
-		in, out := &in.Status, &out.Status
+	if in.OnStatus != nil {
+		in, out := &in.OnStatus, &out.OnStatus
 		*out = new(PrometheusAlertEvaluationStatus)
 		(*in).DeepCopyInto(*out)
 	}

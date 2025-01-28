@@ -97,14 +97,11 @@ type Evaluation struct {
 	// RelevantLabels indicates which part(s) of the alert payload to forward to the Action.
 	// +kubebuilder:validation:Optional
 	RelevantLabels *[]string `json:"relevantLabels" yaml:"relevantLabels"`
-	// Resolve is the action that's taken when this alert fires. It's a shorthand for Status.Firing. DEPRECATED: Use Status.Firing instead!
-	// +kubebuilder:validation:Optional
-	Resolve *Action `json:"resolve" yaml:"resolve"`
-	// Status allows the user to specify actions depending on the state of the evaluation
+	// OnStatus allows the user to specify actions depending on the state of the evaluation
 	// If Resolve is not provided, Status.Firing is required
-	// If both are provided, Status will override Resolve
+	// If both are provided, OnStatus will override Resolve
 	// +kubebuilder:validation:Optional
-	Status *PrometheusAlertEvaluationStatus `json:"status" yaml:"status"`
+	OnStatus *PrometheusAlertEvaluationStatus `json:"status" yaml:"status"`
 	// Specify the interval at which this evaluation is assessed in the Prometheus infrastructure.
 	// +kubebuilder:validation:Format:=duration
 	Interval *metav1.Duration `json:"interval,omitempty" yaml:"interval,omitempty"`

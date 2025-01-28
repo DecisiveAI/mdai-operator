@@ -91,33 +91,14 @@ spec:
                       items:
                         type: string
                       type: array
-                    resolve:
-                      description: 'Resolve is the action that''s taken when this
-                        alert fires. It''s a shorthand for Status.Firing. DEPRECATED:
-                        Use Status.Firing instead!'
-                      properties:
-                        variableUpdate:
-                          properties:
-                            operation:
-                              enum:
-                              - mdai/add_element
-                              - mdai/remove_element
-                              type: string
-                            variableRef:
-                              type: string
-                          required:
-                          - operation
-                          - variableRef
-                          type: object
-                      type: object
                     severity:
                       pattern: ^(warning|critical)$
                       type: string
                     status:
                       description: |-
-                        Status allows the user to specify actions depending on the state of the evaluation
+                        OnStatus allows the user to specify actions depending on the state of the evaluation
                         If Resolve is not provided, Status.Firing is required
-                        If both are provided, Status will override Resolve
+                        If both are provided, OnStatus will override Resolve
                       properties:
                         firing:
                           properties:

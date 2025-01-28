@@ -268,9 +268,9 @@ func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation, engine
 		c.logger.Error(err, "Failed to compose relevant labels for eval", "name", alertName, "relevantLabels", *alertingRule.RelevantLabels)
 	}
 
-	actionContextJson, err := json.Marshal(alertingRule.Status)
+	actionContextJson, err := json.Marshal(alertingRule.OnStatus)
 	if err != nil {
-		c.logger.Error(err, "Failed to compose action context for eval", "name", alertName, "status", *alertingRule.Status)
+		c.logger.Error(err, "Failed to compose action context for eval", "name", alertName, "status", *alertingRule.OnStatus)
 	}
 
 	prometheusRule := prometheusv1.Rule{
