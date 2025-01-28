@@ -219,7 +219,7 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 		return ContinueProcessing()
 	}
 
-	rules := make([]prometheusv1.Rule{}, 0, len(*evals))
+	rules := make([]prometheusv1.Rule, 0, len(*evals))
 	for _, eval := range *evals {
 		rule := c.composePrometheusRule(eval)
 		rules = append(rules, rule)
