@@ -197,12 +197,6 @@ func Filter(list []string, strToFilter string) (newList []string) {
 
 // EnsurePrometheusRuleSynchronized creates or updates PrometheusFilter CR
 func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (OperationResult, error) {
-	evals := c.mdaiCR.Spec.Evaluations
-	if evals == nil {
-		c.logger.Info("No evaluation found in the CR, skipping PrometheusRule synchronization")
-		return ContinueProcessing()
-	}
-
 	defaultPrometheusRuleName := "mdai-" + c.mdaiCR.Name + "-alert-rules"
 	c.logger.Info("EnsurePrometheusRuleSynchronized")
 
@@ -212,11 +206,25 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 		return RequeueAfter(time.Second*10, err)
 	}
 
-	rules := []prometheusv1.Rule{}
+	evals := c.mdaiCR.Spec.Evaluations
+	if evals == nil {
+		if len(prometheusRuleCR.Spec.Groups[0].Rules) != 0 {
+			c.logger.Info("Rules removed from CR but still exist in prometheus, removing existing rules")
+			if err := c.deletePrometheusRule(ctx); err != nil {
+				c.logger.Error(err, "Failed to remove existing rules")
+			}
+		} else {
+			c.logger.Info("No evaluation found in the CR, skipping PrometheusRule synchronization")
+		}
+		return ContinueProcessing()
+	}
+
+	rules := make([]prometheusv1.Rule, 0, len(*evals))
 	for _, eval := range *evals {
-		rule := c.composePrometheusRule(eval, c.mdaiCR.Name)
+		rule := c.composePrometheusRule(eval)
 		rules = append(rules, rule)
 	}
+
 	prometheusRuleCR.Spec.Groups[0].Rules = rules
 	if err = c.client.Update(ctx, prometheusRuleCR); err != nil {
 		c.logger.Error(err, "Failed to update PrometheusRule")
@@ -262,7 +270,7 @@ func (c HubAdapter) getOrCreatePrometheusRuleCR(ctx context.Context, defaultProm
 	return prometheusRule, nil
 }
 
-func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation, engineName string) prometheusv1.Rule {
+func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation) prometheusv1.Rule {
 	alertName := string(alertingRule.Name)
 
 	prometheusRule := prometheusv1.Rule{
@@ -271,7 +279,7 @@ func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation, engine
 		For:   alertingRule.For,
 		Annotations: map[string]string{
 			"alert_name":    alertName,
-			"engine_name":   engineName,
+			"engine_name":   c.mdaiCR.Name,
 			"current_value": "{{ $value | printf \"%.2f\" }}",
 		},
 		Labels: map[string]string{
