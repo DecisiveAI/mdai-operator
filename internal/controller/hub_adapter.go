@@ -374,19 +374,23 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 
 				for _, with := range *variable.With {
 					exportedVariableName := with.ExportedVariableName
-					transformer := with.Transformer
-
 					envVarName := transformKeyToVariableName(exportedVariableName)
 
-					join := transformer.Join
-					if join != nil {
-						delimiter := join.Delimiter
-						variableWithDelimiter := strings.Join(valueAsSlice, delimiter)
-						if envMap[envVarName] != "" {
-							c.logger.Info("VariableWith configuration overrides existing configuration", "exportedVariableName", exportedVariableName)
-							continue
+					if envMap[envVarName] != "" {
+						c.logger.Info("VariableWith configuration overrides existing configuration", "exportedVariableName", exportedVariableName)
+						continue
+					}
+
+					transformer := with.Transformer
+					if transformer != nil {
+						join := transformer.Join
+						if join != nil {
+							delimiter := join.Delimiter
+							variableWithDelimiter := strings.Join(valueAsSlice, delimiter)
+							envMap[envVarName] = variableWithDelimiter
 						}
-						envMap[envVarName] = variableWithDelimiter
+					} else {
+						c.logger.Info("No Transformer configured", "exportedVariableName", exportedVariableName)
 					}
 				}
 			} else if variable.Type == mdaiv1.VariableTypeString {
