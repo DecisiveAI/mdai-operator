@@ -272,7 +272,7 @@ func (c HubAdapter) getOrCreatePrometheusRuleCR(ctx context.Context, defaultProm
 }
 
 func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation) prometheusv1.Rule {
-	alertName := string(alertingRule.Name)
+	alertName := alertingRule.Name
 
 	prometheusRule := prometheusv1.Rule{
 		Expr:  alertingRule.Expr,
@@ -374,13 +374,23 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 
 				for _, with := range *variable.With {
 					exportedVariableName := with.ExportedVariableName
-					transformer := with.Transformer
+					envVarName := transformKeyToVariableName(exportedVariableName)
 
+					if envMap[envVarName] != "" {
+						c.logger.Info("VariableWith configuration overrides existing configuration", "exportedVariableName", exportedVariableName)
+						continue
+					}
+
+					transformer := with.Transformer
+					if transformer == nil {
+						c.logger.Info("No Transformer configured", "exportedVariableName", exportedVariableName)
+						continue
+					}
 					join := transformer.Join
 					if join != nil {
 						delimiter := join.Delimiter
 						variableWithDelimiter := strings.Join(valueAsSlice, delimiter)
-						envMap[transformKeyToVariableName(exportedVariableName)] = variableWithDelimiter
+						envMap[envVarName] = variableWithDelimiter
 					}
 				}
 			} else if variable.Type == mdaiv1.VariableTypeString {

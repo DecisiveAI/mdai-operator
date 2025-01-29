@@ -23,35 +23,44 @@ import (
 )
 
 type VariableWith struct {
+	// ExportedVariableName The environment variable name to be used to access the variable's value.
 	// +kubeuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
+	// +kubebuilder:validation:MinLength=1
 	// +kubeuilder:validation:Required
-	ExportedVariableName string `json:"exportedVariableName,omitempty" yaml:"exportedVariableName,omitempty"`
+	ExportedVariableName string `json:"exportedVariableName" yaml:"exportedVariableName"`
+	// Transformer The transformation applied to the value of the variable before it is assigned as an environment variable.
 	// +kubebuilder:validation:Optional
 	Transformer *VariableTransformer `json:"transformer,omitempty" yaml:"transformer,omitempty"`
 }
 
 type JoinFunction struct {
+	// Delimiter The delimiter inserted between each item in the collection during the Join
 	// +kubebuilder:validation:Required
 	Delimiter string `json:"delimiter" yaml:"delimiter"`
 }
 
 type VariableTransformer struct {
+	// Join For use with "set" or "array" type variables, joins the items of the collection into a string.
 	// +kubebuilder:validation:Optional
 	Join *JoinFunction `json:"join,omitempty" yaml:"join,omitempty"`
 }
 
 type Variable struct {
+	// StorageKey The key for which this variable's managed value is assigned. Will also be used as the environment variable name for variables of type "string"
 	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
+	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Required
 	StorageKey string `json:"storageKey" yaml:"storageKey"`
+	// Type Data type for the managed variable value
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=int;float;boolean;string;set;array
+	// +kubebuilder:validation:Enum:=string;set
 	Type VariableType `json:"type" yaml:"type"`
 	// StorageType defaults to "mdai-valkey" if not provided
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default="mdai-valkey"
 	// +kubebuilder:validation:Enum:=mdai-valkey
 	StorageType *VariableStorageType `json:"storageType" yaml:"storageType"`
+	// DefaultValue The initial value when the variable is instantiated. If not provided, a "zero value" of the variable's Type will be used.
 	// +kubebuilder:validation:Optional
 	DefaultValue *string `json:"defaultValue,omitempty" yaml:"defaultValue,omitempty"`
 	// +kubebuilder:validation:Optional
@@ -59,49 +68,63 @@ type Variable struct {
 }
 
 type VariableUpdate struct {
+	// VariableRef The StorageKey of the variable to be updated.
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
+	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Required
 	VariableRef string `json:"variableRef" yaml:"variableRef"`
+	// Operation how the variable will be updated
 	// +kubebuilder:validation:Enum:=mdai/add_element;mdai/remove_element
+	// +kubebuilder:validation:Required
 	Operation string `json:"operation" yaml:"operation"`
 }
 
 type Action struct {
+	// VariableUpdate Modify the value of a managed variable.
 	// +kubebuilder:validation:Optional
-	VariableUpdate *VariableUpdate `json:"variableUpdate" yaml:"variableUpdate"`
+	VariableUpdate *VariableUpdate `json:"variableUpdate,omitempty" yaml:"variableUpdate,omitempty"`
 }
 
 type PrometheusAlertEvaluationStatus struct {
+	// Firing Action performed when the Prometheus Alert status changes to "firing"
 	// +kubebuilder:validation:Optional
-	Firing *Action `json:"firing" yaml:"firing"`
+	Firing *Action `json:"firing,omitempty" yaml:"firing,omitempty"`
+	// Resolved Action performed when the Prometheus Alert status changes to "resolved"
 	// +kubebuilder:validation:Optional
-	Resolved *Action `json:"resolved" yaml:"resolved"`
+	Resolved *Action `json:"resolved,omitempty" yaml:"resolved,omitempty"`
 }
 
 type Evaluation struct {
-	// How this evaluation will be referred to elsewhere in the config
+	// Name How this evaluation will be referred to elsewhere in the config. Also, the name applied to the Prometheus Alert
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
+	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Required
-	Name EvaluationName `json:"name" yaml:"name"`
+	Name string `json:"name" yaml:"name"`
 	// +kubebuilder:validation:Enum:=mdai/prometheus_alert
+	// +kubebuilder:validation:Required
 	Type string `json:"type" yaml:"type"`
-	// A valid PromQL query expression
+	// Expr A valid PromQL query expression
 	// +kubebuilder:validation:Required
 	Expr intstr.IntOrString `json:"expr" yaml:"expr"`
-	// Alerts are considered firing once they have been returned for this long.
+	// For Alerts are considered firing once they have been returned for this long.
 	// +kubebuilder:validation:Optional
 	For *prometheusv1.Duration `json:"for,omitempty" yaml:"for,omitempty"`
 	// KeepFiringFor defines how long an alert will continue firing after the condition that triggered it has cleared.
 	// +kubebuilder:validation:Optional
 	KeepFiringFor *prometheusv1.NonEmptyDuration `json:"keep_firing_for,omitempty" yaml:"keep_firing_for,omitempty"`
 	// +kubebuilder:validation:Pattern:="^(warning|critical)$"
+	// +kubebuilder:validation:Required
 	Severity string `json:"severity" yaml:"severity"`
 	// RelevantLabels indicates which part(s) of the alert payload to forward to the Action.
 	// +kubebuilder:validation:Optional
-	RelevantLabels *[]string `json:"relevantLabels" yaml:"relevantLabels"`
+	RelevantLabels *[]string `json:"relevantLabels,omitempty" yaml:"relevantLabels,omitempty"`
 	// OnStatus allows the user to specify actions depending on the state of the evaluation
 	// +kubebuilder:validation:Optional
-	OnStatus *PrometheusAlertEvaluationStatus `json:"onStatus" yaml:"onStatus"`
+	OnStatus *PrometheusAlertEvaluationStatus `json:"onStatus,omitempty" yaml:"onStatus,omitempty"`
 	// Specify the interval at which this evaluation is assessed in the Prometheus infrastructure.
+	// Interval Specify how often this evaluation is assessed in the Prometheus infrastructure.
 	// +kubebuilder:validation:Format:=duration
+	// +kubebuilder:validation:Optional
 	Interval *metav1.Duration `json:"interval,omitempty" yaml:"interval,omitempty"`
 }
 
@@ -140,7 +163,7 @@ type Config struct {
 	// +kubebuilder:default:="2m"
 	// +kubebuilder:validation:Format:=duration
 	ReconcileLoopInterval *metav1.Duration `json:"reconcileLoopInterval,omitempty" yaml:"reconcileLoopInterval,omitempty"`
-	// Specify the interval at which all evaluations are assessed in the Prometheus infrastructure.
+	// EvaluationInterval Specify the interval at which all evaluations are assessed in the Prometheus infrastructure.
 	// Evaluations with explicit `Interval`s will override this value
 	// +kubebuilder:validation:Optional
 	EvaluationInterval prometheusv1.Duration `json:"evaluation_interval,omitempty" yaml:"evaluation_interval,omitempty"`
@@ -195,10 +218,6 @@ func init() {
 }
 
 type (
-	ActionName          string
-	TriggerName         string
-	EvaluationName      string
-	TriggerType         string
 	VariableSourceType  string
 	VariableStorageType string
 	VariableType        string
@@ -206,7 +225,6 @@ type (
 )
 
 const (
-	TriggerTypePrometheus          TriggerType         = "prometheus"
 	VariableSourceTypeBultInValkey VariableStorageType = "mdai-valkey"
 	VariableTypeInt                VariableType        = "int"
 	VariableTypeFloat              VariableType        = "float"
