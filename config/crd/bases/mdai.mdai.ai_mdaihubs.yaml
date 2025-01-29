@@ -46,14 +46,8 @@ spec:
                     description: |-
                       Specify the interval at which all evaluations are assessed in the Prometheus infrastructure.
                       Evaluations with explicit `Interval`s will override this value
+                      Not implemented yet
                     pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
-                    type: string
-                  reconcileLoopInterval:
-                    default: 2m
-                    description: Interval at which to reconcile the Cluster Configuration,
-                      applied only if built-in ValKey is enabled and variables defined
-                      for Valkey storage.
-                    format: duration
                     type: string
                 type: object
               evaluations:

@@ -10,8 +10,8 @@ Operator
 - Creates alerting rules for the Prometheus operator.
 - Reads variables from ValKey.
 - Requires environment variables with the ValKey endpoint and password to be provided.
-- Supports two types of variables: set and scalars.
-- Converts to uppercase MDAI environment variables when injecting them into the OTEL collector.
+- Supports two types of variables: set and string.
+- Converts to uppercase MDAI environment variables when injecting them into the OTEL collector if env variable name is not specified explicitly.
   Injects environment variables into OTEL collectors through a ConfigMap with labels matching the hub name. The OTEL collector must be configured to use the ConfigMap. Operator is not responsible for removing this ConfigMap.
 - The ConfigMap name is the MDAI hub name plus `-variables`
 ```yaml
@@ -19,8 +19,9 @@ Operator
     - configMapRef:
       name: mdaihub-sample-variabes
 ```
+- For now assuming hub names are unique across all namespaces
+- Valkey key name has a structure: `variable/some_hub_name/some_variable_name`
 - Updates to variables are applied by triggering the collector’s restart
-
 - Supports the built-in ValKey storage type for variables 
 
 ## Getting Started
@@ -91,9 +92,10 @@ You can apply the samples (examples) from the config/sample:
 kubectl apply -k config/samples/
 ```
 ### Testing
-Create namespace for OTEL collector
+Create namespace for OTEL collector and mdai hub sample
 ```shell
 kubectl create namespace otel
+kubectl create namespace mdai
 ```
 Deploy test otel collectors:
 ```sh
@@ -102,7 +104,7 @@ kubectl apply -k test/test-samples/
 
 Add watcher scrape config to Prometheus:
 ```shell
-helm upgrade prometheus prometheus-community/kube-prometheus-stack -f test/test-samples/custom-values.yaml
+helm upgrade prometheus prometheus-community/kube-prometheus-stack -f test/test-samples/prometheus-custom-values.yaml
 ```
 
 >**NOTE**: Ensure that the samples has default values to test it out.

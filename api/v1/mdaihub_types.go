@@ -135,13 +135,9 @@ type Observer struct {
 }
 
 type Config struct {
-	// Interval at which to reconcile the Cluster Configuration, applied only if built-in ValKey is enabled and variables defined for Valkey storage.
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default:="2m"
-	// +kubebuilder:validation:Format:=duration
-	ReconcileLoopInterval *metav1.Duration `json:"reconcileLoopInterval,omitempty" yaml:"reconcileLoopInterval,omitempty"`
 	// Specify the interval at which all evaluations are assessed in the Prometheus infrastructure.
 	// Evaluations with explicit `Interval`s will override this value
+	// Not implemented yet
 	// +kubebuilder:validation:Optional
 	EvaluationInterval prometheusv1.Duration `json:"evaluation_interval,omitempty" yaml:"evaluation_interval,omitempty"`
 }
