@@ -382,15 +382,16 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 					}
 
 					transformer := with.Transformer
-					if transformer != nil {
-						join := transformer.Join
-						if join != nil {
-							delimiter := join.Delimiter
-							variableWithDelimiter := strings.Join(valueAsSlice, delimiter)
-							envMap[envVarName] = variableWithDelimiter
-						}
-					} else {
-						c.logger.Info("No Transformer configured", "exportedVariableName", exportedVariableName)
+					if transformer == nil {
+					        c.logger.Info("No Transformer configured", "exportedVariableName", exportedVariableName)
+					        continue
+					 }
+					join := transformer.Join
+					if join != nil {
+						delimiter := join.Delimiter
+						variableWithDelimiter := strings.Join(valueAsSlice, delimiter)
+						envMap[envVarName] = variableWithDelimiter
+					}
 					}
 				}
 			} else if variable.Type == mdaiv1.VariableTypeString {
