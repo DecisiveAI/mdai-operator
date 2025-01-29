@@ -75,6 +75,7 @@ type VariableUpdate struct {
 	VariableRef string `json:"variableRef" yaml:"variableRef"`
 	// Operation how the variable will be updated
 	// +kubebuilder:validation:Enum:=mdai/add_element;mdai/remove_element
+	// +kubebuilder:validation:Required
 	Operation string `json:"operation" yaml:"operation"`
 }
 
