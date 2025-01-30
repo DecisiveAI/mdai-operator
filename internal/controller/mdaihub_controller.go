@@ -23,7 +23,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -257,12 +259,28 @@ func (r *MdaiHubReconciler) initializeValkey() error {
 		log.Info("ValKey client is not enabled; skipping initialization")
 	} else {
 		log := logger.FromContext(context.Background())
-		log.Info("Initializing ValKey/Vault client", "endpoint", valkeyEndpoint)
-		valkeyClient, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{valkeyEndpoint}, Password: valkeyPassword})
-		if err != nil {
-			return fmt.Errorf("failed to initialize ValKey/Vault client: %w", err)
+		log.Info("Initializing ValKey client", "endpoint", valkeyEndpoint)
+		operation := func() error {
+			valkeyClient, err := valkey.NewClient(valkey.ClientOption{
+				InitAddress: []string{valkeyEndpoint},
+				Password:    valkeyPassword,
+			})
+			if err != nil {
+				log.Error(err, "Failed to initialize ValKey client. Retrying...")
+				return err
+			}
+			r.ValKeyClient = &valkeyClient
+			return nil
 		}
-		r.ValKeyClient = &valkeyClient
+
+		backoffConfig := backoff.NewExponentialBackOff()
+		backoffConfig.InitialInterval = 5 * time.Second
+		backoffConfig.MaxElapsedTime = 3 * time.Minute
+
+		err := backoff.Retry(operation, backoffConfig)
+		if err != nil {
+			return fmt.Errorf("failed to initialize ValKey client after retries: %w", err)
+		}
 	}
 	return nil
 }
