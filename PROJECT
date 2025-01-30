@@ -6,7 +6,7 @@ domain: mdai.ai
 layout:
 - go.kubebuilder.io/v4
 projectName: mdai-operator
-repo: mdai.ai/operator
+repo: github.com/DecisiveAI/mdai-operator
 resources:
 - api:
     crdVersion: v1
@@ -15,6 +15,6 @@ resources:
   domain: mdai.ai
   group: mdai
   kind: MdaiHub
-  path: mdai.ai/operator/api/v1
+  path: github.com/DecisiveAI/mdai-operator/api/v1
   version: v1
 version: "3"

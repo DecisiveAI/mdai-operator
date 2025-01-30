@@ -27,7 +27,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	mdaiv1 "mdai.ai/operator/api/v1"
+	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
 )
 
 var _ = Describe("MdaiHub Controller", func() {
