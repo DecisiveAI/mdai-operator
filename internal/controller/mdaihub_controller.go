@@ -277,8 +277,7 @@ func (r *MdaiHubReconciler) initializeValkey() error {
 		backoffConfig.InitialInterval = 5 * time.Second
 		backoffConfig.MaxElapsedTime = 3 * time.Minute
 
-		err := backoff.Retry(operation, backoffConfig)
-		if err != nil {
+		if err := backoff.Retry(operation, backoffConfig); err != nil {
 			return fmt.Errorf("failed to initialize ValKey client after retries: %w", err)
 		}
 	}
