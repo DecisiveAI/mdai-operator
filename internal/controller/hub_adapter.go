@@ -280,7 +280,7 @@ func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation) promet
 		For:   alertingRule.For,
 		Annotations: map[string]string{
 			"alert_name":    alertName,
-			"engine_name":   c.mdaiCR.Name,
+			"hub_name":      c.mdaiCR.Name,
 			"current_value": "{{ $value | printf \"%.2f\" }}",
 		},
 		Labels: map[string]string{
