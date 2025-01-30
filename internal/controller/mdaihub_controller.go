@@ -18,11 +18,14 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
-	"time"
+	"strconv"
+	"strings"
 
-	"k8s.io/apimachinery/pkg/api/meta"
+	"github.com/go-logr/logr"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -47,7 +50,8 @@ import (
 )
 
 const (
-	LabelMdaiHubName = "mdaihub-name" // Replace with your actual label key
+	LabelMdaiHubName  = "mdaihub-name" // Replace with your actual label key
+	VariableKeyPrefix = "variable/"
 )
 
 // MdaiHubReconciler reconciles a MdaiHub object
@@ -56,6 +60,7 @@ type MdaiHubReconciler struct {
 	Scheme       *runtime.Scheme
 	Recorder     record.EventRecorder
 	ValKeyClient *valkey.Client
+	valkeyEvents chan event.GenericEvent
 }
 
 // +kubebuilder:rbac:groups=mdai.mdai.ai,resources=mdaihubs,verbs=get;list;watch;create;update;patch;delete
@@ -93,41 +98,8 @@ func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	meta.SetStatusCondition(&fetchedCR.Status.Conditions, metav1.Condition{Type: typeAvailableHub,
-		Status: metav1.ConditionTrue, Reason: "Reconciling",
-		Message: fmt.Sprintf("mdai hub (%s) reconciled successfully", fetchedCR.Name)})
-	if err := r.Status().Update(ctx, fetchedCR); err != nil {
-		log.Error(err, "Failed to update mdai hub status")
-		return ctrl.Result{}, err
-	}
-
-	if r.ValKeyClient != nil && r.isValkeyVariableConfigured(fetchedCR) {
-		var timeInterval metav1.Duration
-		if fetchedCR.Spec.Config != nil && fetchedCR.Spec.Config.ReconcileLoopInterval != nil {
-			timeInterval = *fetchedCR.Spec.Config.ReconcileLoopInterval
-		} else {
-			timeInterval = metav1.Duration{Duration: 2 * time.Minute}
-		}
-		log.Info("-- Finished reconciliation --")
-		log.Info(fmt.Sprintf("-- Rescheduling in %v for Valkey synchronization --", timeInterval))
-		return ctrl.Result{RequeueAfter: timeInterval.Duration}, nil
-	}
 	log.Info("-- Finished reconciliation --")
 	return ctrl.Result{}, nil
-}
-
-func (r *MdaiHubReconciler) isValkeyVariableConfigured(fetchedCR *mdaiv1.MdaiHub) bool {
-	if fetchedCR.Spec.Config == nil || fetchedCR.Spec.Variables == nil {
-		return false
-	}
-
-	for _, variable := range *fetchedCR.Spec.Variables {
-		if *variable.StorageType == mdaiv1.VariableSourceTypeBultInValkey {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (r *MdaiHubReconciler) ReconcileHandler(ctx context.Context, adapter HubAdapter) (ctrl.Result, error) {
@@ -138,6 +110,7 @@ func (r *MdaiHubReconciler) ReconcileHandler(ctx context.Context, adapter HubAda
 		adapter.ensureEvaluationsSynchronized,
 		adapter.ensureVariableSynced,
 		adapter.ensureObserversSynchronized,
+		adapter.ensureStatusSetToDone,
 	}
 	for _, operation := range operations {
 		result, err := operation(ctx)
@@ -176,11 +149,13 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	combinedPredicate := predicate.And(selectorPredicate, createPredicate)
 
-	return ctrl.NewControllerManagedBy(mgr).
+	r.valkeyEvents = make(chan event.GenericEvent)
+
+	if err := ctrl.NewControllerManagedBy(mgr).
 		For(&mdaiv1.MdaiHub{}).
-		Owns(&v1.ConfigMap{}).
-		Owns(&v1.Service{}).
-		Owns(&appsv1.Deployment{}).
+		Owns(&v1.ConfigMap{}, builder.WithPredicates(mdaiResourcesPredicate())).
+		Owns(&v1.Service{}, builder.WithPredicates(mdaiResourcesPredicate())).
+		Owns(&appsv1.Deployment{}, builder.WithPredicates(mdaiResourcesPredicate())).
 		Watches(
 			// we are watching OpenTelemetryCollector resources to detect if new ones have been created
 			// if new ones are created, we have to provide mdai variables for new collectors
@@ -189,9 +164,88 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.requeueByLabels),
 			builder.WithPredicates(combinedPredicate),
 		).
+		WatchesRawSource(
+			source.Channel(
+				r.valkeyEvents,
+				&handler.EnqueueRequestForObject{},
+			),
+		).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 1}).
 		Named("mdaihub").
-		Complete(r)
+		Complete(r); err != nil {
+		return err
+	}
+
+	if r.ValKeyClient != nil {
+		go r.startValkeySubscription()
+	}
+
+	return nil
+}
+
+func mdaiResourcesPredicate() predicate.Predicate {
+	log := logger.FromContext(context.TODO())
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			// log.Info("<CreateFunc> " + e.Object.GetName() + " ignored")
+			return false // assuming only mdai operator creates managed resources
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			shouldReconsile := predicate.GenerationChangedPredicate{}.Update(e)
+			log.Info("<UpdateFunc> " + e.ObjectNew.GetName() + " shouldReconsile: " + strconv.FormatBool(shouldReconsile))
+			return shouldReconsile
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// log.Info("<DeleteFunc> " + e.Object.GetName() + " ignored")
+			return false // assuming only mdai operator deletes managed resources
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			// log.Info("<GenericFunc> " + e.Object.GetName() + " ignored")
+			return false // we do not handle generic events
+		},
+	}
+}
+
+func (r *MdaiHubReconciler) startValkeySubscription() {
+	ctx := context.Background()
+	log := logger.FromContext(ctx)
+	pattern := "__keyspace@0__:" + VariableKeyPrefix + "*"
+	valkeyClient := *r.ValKeyClient
+	log.Info("Starting ValKey subscription", "pattern", pattern)
+	// Subscribe to all ValKey events targeting any key
+	// later, we can switch to dynamically subscribing to events targeting specific keys
+	if err := valkeyClient.Receive(ctx, valkeyClient.B().Psubscribe().Pattern(pattern).Build(), func(msg valkey.PubSubMessage) {
+		// Do we need to batch here to avoid multiple reconciliations and restarts?
+		// Apparently for most cases controller-runtime will do the deduplication of requests
+		log.Info("Received message", "channel", msg.Channel, "message", msg.Message)
+		// Extract the key from the channel name
+		key := strings.TrimPrefix(msg.Channel, "__keyspace@0__:")
+		// find hub by name from the channel name by prefix
+		parts := strings.SplitN(key, "/", 3)
+		if len(parts) != 3 {
+			log.Info("invalid key format, skipping", "key", key)
+			return
+		}
+		hubName := parts[1]
+		hubNamespace, err := r.findHubNamespace(ctx, log, hubName)
+		if err != nil {
+			log.Error(err, "failed to find hub namespace", "hubName", hubName)
+			return
+		}
+
+		r.valkeyEvents <- event.GenericEvent{
+			Object: &mdaiv1.MdaiHub{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      hubName,
+					Namespace: hubNamespace,
+				},
+			},
+		}
+		log.Info("-- Requeueing MdaiHub triggered by valkey key change", "hubName", hubName, "hubNamespace", hubNamespace, "key", key)
+	}); err != nil {
+		log.Error(err, "failed to subscribe to ValKey channel")
+		return
+	}
 }
 
 func (r *MdaiHubReconciler) initializeValkey() error {
@@ -230,16 +284,49 @@ func (r *MdaiHubReconciler) requeueByLabels(ctx context.Context, obj client.Obje
 	}
 	log.Info("OpenTelemetryCollector for MdaiHub found with hubNameFromLabel", "hubNameFromLabel", hubNameFromLabel)
 
-	log.Info("Requeueing MdaiHub triggered by otel collector", "hubNameFromLabel", hubNameFromLabel, "otelCollector", otelCollector.Name)
+	hubNamespace, err := r.findHubNamespace(ctx, log, hubNameFromLabel)
+	if err != nil {
+		return nil
+	}
+
+	log.Info("-- Requeueing MdaiHub triggered by otel collector", "hubNameFromLabel", hubNameFromLabel, "otelCollector", otelCollector.Name, "hubNamespace", hubNamespace)
 
 	return []ctrl.Request{
 		{
 			NamespacedName: types.NamespacedName{
 				Name:      hubNameFromLabel,
-				Namespace: otelCollector.Namespace, // TODO Assuming MdaiHub is namespaced
+				Namespace: hubNamespace,
 			},
 		},
 	}
+}
+
+func (r *MdaiHubReconciler) findHubNamespace(ctx context.Context, log logr.Logger, hubNameFromLabel string) (string, error) {
+	listOptions := []client.ListOption{
+		client.InNamespace(""), // all namespaces
+	}
+	hubList := &mdaiv1.MdaiHubList{}
+	if err := r.List(ctx, hubList, listOptions...); err != nil {
+		log.Error(err, "Failed to list MdaiHubs")
+		return "", err
+	}
+
+	var targetHub *mdaiv1.MdaiHub
+	for _, hub := range hubList.Items {
+		if hub.Name == hubNameFromLabel {
+			targetHub = &hub
+			break
+		}
+	}
+
+	if targetHub == nil {
+		log.Info("MdaiHub not found", "hubName", hubNameFromLabel)
+		return "", errors.New("mdaiHub not found")
+	}
+
+	// Assuming that hub names are unique across namespaces, take the first match
+	hubNamespace := targetHub.Namespace
+	return hubNamespace, nil
 }
 
 var createPredicate = predicate.Funcs{

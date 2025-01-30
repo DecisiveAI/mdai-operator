@@ -5,9 +5,8 @@ metadata:
     app.kubernetes.io/name: mdai-operator
     app.kubernetes.io/managed-by: kustomize
   name: mdaihub-second
+  namespace: mdai
 spec:
-  config:
-    reconcileLoopInterval: 2m
   # Variables whose values are managed by MDAI. Typical use is update by Action and converted to environment variables by the MDAI Operator.
   variables:
     - storageKey: service_list

@@ -16,7 +16,7 @@ spec:
         sampling_thereafter: 100
         verbosity: detailed
       otlp/mdai_datalyzer:
-        endpoint: mdaihub-dynamic-data-filtering-sample-watcher-collector-service.default.svc.cluster.local:4317
+        endpoint: mdaihub-dynamic-data-filtering-sample-watcher-collector-service.mdai.svc.cluster.local:4317
         tls:
           insecure: true
     processors:

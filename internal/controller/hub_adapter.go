@@ -105,8 +105,8 @@ func (c HubAdapter) ensureStatusInitialized(ctx context.Context) (OperationResul
 	return ContinueProcessing()
 }
 
-// FinalizeHub handles the deletion of a hub
-func (c HubAdapter) FinalizeHub(ctx context.Context) (ObjectState, error) {
+// finalizeHub handles the deletion of a hub
+func (c HubAdapter) finalizeHub(ctx context.Context) (ObjectState, error) {
 	if !controllerutil.ContainsFinalizer(c.mdaiCR, hubFinalizer) {
 		c.logger.Info("No finalizer found")
 		return ObjectModified, nil
@@ -149,14 +149,14 @@ func (c HubAdapter) FinalizeHub(ctx context.Context) (ObjectState, error) {
 	}
 
 	c.logger.Info("Removing Finalizer for Cluster after successfully perform the operations")
-	if err := c.EnsureHubFinalizerDeleted(ctx); err != nil {
+	if err := c.ensureHubFinalizerDeleted(ctx); err != nil {
 		return ObjectUnchanged, err
 	}
 	return ObjectModified, nil
 }
 
-// EnsureHubFinalizerDeleted removes finalizer of a Hub
-func (c HubAdapter) EnsureHubFinalizerDeleted(ctx context.Context) error {
+// ensureHubFinalizerDeleted removes finalizer of a Hub
+func (c HubAdapter) ensureHubFinalizerDeleted(ctx context.Context) error {
 	c.logger.Info("Deleting Cluster Finalizer")
 	return c.deleteFinalizer(ctx, c.mdaiCR, hubFinalizer)
 }
@@ -280,7 +280,7 @@ func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation) promet
 		For:   alertingRule.For,
 		Annotations: map[string]string{
 			"alert_name":    alertName,
-			"engine_name":   c.mdaiCR.Name,
+			"hub_name":      c.mdaiCR.Name,
 			"current_value": "{{ $value | printf \"%.2f\" }}",
 		},
 		Labels: map[string]string{
@@ -348,7 +348,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	for _, variable := range *variables {
 		// we should test filter processor when the variable is empty and if breaks it we may recommend to use some placeholder as default value
 		if *variable.StorageType == mdaiv1.VariableSourceTypeBultInValkey {
-			valkeyKey := variable.StorageKey
+			valkeyKey := c.composeValkeyKey(variable)
 			if variable.Type == mdaiv1.VariableTypeSet {
 				valueAsSlice, err := valkeyClient.Do(
 					ctx,
@@ -466,6 +466,10 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	return ContinueProcessing()
 }
 
+func (c HubAdapter) composeValkeyKey(variable mdaiv1.Variable) string {
+	return VariableKeyPrefix + c.mdaiCR.Name + "/" + variable.StorageKey
+}
+
 func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, namespace string) (controllerutil.OperationResult, error) {
 	envConfigMapName := c.mdaiCR.Name + envConfigMapNamePostfix
 	desiredConfigMap := &v1.ConfigMap{
@@ -515,7 +519,7 @@ func (c HubAdapter) listOtelCollectorsWithLabel(ctx context.Context, labelSelect
 func (c HubAdapter) ensureHubDeletionProcessed(ctx context.Context) (OperationResult, error) {
 	if !c.mdaiCR.DeletionTimestamp.IsZero() {
 		c.logger.Info("Deleting Cluster:" + c.mdaiCR.Name)
-		crState, err := c.FinalizeHub(ctx)
+		crState, err := c.finalizeHub(ctx)
 		if crState == ObjectUnchanged || err != nil {
 			c.logger.Info("Has to requeue mdai")
 			return RequeueAfter(5*time.Second, err)
@@ -540,10 +544,15 @@ func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationR
 	}
 
 	// for now assuming one collector holds all observers
-	if err := c.createOrUpdateWatcherCollectorService(ctx, c.mdaiCR.Namespace); err != nil {
+	if err := c.createOrUpdateWatcherCollectorDeployment(ctx, c.mdaiCR.Namespace, hash); err != nil {
+		if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
+			c.logger.Info("re-queuing due to resource conflict")
+			return Requeue()
+		}
 		return OperationResult{}, err
 	}
-	if err := c.createOrUpdateWatcherCollectorDeployment(ctx, c.mdaiCR.Namespace, hash); err != nil {
+
+	if err := c.createOrUpdateWatcherCollectorService(ctx, c.mdaiCR.Namespace); err != nil {
 		return OperationResult{}, err
 	}
 
@@ -659,21 +668,26 @@ func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context
 		},
 	}
 
-	if err := controllerutil.SetControllerReference(c.mdaiCR, deployment, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on Deployment", "deployment", deployment.Name)
-		return err
-	}
-
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, deployment, func() error {
+		if err := controllerutil.SetControllerReference(c.mdaiCR, deployment, c.scheme); err != nil {
+			c.logger.Error(err, "Failed to set owner reference on Deployment", "deployment", deployment.Name)
+			return err
+		}
+
 		if deployment.Labels == nil {
 			deployment.Labels = make(map[string]string)
 		}
 		deployment.Labels["app"] = name
+
 		deployment.Spec.Replicas = int32Ptr(1)
 		if deployment.Spec.Selector == nil {
 			deployment.Spec.Selector = &metav1.LabelSelector{}
 		}
+		if deployment.Spec.Selector.MatchLabels == nil {
+			deployment.Spec.Selector.MatchLabels = make(map[string]string)
+		}
 		deployment.Spec.Selector.MatchLabels["app"] = name
+
 		if deployment.Spec.Template.Labels == nil {
 			deployment.Spec.Template.Labels = make(map[string]string)
 		}
@@ -687,38 +701,37 @@ func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context
 		deployment.Spec.Template.Annotations["prometheus.io/port"] = "8899"
 		deployment.Spec.Template.Annotations["prometheus.io/scrape"] = "true"
 		deployment.Spec.Template.Annotations["mdai-collector-config/sha256"] = hash
-		deployment.Spec.Template.Spec = v1.PodSpec{
-			Containers: []v1.Container{
-				{
-					Name:  name,
-					Image: "public.ecr.aws/decisiveai/watcher-collector:0.1.0-dev",
-					Ports: []v1.ContainerPort{
-						{ContainerPort: 8888, Name: "otelcol-metrics"},
-						{ContainerPort: 8899, Name: "watcher-metrics"},
-						{ContainerPort: 4317, Name: "otlp-grpc"},
-						{ContainerPort: 4318, Name: "otlp-http"},
-					},
-					VolumeMounts: []v1.VolumeMount{
-						{
-							Name:      "config-volume",
-							MountPath: "/conf/collector.yaml",
-							SubPath:   "collector.yaml",
-						},
-					},
-					Command: []string{
-						"/mdai-watcher-collector",
-						"--config=/conf/collector.yaml",
+
+		deployment.Spec.Template.Spec.Containers = []v1.Container{
+			{
+				Name:  name,
+				Image: "public.ecr.aws/decisiveai/watcher-collector:0.1.0-dev", // FIXME should be configured from CR
+				Ports: []v1.ContainerPort{
+					{ContainerPort: 8888, Name: "otelcol-metrics"},
+					{ContainerPort: 8899, Name: "watcher-metrics"},
+					{ContainerPort: 4317, Name: "otlp-grpc"},
+					{ContainerPort: 4318, Name: "otlp-http"},
+				},
+				VolumeMounts: []v1.VolumeMount{
+					{
+						Name:      "config-volume",
+						MountPath: "/conf/collector.yaml",
+						SubPath:   "collector.yaml",
 					},
 				},
+				Command: []string{
+					"/mdai-watcher-collector",
+					"--config=/conf/collector.yaml",
+				},
 			},
-			Volumes: []v1.Volume{
-				{
-					Name: "config-volume",
-					VolumeSource: v1.VolumeSource{
-						ConfigMap: &v1.ConfigMapVolumeSource{
-							LocalObjectReference: v1.LocalObjectReference{
-								Name: c.mdaiCR.Name + watcherConfigMapPostfix,
-							},
+		}
+		deployment.Spec.Template.Spec.Volumes = []v1.Volume{
+			{
+				Name: "config-volume",
+				VolumeSource: v1.VolumeSource{
+					ConfigMap: &v1.ConfigMapVolumeSource{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: c.mdaiCR.Name + watcherConfigMapPostfix,
 						},
 					},
 				},
@@ -728,7 +741,6 @@ func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context
 		return nil
 	})
 	if err != nil {
-		c.logger.Error(err, "Failed to create or update Deployment", "deployment", deployment.Name)
 		return err
 	}
 	c.logger.Info("Deployment created or updated successfully", "deployment", deployment.Name, "operationResult", operationResult)
@@ -803,6 +815,27 @@ func (c HubAdapter) buildCollectorConfig() (string, error) {
 	}
 
 	return string(raw), nil
+}
+
+func (c HubAdapter) ensureStatusSetToDone(ctx context.Context) (OperationResult, error) {
+	// Re-fetch the Custom Resource after update or create
+	if err := c.client.Get(ctx, types.NamespacedName{Name: c.mdaiCR.Name, Namespace: c.mdaiCR.Namespace}, c.mdaiCR); err != nil {
+		c.logger.Error(err, "Failed to re-fetch Engine")
+		return Requeue()
+	}
+	meta.SetStatusCondition(&c.mdaiCR.Status.Conditions, metav1.Condition{Type: typeAvailableHub,
+		Status: metav1.ConditionTrue, Reason: "Reconciling",
+		Message: "reconciled successfully"})
+	if err := c.client.Status().Update(ctx, c.mdaiCR); err != nil {
+		if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
+			c.logger.Info("re-queuing due to resource conflict")
+			return Requeue()
+		}
+		c.logger.Error(err, "Failed to update mdai hub status")
+		return Requeue()
+	}
+	c.logger.Info("Status set to done for mdai hub", "mdaiHub", c.mdaiCR.Name)
+	return ContinueProcessing()
 }
 
 func buildFilterProcessorMap(filter *mdaiv1.ObserverFilter) map[string]any {
