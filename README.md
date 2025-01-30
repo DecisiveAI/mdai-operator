@@ -55,7 +55,7 @@ export VALKEY_PASSWORD=abc
 kubectl create secret generic valkey-secret \
   --from-literal=VALKEY_ENDPOINT=valkey-primary.default.svc.cluster.local:6379 \
   --from-literal=VALKEY_PASSWORD=abc \
-  --namespace=mdai-operator-system \
+  --namespace=mdai \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 **Build and push your image to the location specified by `IMG`:**
