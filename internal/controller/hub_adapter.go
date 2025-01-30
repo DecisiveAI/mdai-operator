@@ -700,6 +700,7 @@ func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context
 		deployment.Spec.Template.Annotations["prometheus.io/path"] = "/metrics"
 		deployment.Spec.Template.Annotations["prometheus.io/port"] = "8899"
 		deployment.Spec.Template.Annotations["prometheus.io/scrape"] = "true"
+		deployment.Spec.Template.Annotations["mdai_component_type"] = "mdai-watcher"
 		deployment.Spec.Template.Annotations["mdai-collector-config/sha256"] = hash
 
 		deployment.Spec.Template.Spec.Containers = []v1.Container{
