@@ -40,88 +40,216 @@ spec:
           spec:
             description: MdaiHubSpec defines the desired state of MdaiHub.
             properties:
+              config:
+                description: kubebuilder:validation:Optional
+                properties:
+                  evaluation_interval:
+                    description: |-
+                      EvaluationInterval Specify the interval at which all evaluations are assessed in the Prometheus infrastructure.
+                      Evaluations with explicit `Interval`s will override this value
+                    pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
+                    type: string
+                type: object
               evaluations:
                 items:
                   properties:
-                    alertingRules:
+                    expr:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      description: Expr A valid PromQL query expression
+                      x-kubernetes-int-or-string: true
+                    for:
+                      description: For Alerts are considered firing once they have been
+                        returned for this long.
+                      pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
+                      type: string
+                    interval:
+                      description: |-
+                        Specify the interval at which this evaluation is assessed in the Prometheus infrastructure.
+                        Interval Specify how often this evaluation is assessed in the Prometheus infrastructure.
+                      format: duration
+                      type: string
+                    keep_firing_for:
+                      description: KeepFiringFor defines how long an alert will continue
+                        firing after the condition that triggered it has cleared.
+                      minLength: 1
+                      pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
+                      type: string
+                    name:
+                      description: Name How this evaluation will be referred to elsewhere
+                        in the config. Also, the name applied to the Prometheus Alert
+                      minLength: 1
+                      pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
+                      type: string
+                    onStatus:
+                      description: OnStatus allows the user to specify actions depending
+                        on the state of the evaluation
+                      properties:
+                        firing:
+                          description: Firing Action performed when the Prometheus Alert
+                            status changes to "firing"
+                          properties:
+                            variableUpdate:
+                              description: VariableUpdate Modify the value of a managed
+                                variable.
+                              properties:
+                                operation:
+                                  description: Operation how the variable will be updated
+                                  enum:
+                                  - mdai/add_element
+                                  - mdai/remove_element
+                                  type: string
+                                variableRef:
+                                  description: VariableRef The StorageKey of the variable
+                                    to be updated.
+                                  minLength: 1
+                                  pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
+                                  type: string
+                              required:
+                              - operation
+                              - variableRef
+                              type: object
+                          type: object
+                        resolved:
+                          description: Resolved Action performed when the Prometheus
+                            Alert status changes to "resolved"
+                          properties:
+                            variableUpdate:
+                              description: VariableUpdate Modify the value of a managed
+                                variable.
+                              properties:
+                                operation:
+                                  description: Operation how the variable will be updated
+                                  enum:
+                                  - mdai/add_element
+                                  - mdai/remove_element
+                                  type: string
+                                variableRef:
+                                  description: VariableRef The StorageKey of the variable
+                                    to be updated.
+                                  minLength: 1
+                                  pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
+                                  type: string
+                              required:
+                              - operation
+                              - variableRef
+                              type: object
+                          type: object
+                      type: object
+                    relevantLabels:
+                      description: RelevantLabels indicates which part(s) of the alert
+                        payload to forward to the Action.
                       items:
-                        properties:
-                          action:
-                            type: string
-                          alert_query:
-                            anyOf:
-                            - type: integer
-                            - type: string
-                            x-kubernetes-int-or-string: true
-                          for:
-                            description: Alerts are considered firing once they have
-                              been returned for this long.
-                            pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
-                            type: string
-                          name:
-                            type: string
-                          severity:
-                            pattern: ^(warning|critical)$
-                            type: string
-                        required:
-                        - action
-                        - alert_query
-                        - name
-                        - severity
-                        type: object
+                        type: string
                       type: array
-                    evaluationType:
+                    severity:
+                      pattern: ^(warning|critical)$
                       type: string
-                    name:
-                      type: string
-                  required:
-                  - evaluationType
-                  - name
-                  type: object
-                type: array
-              events:
-                items:
-                  properties:
-                    name:
+                    type:
+                      enum:
+                      - mdai/prometheus_alert
                       type: string
                   required:
+                  - expr
                   - name
+                  - severity
+                  - type
                   type: object
                 type: array
               observers:
                 items:
                   properties:
+                    bytesMetricName:
+                      type: string
+                    countMetricName:
+                      type: string
+                    filter:
+                      properties:
+                        error_mode:
+                          type: string
+                        logs:
+                          properties:
+                            log_record:
+                              items:
+                                type: string
+                              type: array
+                          required:
+                          - log_record
+                          type: object
+                      type: object
+                    image:
+                      type: string
+                    labelResourceAttributes:
+                      items:
+                        type: string
+                      type: array
                     name:
                       type: string
                   required:
+                  - labelResourceAttributes
                   - name
                   type: object
                 type: array
               variables:
                 items:
                   properties:
-                    delimiter:
+                    defaultValue:
+                      description: DefaultValue The initial value when the variable
+                        is instantiated. If not provided, a "zero value" of the variable's
+                        Type will be used.
                       type: string
-                    name:
-                      minLength: 0
+                    storageKey:
+                      description: StorageKey The key for which this variable's managed
+                        value is assigned. Will also be used as the environment variable
+                        name for variables of type "string"
+                      minLength: 1
+                      pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                       type: string
-                    source:
-                      properties:
-                        type:
-                          enum:
-                          - valkey
-                          type: string
-                      required:
-                      - type
-                      type: object
-                    type:
+                    storageType:
+                      default: mdai-valkey
+                      description: StorageType defaults to "mdai-valkey" if not provided
                       enum:
-                      - scalar
+                      - mdai-valkey
+                      type: string
+                    type:
+                      description: Type Data type for the managed variable value
+                      enum:
+                      - string
                       - set
                       type: string
+                    with:
+                      items:
+                        properties:
+                          exportedVariableName:
+                            description: ExportedVariableName The environment variable
+                              name to be used to access the variable's value.
+                            minLength: 1
+                            type: string
+                          transformer:
+                            description: Transformer The transformation applied to the
+                              value of the variable before it is assigned as an environment
+                              variable.
+                            properties:
+                              join:
+                                description: Join For use with "set" or "array" type
+                                  variables, joins the items of the collection into
+                                  a string.
+                                properties:
+                                  delimiter:
+                                    description: Delimiter The delimiter inserted between
+                                      each item in the collection during the Join
+                                    type: string
+                                required:
+                                - delimiter
+                                type: object
+                            type: object
+                        required:
+                        - exportedVariableName
+                        type: object
+                      type: array
                   required:
-                  - name
-                  - source
+                  - storageKey
                   - type
                   type: object
                 type: array
