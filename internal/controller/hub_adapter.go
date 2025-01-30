@@ -466,7 +466,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	return ContinueProcessing()
 }
 
-func composeValkeyKey(c HubAdapter, variable mdaiv1.Variable) string {
+func (c HubAdapter) composeValkeyKey(variable mdaiv1.Variable) string {
 	return VariableKeyPrefix + c.mdaiCR.Name + "/" + variable.StorageKey
 }
 
