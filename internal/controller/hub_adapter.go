@@ -825,7 +825,7 @@ func (c HubAdapter) ensureStatusSetToDone(ctx context.Context) (OperationResult,
 	}
 	meta.SetStatusCondition(&c.mdaiCR.Status.Conditions, metav1.Condition{Type: typeAvailableHub,
 		Status: metav1.ConditionTrue, Reason: "Reconciling",
-		Message: fmt.Sprintf("mdai hub (%s) reconciled successfully", c.mdaiCR.Name)})
+		Message: "reconciled successfully"})
 	if err := c.client.Status().Update(ctx, c.mdaiCR); err != nil {
 		if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
 			c.logger.Info("re-queuing due to resource conflict")

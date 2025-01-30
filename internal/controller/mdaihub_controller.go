@@ -176,7 +176,9 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	go r.startValkeySubscription()
+	if r.ValKeyClient != nil {
+		go r.startValkeySubscription()
+	}
 
 	return nil
 }
@@ -209,10 +211,6 @@ func (r *MdaiHubReconciler) startValkeySubscription() {
 	log := logger.FromContext(ctx)
 	pattern := "__keyspace@0__:" + VariableKeyPrefix + "*"
 	valkeyClient := *r.ValKeyClient
-	if valkeyClient == nil {
-		log.Info("ValKey client not initialized, skipping ValKey subscription")
-		return
-	}
 	log.Info("Starting ValKey subscription", "pattern", pattern)
 	// Subscribe to all ValKey events targeting any key
 	// later, we can switch to dynamically subscribing to events targeting specific keys
