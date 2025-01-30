@@ -3,7 +3,7 @@ kind: CustomResourceDefinition
 metadata:
   name: mdaihubs.mdai.mdai.ai
   annotations:
-    controller-gen.kubebuilder.io/version: v0.16.4
+    controller-gen.kubebuilder.io/version: v0.17.1
   labels:
   {{- include "deployment.labels" . | nindent 4 }}
 spec:

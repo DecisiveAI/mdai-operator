@@ -38,8 +38,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	mdaiv1 "mdai.ai/operator/api/v1"
-	"mdai.ai/operator/internal/controller"
+	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
+	"github.com/DecisiveAI/mdai-operator/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
 

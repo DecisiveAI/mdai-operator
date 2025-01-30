@@ -1,4 +1,4 @@
-module mdai.ai/operator
+module github.com/DecisiveAI/mdai-operator
 
 go 1.23.0
 

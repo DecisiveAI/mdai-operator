@@ -27,11 +27,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"mdai.ai/operator/test/utils"
+	"github.com/DecisiveAI/mdai-operator/test/utils"
 )
 
 // namespace where the project is deployed in
-const namespace = "mdai-operator-system"
+const namespace = "mdai"
 
 // serviceAccountName created for the project
 const serviceAccountName = "mdai-operator-controller-manager"
