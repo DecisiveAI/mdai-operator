@@ -1,15 +1,8 @@
-nameOverride: ""
-fullnameOverride: ""
-
-serviceAccount:
-  create: false
-  name: ""
-
 controllerManager:
   manager:
     args:
     - --metrics-bind-address=:8443
-    - --leader-elect
+    - --leader-elect=false
     - --health-probe-bind-address=:8081
     containerSecurityContext:
       allowPrivilegeEscalation: false
@@ -18,6 +11,7 @@ controllerManager:
         - ALL
     image:
       repository: public.ecr.aws/p3k6k6h3/mdai-operator
+      tag: 0.1.0
     resources:
       limits:
         cpu: 500m
