@@ -449,7 +449,11 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 
 	for _, collector := range collectors {
 		if _, shouldRestart := namespaceToRestart[collector.Namespace]; shouldRestart {
-			c.logger.Info("Triggering restart of OpenTelemetry Collector", "name", collector.Name)
+			mdaiHubEvent := map[string]any{
+				"type":   "collector_restart",
+				"envMap": envMap,
+			}
+			c.logger.Info("Triggering restart of OpenTelemetry Collector", "name", collector.Name, "mdaiHubEvent", mdaiHubEvent)
 			collectorCopy := collector.DeepCopy()
 			// trigger restart
 			if collector.Annotations == nil {
