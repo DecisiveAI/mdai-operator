@@ -19,9 +19,10 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"os"
+
 	"github.com/go-logr/zerologr"
 	"github.com/rs/zerolog"
-	"os"
 
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
