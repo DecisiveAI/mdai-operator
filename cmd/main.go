@@ -21,6 +21,9 @@ import (
 	"flag"
 	"os"
 
+	"github.com/go-logr/zerologr"
+	"github.com/rs/zerolog"
+
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 
@@ -82,8 +85,8 @@ func main() {
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
-
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	zeroLogger := zerolog.New(os.Stdout)
+	ctrl.SetLogger(zerologr.New(&zeroLogger))
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
