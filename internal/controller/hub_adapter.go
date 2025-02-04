@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -54,6 +55,7 @@ type HubAdapter struct {
 	recorder     record.EventRecorder
 	scheme       *runtime.Scheme
 	valKeyClient *valkey.Client
+	releaseName  string
 }
 
 type ObjectState bool
@@ -72,6 +74,7 @@ func NewHubAdapter(
 		recorder:     recorder,
 		scheme:       scheme,
 		valKeyClient: valkeyClient,
+		releaseName:  os.Getenv("RELEASE_NAME"),
 	}
 }
 
@@ -245,8 +248,13 @@ func (c HubAdapter) getOrCreatePrometheusRuleCR(ctx context.Context, defaultProm
 	if apierrors.IsNotFound(err) {
 		prometheusRule := &prometheusv1.PrometheusRule{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: c.mdaiCR.Namespace,
 				Name:      defaultPrometheusRuleName,
+				Namespace: c.mdaiCR.Namespace,
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "Helm",
+					"app.kubernetes.io/part-of":    "kube-prometheus-stack",
+					"app.kubernetes.io/instance":   c.releaseName,
+				},
 			},
 			Spec: prometheusv1.PrometheusRuleSpec{
 				Groups: []prometheusv1.RuleGroup{
