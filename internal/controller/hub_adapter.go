@@ -46,7 +46,7 @@ const (
 	envConfigMapNamePostfix = "-variables"
 	watcherConfigMapPostfix = "-watcher-collector-config"
 
-	observerDefaultImage = "public.ecr.aws/decisiveai/watcher-collector:latest"
+	observerDefaultImage = "public.ecr.aws/decisiveai/watcher-collector:0.1"
 )
 
 type HubAdapter struct {
