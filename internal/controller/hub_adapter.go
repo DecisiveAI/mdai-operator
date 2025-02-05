@@ -45,6 +45,8 @@ const (
 
 	envConfigMapNamePostfix = "-variables"
 	watcherConfigMapPostfix = "-watcher-collector-config"
+
+	observerDefaultImage = "public.ecr.aws/decisiveai/watcher-collector:0.1"
 )
 
 type HubAdapter struct {
@@ -710,7 +712,7 @@ func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context
 		deployment.Spec.Template.Spec.Containers = []v1.Container{
 			{
 				Name:  name,
-				Image: "public.ecr.aws/decisiveai/watcher-collector:0.1.0-dev", // FIXME should be configured from CR
+				Image: observerDefaultImage, // FIXME should be configured from CR
 				Ports: []v1.ContainerPort{
 					{ContainerPort: 8888, Name: "otelcol-metrics"},
 					{ContainerPort: 8899, Name: "watcher-metrics"},
