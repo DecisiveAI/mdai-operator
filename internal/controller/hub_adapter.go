@@ -551,27 +551,28 @@ func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationR
 		}
 
 		if !slices.Contains(provisionedObserverImages, observerImage) {
-			// for now assuming one collector holds all observers
-			hash, err := c.createOrUpdateWatcherCollectorConfigMap(ctx)
-			if err != nil {
-				return OperationResult{}, err
-			}
-
-			// for now assuming one collector holds all observers
-			if err := c.createOrUpdateWatcherCollectorDeployment(ctx, c.mdaiCR.Namespace, hash, observerImage); err != nil {
-				if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
-					c.logger.Info("re-queuing due to resource conflict")
-					return Requeue()
+			if strings.Contains(observerImage, "collector") {
+				// for now assuming one collector holds all observers
+				hash, err := c.createOrUpdateWatcherCollectorConfigMap(ctx)
+				if err != nil {
+					return OperationResult{}, err
 				}
-				return OperationResult{}, err
-			}
 
-			if err := c.createOrUpdateWatcherCollectorService(ctx, c.mdaiCR.Namespace); err != nil {
-				return OperationResult{}, err
+				// for now assuming one collector holds all observers
+				if err := c.createOrUpdateWatcherCollectorDeployment(ctx, c.mdaiCR.Namespace, hash, observerImage); err != nil {
+					if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
+						c.logger.Info("re-queuing due to resource conflict")
+						return Requeue()
+					}
+					return OperationResult{}, err
+				}
+
+				if err := c.createOrUpdateWatcherCollectorService(ctx, c.mdaiCR.Namespace); err != nil {
+					return OperationResult{}, err
+				}
 			}
 
 			provisionedObserverImages = append(provisionedObserverImages, observerImage)
-
 		}
 	}
 	return ContinueProcessing()
