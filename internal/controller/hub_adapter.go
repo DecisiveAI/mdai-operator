@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -45,6 +46,7 @@ const (
 
 	envConfigMapNamePostfix = "-variables"
 	watcherConfigMapPostfix = "-watcher-collector-config"
+	defaultWatcherImage     = "public.ecr.aws/decisiveai/watcher-collector:latest"
 )
 
 type HubAdapter struct {
@@ -535,31 +537,43 @@ func (c HubAdapter) ensureHubDeletionProcessed(ctx context.Context) (OperationRe
 
 func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationResult, error) {
 	observers := c.mdaiCR.Spec.Observers
+	provisionedObserverImages := []string{}
 
 	if observers == nil {
 		c.logger.Info("No observers found in the CR, skipping observer synchronization")
 		return ContinueProcessing()
 	}
 
-	// for now assuming one collector holds all observers
-	hash, err := c.createOrUpdateWatcherCollectorConfigMap(ctx)
-	if err != nil {
-		return OperationResult{}, err
-	}
-
-	// for now assuming one collector holds all observers
-	if err := c.createOrUpdateWatcherCollectorDeployment(ctx, c.mdaiCR.Namespace, hash); err != nil {
-		if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
-			c.logger.Info("re-queuing due to resource conflict")
-			return Requeue()
+	for _, observer := range *observers {
+		observerImage := defaultWatcherImage
+		if observer.Image != nil && *observer.Image != "" {
+			observerImage = *observer.Image
 		}
-		return OperationResult{}, err
-	}
 
-	if err := c.createOrUpdateWatcherCollectorService(ctx, c.mdaiCR.Namespace); err != nil {
-		return OperationResult{}, err
-	}
+		if !slices.Contains(provisionedObserverImages, observerImage) {
+			// for now assuming one collector holds all observers
+			hash, err := c.createOrUpdateWatcherCollectorConfigMap(ctx)
+			if err != nil {
+				return OperationResult{}, err
+			}
 
+			// for now assuming one collector holds all observers
+			if err := c.createOrUpdateWatcherCollectorDeployment(ctx, c.mdaiCR.Namespace, hash, observerImage); err != nil {
+				if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
+					c.logger.Info("re-queuing due to resource conflict")
+					return Requeue()
+				}
+				return OperationResult{}, err
+			}
+
+			if err := c.createOrUpdateWatcherCollectorService(ctx, c.mdaiCR.Namespace); err != nil {
+				return OperationResult{}, err
+			}
+
+			provisionedObserverImages = append(provisionedObserverImages, observerImage)
+
+		}
+	}
 	return ContinueProcessing()
 }
 
@@ -662,7 +676,7 @@ func getConfigMapSHA(config v1.ConfigMap) (string, error) {
 	return fmt.Sprintf("%x", sum), nil
 }
 
-func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context, namespace string, hash string) error {
+func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context, namespace string, hash string, observerImage string) error {
 	name := c.mdaiCR.Name + "-watcher-collector"
 
 	deployment := &appsv1.Deployment{
@@ -710,7 +724,7 @@ func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context
 		deployment.Spec.Template.Spec.Containers = []v1.Container{
 			{
 				Name:  name,
-				Image: "public.ecr.aws/decisiveai/watcher-collector:0.1.0-dev", // FIXME should be configured from CR
+				Image: observerImage,
 				Ports: []v1.ContainerPort{
 					{ContainerPort: 8888, Name: "otelcol-metrics"},
 					{ContainerPort: 8899, Name: "watcher-metrics"},
