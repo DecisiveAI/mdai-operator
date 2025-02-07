@@ -1,10 +1,10 @@
 [![E2E Tests](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test-e2e.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test-e2e.yml)
 [![Tests](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml)
 [![Lint](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml)
-# mdai-operator
+# Mdai K8s Operator
 manages MDAI Hub
 ## Description
-Operator 
+Mdai k8s operator: 
 
 - Monitors OTEL collectors with labels matching the hub name.
 - Creates alerting rules for the Prometheus operator.
@@ -131,7 +131,24 @@ make uninstall
 ```sh
 make undeploy
 ```
-
+## Helm
+- Regenerate from the latest manifests:
+```shell
+make helm
+```
+- update chart and app version in `deployment/Chart.yaml`
+- update image version in `deployment/values.yaml`
+- package chart
+```shell
+helm package -u deployment
+```
+- from https://github.com/DecisiveAI/mdai-helm-charts 
+```shell
+cd ../mdai-helm-charts
+helm repo index ../mdai-operator --merge index.yaml
+mv ../mdai-operator/index.yaml ../mdai-operator/mdai-operator-0.1.3.tgz .
+cd -
+```
 ## Project Distribution
 
 Following are the steps to build the installer and distribute this project to users.

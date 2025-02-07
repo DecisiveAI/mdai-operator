@@ -213,13 +213,17 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 	if evals == nil {
 		if len(prometheusRuleCR.Spec.Groups[0].Rules) != 0 {
 			c.logger.Info("Rules removed from CR but still exist in prometheus, removing existing rules")
-			if err := c.deletePrometheusRule(ctx); err != nil {
+			if err = c.deletePrometheusRule(ctx); err != nil {
 				c.logger.Error(err, "Failed to remove existing rules")
 			}
 		} else {
 			c.logger.Info("No evaluation found in the CR, skipping PrometheusRule synchronization")
 		}
 		return ContinueProcessing()
+	}
+
+	if c.mdaiCR.Spec.Config != nil && c.mdaiCR.Spec.Config.EvaluationInterval != nil {
+		prometheusRuleCR.Spec.Groups[0].Interval = c.mdaiCR.Spec.Config.EvaluationInterval
 	}
 
 	rules := make([]prometheusv1.Rule, 0, len(*evals))
@@ -372,6 +376,11 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 						c.logger.Info("No value found in Valkey, skipping", "key", valkeyKey)
 						continue
 					}
+				}
+
+				if variable.With == nil {
+					c.logger.Info("No With configuration provided", "variableStorageKey", variable.StorageKey)
+					continue
 				}
 
 				for _, with := range *variable.With {
