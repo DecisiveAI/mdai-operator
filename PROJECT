@@ -2,7 +2,7 @@
 # This file is used to track the info used to scaffold your project
 # and allow the plugins properly work.
 # More info: https://book.kubebuilder.io/reference/project-config.html
-domain: mdai.ai
+domain: mydecisive.ai
 layout:
 - go.kubebuilder.io/v4
 projectName: mdai-operator
@@ -12,8 +12,8 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: mdai.ai
-  group: mdai
+  domain: mydecisive.ai
+  group: hub
   kind: MdaiHub
   path: github.com/DecisiveAI/mdai-operator/api/v1
   version: v1

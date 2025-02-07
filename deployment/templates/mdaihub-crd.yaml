@@ -1,13 +1,13 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: mdaihubs.mdai.mdai.ai
+  name: mdaihubs.hub.mydecisive.ai
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
   labels:
   {{- include "deployment.labels" . | nindent 4 }}
 spec:
-  group: mdai.mdai.ai
+  group: hub.mydecisive.ai
   names:
     kind: MdaiHub
     listKind: MdaiHubList
