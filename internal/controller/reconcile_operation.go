@@ -19,6 +19,7 @@ func ContinueOperationResult() OperationResult {
 		CancelRequest:  false,
 	}
 }
+
 func StopOperationResult() OperationResult {
 	return OperationResult{
 		RequeueDelay:   0,
@@ -27,61 +28,50 @@ func StopOperationResult() OperationResult {
 	}
 }
 
-func StopProcessing() (result OperationResult, err error) {
-	result = StopOperationResult()
-	return
+func StopProcessing() (OperationResult, error) {
+	return StopOperationResult(), nil
 }
 
-func Requeue() (result OperationResult, err error) {
-	result = OperationResult{
+func Requeue() (OperationResult, error) {
+	return OperationResult{
 		RequeueDelay:   0,
 		RequeueRequest: true,
 		CancelRequest:  false,
-	}
-	return
+	}, nil
 }
 
-func RequeueWithError(errIn error) (result OperationResult, err error) {
-	result = OperationResult{
+func RequeueWithError(errIn error) (OperationResult, error) {
+	return OperationResult{
 		RequeueDelay:   0,
 		RequeueRequest: true,
 		CancelRequest:  false,
-	}
-	err = errIn
-	return
+	}, errIn
 }
 
-func RequeueOnErrorOrStop(errIn error) (result OperationResult, err error) {
-	result = OperationResult{
+func RequeueOnErrorOrStop(errIn error) (OperationResult, error) {
+	return OperationResult{
 		RequeueDelay:   0,
 		RequeueRequest: false,
 		CancelRequest:  true,
-	}
-	err = errIn
-	return
+	}, errIn
 }
 
-func RequeueOnErrorOrContinue(errIn error) (result OperationResult, err error) {
-	result = OperationResult{
+func RequeueOnErrorOrContinue(errIn error) (OperationResult, error) {
+	return OperationResult{
 		RequeueDelay:   0,
 		RequeueRequest: false,
 		CancelRequest:  false,
-	}
-	err = errIn
-	return
+	}, errIn
 }
 
-func RequeueAfter(delay time.Duration, errIn error) (result OperationResult, err error) {
-	result = OperationResult{
+func RequeueAfter(delay time.Duration, errIn error) (OperationResult, error) {
+	return OperationResult{
 		RequeueDelay:   delay,
 		RequeueRequest: true,
 		CancelRequest:  false,
-	}
-	err = errIn
-	return
+	}, errIn
 }
 
-func ContinueProcessing() (result OperationResult, err error) {
-	result = ContinueOperationResult()
-	return
+func ContinueProcessing() (OperationResult, error) {
+	return ContinueOperationResult(), nil
 }

@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -47,6 +49,7 @@ const (
 	watcherConfigMapPostfix = "-watcher-collector-config"
 
 	observerDefaultImage = "public.ecr.aws/decisiveai/watcher-collector:0.1"
+	requeueTime          = time.Second * 10
 )
 
 type HubAdapter struct {
@@ -66,7 +69,8 @@ func NewHubAdapter(
 	client client.Client,
 	recorder record.EventRecorder,
 	scheme *runtime.Scheme,
-	valkeyClient *valkey.Client) *HubAdapter {
+	valkeyClient *valkey.Client,
+) *HubAdapter {
 	return &HubAdapter{
 		mdaiCR:       cr,
 		logger:       log,
@@ -171,34 +175,14 @@ func (c HubAdapter) deleteFinalizer(ctx context.Context, object client.Object, f
 		return err
 	}
 	finalizers := metadata.GetFinalizers()
-	if Contains(finalizers, finalizer) {
-		metadata.SetFinalizers(Filter(finalizers, finalizer))
+	if slices.Contains(finalizers, finalizer) {
+		metadata.SetFinalizers(slices.DeleteFunc(finalizers, func(f string) bool { return f == finalizer }))
 		return c.client.Update(ctx, object)
 	}
 	return nil
 }
 
-// Contains returns true if a list contains a string.
-func Contains(list []string, strToSearch string) bool {
-	for _, item := range list {
-		if item == strToSearch {
-			return true
-		}
-	}
-	return false
-}
-
-// Filter filters a list for a string.
-func Filter(list []string, strToFilter string) (newList []string) {
-	for _, item := range list {
-		if item != strToFilter {
-			newList = append(newList, item)
-		}
-	}
-	return
-}
-
-// EnsurePrometheusRuleSynchronized creates or updates PrometheusFilter CR
+// ensurePrometheusRuleSynchronized creates or updates PrometheusFilter CR
 func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (OperationResult, error) {
 	defaultPrometheusRuleName := "mdai-" + c.mdaiCR.Name + "-alert-rules"
 	c.logger.Info("EnsurePrometheusRuleSynchronized")
@@ -206,7 +190,7 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 	prometheusRuleCR, err := c.getOrCreatePrometheusRuleCR(ctx, defaultPrometheusRuleName)
 	if err != nil {
 		c.logger.Error(err, "Failed to get/create PrometheusRule")
-		return RequeueAfter(time.Second*10, err)
+		return RequeueAfter(requeueTime, err)
 	}
 
 	evals := c.mdaiCR.Spec.Evaluations
@@ -247,8 +231,8 @@ func (c HubAdapter) getOrCreatePrometheusRuleCR(ctx context.Context, defaultProm
 	if apierrors.IsNotFound(err) {
 		prometheusRule := &prometheusv1.PrometheusRule{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: c.mdaiCR.Namespace,
 				Name:      defaultPrometheusRuleName,
+				Namespace: c.mdaiCR.Namespace,
 			},
 			Spec: prometheusv1.PrometheusRuleSpec{
 				Groups: []prometheusv1.RuleGroup{
@@ -291,19 +275,19 @@ func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation) promet
 	}
 
 	if alertingRule.OnStatus != nil {
-		actionContextJson, err := json.Marshal(alertingRule.OnStatus)
+		actionContextJSON, err := json.Marshal(alertingRule.OnStatus)
 		if err != nil {
 			c.logger.Error(err, "Failed to compose action context for eval", "name", alertName, "status", *alertingRule.OnStatus)
 		}
-		prometheusRule.Annotations["action_context"] = string(actionContextJson)
+		prometheusRule.Annotations["action_context"] = string(actionContextJSON)
 	}
 
 	if alertingRule.RelevantLabels != nil {
-		relevantLabelsJson, err := json.Marshal(*alertingRule.RelevantLabels)
+		relevantLabelsJSON, err := json.Marshal(*alertingRule.RelevantLabels)
 		if err != nil {
 			c.logger.Error(err, "Failed to compose relevant labels for eval", "name", alertName, "relevantLabels", *alertingRule.RelevantLabels)
 		}
-		prometheusRule.Annotations["relevant_labels"] = string(relevantLabelsJson)
+		prometheusRule.Annotations["relevant_labels"] = string(relevantLabelsJSON)
 	}
 
 	return prometheusRule
@@ -349,29 +333,29 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	valkeyClient := *c.valKeyClient
 	for _, variable := range *variables {
 		// we should test filter processor when the variable is empty and if breaks it we may recommend to use some placeholder as default value
-		if *variable.StorageType == mdaiv1.VariableSourceTypeBultInValkey {
+		switch *variable.StorageType {
+		case mdaiv1.VariableSourceTypeBultInValkey:
 			valkeyKey := c.composeValkeyKey(variable)
-			if variable.Type == mdaiv1.VariableTypeSet {
+			switch variable.Type {
+			case mdaiv1.VariableTypeSet:
 				valueAsSlice, err := valkeyClient.Do(
 					ctx,
 					valkeyClient.B().Smembers().Key(valkeyKey).Build(),
 				).AsStrSlice()
-
 				if err != nil {
 					c.logger.Error(err, "Failed to get set value from Valkey", "key", valkeyKey)
-					return RequeueAfter(time.Second*10, err)
+					return RequeueAfter(requeueTime, err)
 				}
 
 				c.logger.Info("Valkey data received", "key", valkeyKey, "valueAsSlice", valueAsSlice)
 
 				if len(valueAsSlice) == 0 {
-					if variable.DefaultValue != nil {
-						c.logger.Info("Applying default value to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
-						valueAsSlice = append(valueAsSlice, *variable.DefaultValue)
-					} else {
+					if variable.DefaultValue == nil {
 						c.logger.Info("No value found in Valkey, skipping", "key", valkeyKey)
 						continue
 					}
+					c.logger.Info("Applying default value to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
+					valueAsSlice = append(valueAsSlice, *variable.DefaultValue)
 				}
 
 				for _, with := range *variable.With {
@@ -395,30 +379,31 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 						envMap[envVarName] = variableWithDelimiter
 					}
 				}
-			} else if variable.Type == mdaiv1.VariableTypeString {
+			case mdaiv1.VariableTypeString:
 				valueAsString, err := valkeyClient.Do(
 					ctx,
 					valkeyClient.B().Get().Key(valkeyKey).Build(),
 				).ToString()
-
 				if err != nil {
-					if err.Error() == "valkey nil message" {
-						if variable.DefaultValue != nil {
-							c.logger.Info("Applying default valueAsString to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
-							valueAsString = *variable.DefaultValue
-						} else {
-							c.logger.Info("No valueAsString found in Valkey, skipping", "key", valkeyKey)
-							continue
-						}
-					} else {
+					if !valkey.IsValkeyNil(err) {
 						c.logger.Error(err, "Failed to get valueAsString from Valkey", "key", valkeyKey)
-						return RequeueAfter(time.Second*10, err)
+						return RequeueAfter(requeueTime, err)
 					}
+					if variable.DefaultValue == nil {
+						c.logger.Info("No valueAsString found in Valkey, skipping", "key", valkeyKey)
+						continue
+					}
+					c.logger.Info("Applying default valueAsString to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
+					valueAsString = *variable.DefaultValue
 				}
 
 				c.logger.Info("Valkey data received", "key", valkeyKey, "valueAsString", valueAsString)
 				envMap[transformKeyToVariableName(valkeyKey)] = valueAsString
+			default:
+				c.logger.Info("unsupported variable type", "type", variable.Type)
 			}
+		default:
+			c.logger.Info("unsupported storage type", "type", variable.StorageType)
 		}
 	}
 
@@ -433,19 +418,19 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	}
 
 	// assuming collectors could be running in different namespaces, so we need to update envConfigMap in each namespace
-	namespaces := make(map[string]bool)
+	namespaces := make(map[string]struct{})
 	for _, collector := range collectors {
-		namespaces[collector.Namespace] = true
+		namespaces[collector.Namespace] = struct{}{}
 	}
 
-	namespaceToRestart := make(map[string]bool)
+	namespaceToRestart := make(map[string]struct{})
 	for namespace := range namespaces {
 		operationResult, err := c.createOrUpdateEnvConfigMap(ctx, envMap, namespace)
 		if err != nil {
 			return OperationResult{}, err
 		}
 		if operationResult == controllerutil.OperationResultUpdated || operationResult == controllerutil.OperationResultUpdatedStatus {
-			namespaceToRestart[namespace] = true
+			namespaceToRestart[namespace] = struct{}{}
 		}
 	}
 
@@ -456,12 +441,13 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 				"envMap": envMap,
 			}
 			c.logger.Info("Triggering restart of OpenTelemetry Collector", "name", collector.Name, "mdaiHubEvent", mdaiHubEvent)
-			collectorCopy := collector.DeepCopy()
 			// trigger restart
-			if collector.Annotations == nil {
-				collector.Annotations = make(map[string]string)
+			collectorCopy := collector.DeepCopy()
+			if collectorCopy.Annotations == nil {
+				collectorCopy.Annotations = make(map[string]string)
 			}
 			collectorCopy.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+
 			if err := c.client.Update(ctx, collectorCopy); err != nil {
 				c.logger.Error(err, "Failed to update OpenTelemetry Collector", "name", collectorCopy.Name)
 				return OperationResult{}, err
@@ -603,7 +589,6 @@ func (c HubAdapter) createOrUpdateWatcherCollectorService(ctx context.Context, n
 		}
 		return nil
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to create or update watcher-collector-service: %w", err)
 	}
@@ -661,7 +646,7 @@ func getConfigMapSHA(config v1.ConfigMap) (string, error) {
 		return "", err
 	}
 	sum := sha256.Sum256(data)
-	return fmt.Sprintf("%x", sum), nil
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context, namespace string, hash string) error {
@@ -767,7 +752,7 @@ func (c HubAdapter) buildCollectorConfig() (string, error) {
 		return "", err
 	}
 
-	var dataVolumeReceivers = make([]string, 0)
+	dataVolumeReceivers := make([]string, 0)
 	for _, obs := range *observers {
 		observerName := obs.Name
 
@@ -830,9 +815,11 @@ func (c HubAdapter) ensureStatusSetToDone(ctx context.Context) (OperationResult,
 		c.logger.Error(err, "Failed to re-fetch Engine")
 		return Requeue()
 	}
-	meta.SetStatusCondition(&c.mdaiCR.Status.Conditions, metav1.Condition{Type: typeAvailableHub,
+	meta.SetStatusCondition(&c.mdaiCR.Status.Conditions, metav1.Condition{
+		Type:   typeAvailableHub,
 		Status: metav1.ConditionTrue, Reason: "Reconciling",
-		Message: "reconciled successfully"})
+		Message: "reconciled successfully",
+	})
 	if err := c.client.Status().Update(ctx, c.mdaiCR); err != nil {
 		if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
 			c.logger.Info("re-queuing due to resource conflict")

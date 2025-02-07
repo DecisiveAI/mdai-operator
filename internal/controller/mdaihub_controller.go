@@ -188,7 +188,7 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func mdaiResourcesPredicate() predicate.Predicate {
 	log := logger.FromContext(context.TODO())
 	return predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
+		CreateFunc: func(_ event.CreateEvent) bool {
 			// log.Info("<CreateFunc> " + e.Object.GetName() + " ignored")
 			return false // assuming only mdai operator creates managed resources
 		},
@@ -197,11 +197,11 @@ func mdaiResourcesPredicate() predicate.Predicate {
 			log.Info("<UpdateFunc> " + e.ObjectNew.GetName() + " shouldReconsile: " + strconv.FormatBool(shouldReconsile))
 			return shouldReconsile
 		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
+		DeleteFunc: func(_ event.DeleteEvent) bool {
 			// log.Info("<DeleteFunc> " + e.Object.GetName() + " ignored")
 			return false // assuming only mdai operator deletes managed resources
 		},
-		GenericFunc: func(e event.GenericEvent) bool {
+		GenericFunc: func(_ event.GenericEvent) bool {
 			// log.Info("<GenericFunc> " + e.Object.GetName() + " ignored")
 			return false // we do not handle generic events
 		},
@@ -347,16 +347,16 @@ func (r *MdaiHubReconciler) findHubNamespace(ctx context.Context, log logr.Logge
 }
 
 var createPredicate = predicate.Funcs{
-	CreateFunc: func(e event.CreateEvent) bool {
+	CreateFunc: func(_ event.CreateEvent) bool {
 		return true
 	},
-	UpdateFunc: func(e event.UpdateEvent) bool {
+	UpdateFunc: func(_ event.UpdateEvent) bool {
 		return false
 	},
-	DeleteFunc: func(e event.DeleteEvent) bool {
+	DeleteFunc: func(_ event.DeleteEvent) bool {
 		return false // Skip delete events
 	},
-	GenericFunc: func(e event.GenericEvent) bool {
+	GenericFunc: func(_ event.GenericEvent) bool {
 		return false // Skip generic events
 	},
 }
