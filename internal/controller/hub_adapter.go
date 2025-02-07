@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"iter"
 	"strings"
 	"time"
 
@@ -46,7 +47,8 @@ const (
 	envConfigMapNamePostfix = "-variables"
 	watcherConfigMapPostfix = "-watcher-collector-config"
 
-	observerDefaultImage = "public.ecr.aws/decisiveai/watcher-collector:0.1"
+	observerDefaultImage          = "public.ecr.aws/decisiveai/watcher-collector:0.1"
+	mdaiHubEventHistoryStreamName = "mdai_hub_event_history"
 )
 
 type HubAdapter struct {
@@ -451,9 +453,12 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 
 	for _, collector := range collectors {
 		if _, shouldRestart := namespaceToRestart[collector.Namespace]; shouldRestart {
-			mdaiHubEvent := map[string]any{
-				"type":   "collector_restart",
-				"envMap": envMap,
+			mdaiHubEvent := map[string]string{
+				"timestamp": time.Now().UTC().Format(time.RFC3339),
+				"type":      "collector_restart",
+			}
+			for key, value := range envMap {
+				mdaiHubEvent[key] = value
 			}
 			c.logger.Info("Triggering restart of OpenTelemetry Collector", "name", collector.Name, "mdaiHubEvent", mdaiHubEvent)
 			collectorCopy := collector.DeepCopy()
@@ -466,6 +471,10 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 				c.logger.Error(err, "Failed to update OpenTelemetry Collector", "name", collectorCopy.Name)
 				return OperationResult{}, err
 			}
+			valkeyClient := *c.valKeyClient
+			if result := valkeyClient.Do(ctx, valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Id("*").FieldValue().FieldValueIter(composeValkeyStreamIterFromMap(mdaiHubEvent)).Build()); result.Error() != nil {
+				c.logger.Error(err, "Failed to write audit log entry!", "mdaiHubEvent", mdaiHubEvent)
+			}
 		}
 	}
 
@@ -474,6 +483,16 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 
 func (c HubAdapter) composeValkeyKey(variable mdaiv1.Variable) string {
 	return VariableKeyPrefix + c.mdaiCR.Name + "/" + variable.StorageKey
+}
+
+func composeValkeyStreamIterFromMap(mapToIter map[string]string) iter.Seq2[string, string] {
+	return func(yield func(string, string) bool) {
+		for k, v := range mapToIter {
+			if !yield(k, v) {
+				return
+			}
+		}
+	}
 }
 
 func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, namespace string) (controllerutil.OperationResult, error) {
