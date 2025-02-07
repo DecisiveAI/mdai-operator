@@ -333,73 +333,77 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	valkeyClient := *c.valKeyClient
 	for _, variable := range *variables {
 		// we should test filter processor when the variable is empty and if breaks it we may recommend to use some placeholder as default value
-		if *variable.StorageType != mdaiv1.VariableSourceTypeBultInValkey {
-			continue
-		}
-		valkeyKey := c.composeValkeyKey(variable)
-		switch variable.Type {
-		case mdaiv1.VariableTypeSet:
-			valueAsSlice, err := valkeyClient.Do(
-				ctx,
-				valkeyClient.B().Smembers().Key(valkeyKey).Build(),
-			).AsStrSlice()
-			if err != nil {
-				c.logger.Error(err, "Failed to get set value from Valkey", "key", valkeyKey)
-				return RequeueAfter(requeueTime, err)
-			}
-
-			c.logger.Info("Valkey data received", "key", valkeyKey, "valueAsSlice", valueAsSlice)
-
-			if len(valueAsSlice) == 0 {
-				if variable.DefaultValue == nil {
-					c.logger.Info("No value found in Valkey, skipping", "key", valkeyKey)
-					continue
-				}
-				c.logger.Info("Applying default value to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
-				valueAsSlice = append(valueAsSlice, *variable.DefaultValue)
-			}
-
-			for _, with := range *variable.With {
-				exportedVariableName := with.ExportedVariableName
-				envVarName := transformKeyToVariableName(exportedVariableName)
-
-				if envMap[envVarName] != "" {
-					c.logger.Info("VariableWith configuration overrides existing configuration", "exportedVariableName", exportedVariableName)
-					continue
-				}
-
-				transformer := with.Transformer
-				if transformer == nil {
-					c.logger.Info("No Transformer configured", "exportedVariableName", exportedVariableName)
-					continue
-				}
-				join := transformer.Join
-				if join != nil {
-					delimiter := join.Delimiter
-					variableWithDelimiter := strings.Join(valueAsSlice, delimiter)
-					envMap[envVarName] = variableWithDelimiter
-				}
-			}
-		case mdaiv1.VariableTypeString:
-			valueAsString, err := valkeyClient.Do(
-				ctx,
-				valkeyClient.B().Get().Key(valkeyKey).Build(),
-			).ToString()
-			if err != nil {
-				if !valkey.IsValkeyNil(err) {
-					c.logger.Error(err, "Failed to get valueAsString from Valkey", "key", valkeyKey)
+		switch *variable.StorageType {
+		case mdaiv1.VariableSourceTypeBultInValkey:
+			valkeyKey := c.composeValkeyKey(variable)
+			switch variable.Type {
+			case mdaiv1.VariableTypeSet:
+				valueAsSlice, err := valkeyClient.Do(
+					ctx,
+					valkeyClient.B().Smembers().Key(valkeyKey).Build(),
+				).AsStrSlice()
+				if err != nil {
+					c.logger.Error(err, "Failed to get set value from Valkey", "key", valkeyKey)
 					return RequeueAfter(requeueTime, err)
 				}
-				if variable.DefaultValue == nil {
-					c.logger.Info("No valueAsString found in Valkey, skipping", "key", valkeyKey)
-					continue
-				}
-				c.logger.Info("Applying default valueAsString to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
-				valueAsString = *variable.DefaultValue
-			}
 
-			c.logger.Info("Valkey data received", "key", valkeyKey, "valueAsString", valueAsString)
-			envMap[transformKeyToVariableName(valkeyKey)] = valueAsString
+				c.logger.Info("Valkey data received", "key", valkeyKey, "valueAsSlice", valueAsSlice)
+
+				if len(valueAsSlice) == 0 {
+					if variable.DefaultValue == nil {
+						c.logger.Info("No value found in Valkey, skipping", "key", valkeyKey)
+						continue
+					}
+					c.logger.Info("Applying default value to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
+					valueAsSlice = append(valueAsSlice, *variable.DefaultValue)
+				}
+
+				for _, with := range *variable.With {
+					exportedVariableName := with.ExportedVariableName
+					envVarName := transformKeyToVariableName(exportedVariableName)
+
+					if envMap[envVarName] != "" {
+						c.logger.Info("VariableWith configuration overrides existing configuration", "exportedVariableName", exportedVariableName)
+						continue
+					}
+
+					transformer := with.Transformer
+					if transformer == nil {
+						c.logger.Info("No Transformer configured", "exportedVariableName", exportedVariableName)
+						continue
+					}
+					join := transformer.Join
+					if join != nil {
+						delimiter := join.Delimiter
+						variableWithDelimiter := strings.Join(valueAsSlice, delimiter)
+						envMap[envVarName] = variableWithDelimiter
+					}
+				}
+			case mdaiv1.VariableTypeString:
+				valueAsString, err := valkeyClient.Do(
+					ctx,
+					valkeyClient.B().Get().Key(valkeyKey).Build(),
+				).ToString()
+				if err != nil {
+					if !valkey.IsValkeyNil(err) {
+						c.logger.Error(err, "Failed to get valueAsString from Valkey", "key", valkeyKey)
+						return RequeueAfter(requeueTime, err)
+					}
+					if variable.DefaultValue == nil {
+						c.logger.Info("No valueAsString found in Valkey, skipping", "key", valkeyKey)
+						continue
+					}
+					c.logger.Info("Applying default valueAsString to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
+					valueAsString = *variable.DefaultValue
+				}
+
+				c.logger.Info("Valkey data received", "key", valkeyKey, "valueAsString", valueAsString)
+				envMap[transformKeyToVariableName(valkeyKey)] = valueAsString
+			default:
+				c.logger.Info("unsupported variable type", "type", variable.Type)
+			}
+		default:
+			c.logger.Info("unsupported storage type", "type", variable.StorageType)
 		}
 	}
 
@@ -414,13 +418,13 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	}
 
 	// assuming collectors could be running in different namespaces, so we need to update envConfigMap in each namespace
-	namespaces := make([]string, 0, len(collectors))
+	namespaces := make(map[string]struct{})
 	for _, collector := range collectors {
-		namespaces = append(namespaces, collector.Namespace)
+		namespaces[collector.Namespace] = struct{}{}
 	}
 
 	namespaceToRestart := make(map[string]struct{})
-	for _, namespace := range namespaces {
+	for namespace := range namespaces {
 		operationResult, err := c.createOrUpdateEnvConfigMap(ctx, envMap, namespace)
 		if err != nil {
 			return OperationResult{}, err
@@ -438,11 +442,12 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 			}
 			c.logger.Info("Triggering restart of OpenTelemetry Collector", "name", collector.Name, "mdaiHubEvent", mdaiHubEvent)
 			// trigger restart
-			if collector.Annotations == nil {
-				collector.Annotations = make(map[string]string)
-			}
 			collectorCopy := collector.DeepCopy()
+			if collectorCopy.Annotations == nil {
+				collectorCopy.Annotations = make(map[string]string)
+			}
 			collectorCopy.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+
 			if err := c.client.Update(ctx, collectorCopy); err != nil {
 				c.logger.Error(err, "Failed to update OpenTelemetry Collector", "name", collectorCopy.Name)
 				return OperationResult{}, err
