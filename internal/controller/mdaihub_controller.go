@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
+	"github.com/cenkalti/backoff/v5"
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -251,35 +251,45 @@ func (r *MdaiHubReconciler) startValkeySubscription() {
 }
 
 func (r *MdaiHubReconciler) initializeValkey() error {
+	ctx := context.Background()
+	log := logger.FromContext(ctx)
+	retryCount := 0
+
 	// for built-in valkey storage we read the environment variable to get connection string
 	valkeyEndpoint := os.Getenv("VALKEY_ENDPOINT")
 	valkeyPassword := os.Getenv("VALKEY_PASSWORD")
 	if valkeyEndpoint == "" || valkeyPassword == "" {
-		log := logger.FromContext(context.Background())
 		log.Info("ValKey client is not enabled; skipping initialization")
-	} else {
-		log := logger.FromContext(context.Background())
-		log.Info("Initializing ValKey client", "endpoint", valkeyEndpoint)
-		operation := func() error {
-			valkeyClient, err := valkey.NewClient(valkey.ClientOption{
-				InitAddress: []string{valkeyEndpoint},
-				Password:    valkeyPassword,
-			})
-			if err != nil {
-				log.Error(err, "Failed to initialize ValKey client. Retrying...")
-				return err
-			}
-			r.ValKeyClient = &valkeyClient
-			return nil
+		return nil
+	}
+	log.Info("Initializing ValKey client", "endpoint", valkeyEndpoint)
+	operation := func() (string, error) {
+		valkeyClient, err := valkey.NewClient(valkey.ClientOption{
+			InitAddress: []string{valkeyEndpoint},
+			Password:    valkeyPassword,
+		})
+		if err != nil {
+			retryCount++
+			log.Error(err, "Failed to initialize ValKey client. Retrying...")
+			return "", err
 		}
+		r.ValKeyClient = &valkeyClient
+		return "", nil
+	}
 
-		backoffConfig := backoff.NewExponentialBackOff()
-		backoffConfig.InitialInterval = 5 * time.Second
-		backoffConfig.MaxElapsedTime = 3 * time.Minute
+	exponentialBackoff := backoff.NewExponentialBackOff()
+	exponentialBackoff.InitialInterval = 5 * time.Second
 
-		if err := backoff.Retry(operation, backoffConfig); err != nil {
-			return fmt.Errorf("failed to initialize ValKey client after retries: %w", err)
-		}
+	notifyFunc := func(err error, duration time.Duration) {
+		log.Error(err, "Failed to initialize ValKey client. Retrying...", "retry_count", retryCount, "duration", duration.String())
+	}
+
+	if _, err := backoff.Retry(context.TODO(), operation,
+		backoff.WithBackOff(exponentialBackoff),
+		backoff.WithMaxElapsedTime(3*time.Minute),
+		backoff.WithNotify(notifyFunc),
+	); err != nil {
+		return fmt.Errorf("failed to initialize ValKey client after retries: %w", err)
 	}
 	return nil
 }
