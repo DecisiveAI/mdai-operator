@@ -51,7 +51,7 @@ const (
 
 	observerDefaultImage          = "public.ecr.aws/decisiveai/watcher-collector:0.1"
 	mdaiHubEventHistoryStreamName = "mdai_hub_event_history"
-	requeueTime          = time.Second * 10
+	requeueTime                   = time.Second * 10
 )
 
 type HubAdapter struct {
