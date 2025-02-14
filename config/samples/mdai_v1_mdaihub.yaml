@@ -12,7 +12,7 @@ metadata:
 spec:
   # Variables whose values are managed by MDAI. Typical use is update by Action and converted to environment variables by the MDAI Operator.
   variables:
-    - storageKey: service_list
+    - storageKey: service_list_1
       defaultValue: "n/a"
       with:
         - exportedVariableName: "SERVICE_LIST_REGEX"
@@ -23,7 +23,21 @@ spec:
           transformer:
             join:
               delimiter: ","
-      # below properties are optional
+#       below properties are optional
+      type: set
+      storageType: "mdai-valkey"
+    - storageKey: service_list_2
+      defaultValue: "n/a"
+      with:
+        - exportedVariableName: "SERVICE_LIST_2_REGEX"
+          transformer:
+            join:
+              delimiter: "|"
+        - exportedVariableName: "SERVICE_LIST_2_CSV"
+          transformer:
+            join:
+              delimiter: ","
+      #       below properties are optional
       type: set
       storageType: "mdai-valkey"
 
@@ -67,11 +81,11 @@ spec:
       onStatus:
         firing:
           variableUpdate:
-            variableRef: service_list
+            variableRef: service_list_1
             operation: mdai/add_element
         resolved:
           variableUpdate:
-            variableRef: service_list
+            variableRef: service_list_1
             operation: mdai/remove_element
       # Optional below here
       for: 5m

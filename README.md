@@ -49,7 +49,25 @@ export VALKEY_ENDPOINT=127.0.0.1:6379
 export VALKEY_PASSWORD=abc
 ```
 
-### To Deploy on the cluster
+### To Deploy on the local cluster
+**Create cluster**
+```shell
+kind create cluster -n  mdai-operator-test
+```
+**Cert manager**
+```shell
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.1/cert-manager.yaml
+```
+**Otel operator**   
+TBD  
+**valkey**
+```shell
+helm install valkey oci://registry-1.docker.io/bitnamicharts/valkey --set auth.password=abc
+```
+**prometheus operator**
+```shell
+helm install prometheus prometheus-community/kube-prometheus-stack
+```
 **Generate valkey secret**
 ```shell
 kubectl create secret generic valkey-secret \
@@ -95,7 +113,6 @@ kubectl apply -k config/samples/
 Create namespace for OTEL collector and mdai hub sample
 ```shell
 kubectl create namespace otel
-kubectl create namespace mdai
 ```
 Deploy test otel collectors:
 ```sh

@@ -63,8 +63,9 @@ type Variable struct {
 	// DefaultValue The initial value when the variable is instantiated. If not provided, a "zero value" of the variable's Type will be used.
 	// +kubebuilder:validation:Optional
 	DefaultValue *string `json:"defaultValue,omitempty" yaml:"defaultValue,omitempty"`
-	// +kubebuilder:validation:Optional
-	With *[]VariableWith `json:"with,omitempty" yaml:"with,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	With []VariableWith `json:"with" yaml:"with"`
 }
 
 type VariableUpdate struct {
@@ -76,7 +77,7 @@ type VariableUpdate struct {
 	// Operation how the variable will be updated
 	// +kubebuilder:validation:Enum:=mdai/add_element;mdai/remove_element
 	// +kubebuilder:validation:Required
-	Operation string `json:"operation" yaml:"operation"`
+	Operation VariableUpdateOperation `json:"operation" yaml:"operation"`
 }
 
 type Action struct {
@@ -100,9 +101,11 @@ type Evaluation struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
+	// Type The type of evaluation. Currently only "mdai/prometheus_alert" is supported and set as default value.
 	// +kubebuilder:validation:Enum:=mdai/prometheus_alert
 	// +kubebuilder:validation:Required
-	Type string `json:"type" yaml:"type"`
+	// +kubebuilder:default="mdai/prometheus_alert"
+	Type EvaluationType `json:"type" yaml:"type"`
 	// Expr A valid PromQL query expression
 	// +kubebuilder:validation:Required
 	Expr intstr.IntOrString `json:"expr" yaml:"expr"`
@@ -141,7 +144,7 @@ type Observer struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
 	// +kubebuilder:validation:Optional
-	Image *string `json:"image" yaml:"image"`
+	Image *string `json:"image,omitempty" yaml:"image,omitempty"` // TODO code is not implemented for image field
 	// +kubebuilder:validation:Required
 	LabelResourceAttributes []string `json:"labelResourceAttributes" yaml:"labelResourceAttributes"`
 	// +kubebuilder:validation:Optional
@@ -154,7 +157,6 @@ type Observer struct {
 
 type Config struct {
 	// EvaluationInterval Specify the interval at which all evaluations within this hub are assessed in the Prometheus infrastructure.
-	// Evaluations with explicit `Interval`s will override this value
 	// +kubebuilder:validation:Optional
 	EvaluationInterval *prometheusv1.Duration `json:"evaluation_interval,omitempty" yaml:"evaluation_interval,omitempty"`
 }
@@ -208,17 +210,22 @@ func init() {
 }
 
 type (
-	VariableSourceType  string
-	VariableStorageType string
-	VariableType        string
-	VariableTransform   string
+	VariableSourceType      string
+	VariableStorageType     string
+	VariableType            string
+	VariableTransform       string
+	EvaluationType          string
+	VariableUpdateOperation string
 )
 
 const (
-	VariableSourceTypeBultInValkey VariableStorageType = "mdai-valkey"
-	VariableTypeInt                VariableType        = "int"
-	VariableTypeFloat              VariableType        = "float"
-	VariableTypeBoolean            VariableType        = "boolean"
-	VariableTypeString             VariableType        = "string"
-	VariableTypeSet                VariableType        = "set"
+	VariableSourceTypeBultInValkey       VariableStorageType     = "mdai-valkey"
+	VariableTypeInt                      VariableType            = "int"
+	VariableTypeFloat                    VariableType            = "float"
+	VariableTypeBoolean                  VariableType            = "boolean"
+	VariableTypeString                   VariableType            = "string"
+	VariableTypeSet                      VariableType            = "set"
+	EvaluationTypePrometheusAlert        EvaluationType          = "mdai/prometheus_alert"
+	VariableUpdateOperationAddElement    VariableUpdateOperation = "mdai/add_element"    // TODO: use this const in event handler instead of creating a new one
+	VariableUpdateOperationRemoveElement VariableUpdateOperation = "mdai/remove_element" // TODO: use this const in event handler instead of creating a new one
 )

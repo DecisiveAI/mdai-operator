@@ -384,13 +384,9 @@ func (in *Variable) DeepCopyInto(out *Variable) {
 	}
 	if in.With != nil {
 		in, out := &in.With, &out.With
-		*out = new([]VariableWith)
-		if **in != nil {
-			in, out := *in, *out
-			*out = make([]VariableWith, len(*in))
-			for i := range *in {
-				(*in)[i].DeepCopyInto(&(*out)[i])
-			}
+		*out = make([]VariableWith, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
 }

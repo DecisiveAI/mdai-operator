@@ -19,6 +19,7 @@ package v1
 import (
 	"context"
 	"fmt"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -80,7 +81,7 @@ func (d *MdaiHubCustomDefaulter) Default(ctx context.Context, obj runtime.Object
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type MdaiHubCustomValidator struct {
-	//TODO(user): Add more fields as needed for validation
+	// TODO(user): Add more fields as needed for validation
 }
 
 var _ webhook.CustomValidator = &MdaiHubCustomValidator{}
@@ -121,68 +122,83 @@ func (v *MdaiHubCustomValidator) ValidateDelete(ctx context.Context, obj runtime
 func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Warnings, error) {
 	warnings := admission.Warnings{}
 
-	// TODO cross validate variables and evaluations
+	storageKeys := map[string]struct{}{}
+	exportedVariableNames := map[string]struct{}{}
 	variables := mdaihub.Spec.Variables
 	if variables == nil {
 		warnings = append(warnings, "Variables are not specified")
-		return warnings, nil
+	} else {
+		for _, variable := range *variables {
+			// TODO validate change of storage type, change between types
+			switch *variable.StorageType {
+			case mdaiv1.VariableSourceTypeBultInValkey:
+				if _, exists := storageKeys[variable.StorageKey]; exists {
+					return warnings, fmt.Errorf("storage key %s is duplicated", variable.StorageKey)
+				}
+				storageKeys[variable.StorageKey] = struct{}{}
+
+				for _, with := range variable.With {
+					if _, exists := exportedVariableNames[with.ExportedVariableName]; exists {
+						return warnings, fmt.Errorf("variable %s: exported variable name %s is duplicated", variable.StorageKey, with.ExportedVariableName)
+					}
+					exportedVariableNames[with.ExportedVariableName] = struct{}{}
+
+					transformer := with.Transformer
+					switch variable.Type {
+					case mdaiv1.VariableTypeSet:
+						if transformer == nil || transformer.Join == nil {
+							return warnings, fmt.Errorf("variable %s: at least one transformer must be provided, such as 'join'", variable.StorageKey)
+						}
+					default:
+						return warnings, fmt.Errorf("variable %s: unsupported variable type", variable.StorageKey)
+					}
+				}
+			default:
+				return warnings, fmt.Errorf("variable %s: unsupported storage type", variable.StorageKey)
+			}
+		}
 	}
 
-	storageKeys := make(map[string]bool)
-	exportedVariableNames := make(map[string]bool)
-	for _, variable := range *variables {
-		switch *variable.StorageType {
-		case mdaiv1.VariableSourceTypeBultInValkey:
-			if storageKeys[variable.StorageKey] {
-				return warnings, fmt.Errorf("storage key %s is duplicated", variable.StorageKey)
-			}
-			storageKeys[variable.StorageKey] = true
-
-			if variable.With == nil {
-				warnings = append(warnings, fmt.Sprintf("exported variable 'with' block is not specified, the storage key %s will be used and converted to uppercase", variable.StorageKey))
-				continue
-			}
-			for _, with := range *variable.With {
-				if exportedVariableNames[with.ExportedVariableName] == true {
-					return warnings, fmt.Errorf("variable %s: exported variable name %s is duplicated", variable.StorageKey, with.ExportedVariableName)
-				}
-				exportedVariableNames[with.ExportedVariableName] = true
-
-				transformer := with.Transformer
-				if transformer == nil {
+	evaluations := mdaihub.Spec.Evaluations
+	if evaluations == nil || len(*evaluations) == 0 {
+		warnings = append(warnings, "Evaluations are not specified")
+	} else {
+		for _, evaluation := range *evaluations {
+			switch evaluation.Type {
+			case mdaiv1.EvaluationTypePrometheusAlert:
+				if evaluation.OnStatus == nil || (evaluation.OnStatus.Resolved == nil && evaluation.OnStatus.Firing == nil) {
+					warnings = append(warnings, fmt.Sprintf("evaluation %s: 'onStatus' is not specified for evaluation type Prometheus Alert", evaluation.Name))
 					continue
 				}
 
-				switch variable.Type {
-				case mdaiv1.VariableTypeString:
-					if transformer.Join != nil {
-						return warnings, fmt.Errorf("variable %s: 'join' transformation is not supported for variable type 'string'", variable.StorageKey)
-					}
-				case mdaiv1.VariableTypeSet:
-					if transformer.Join == nil {
-						return warnings, fmt.Errorf("variable %s: at least one transformer must be provided, such as 'join'", variable.StorageKey)
-					}
-				default:
-					return warnings, fmt.Errorf("variable %s: unsupported variable type", variable.StorageKey)
+				if err := v.validateOnStatus(evaluation.OnStatus.Firing, storageKeys, evaluation, "firing"); err != nil {
+					return warnings, err
 				}
-			}
-		default:
-			return warnings, fmt.Errorf("variable %s: unsupported storage type", variable.StorageKey)
-		}
 
+				if err := v.validateOnStatus(evaluation.OnStatus.Resolved, storageKeys, evaluation, "resolved"); err != nil {
+					return warnings, err
+				}
+			default:
+				return warnings, fmt.Errorf("evaluation %s: unsupported type", evaluation.Name)
+			}
+
+		}
 	}
 
 	return warnings, nil
 }
 
-func validateWith(variable *mdaiv1.Variable, check func(transformer *mdaiv1.VariableTransformer) error) error {
-	for _, with := range *variable.With {
-		if with.Transformer == nil {
-			continue
-		}
-		if err := check(with.Transformer); err != nil {
-			return err
-		}
+func (v *MdaiHubCustomValidator) validateOnStatus(action *mdaiv1.Action, storageKeys map[string]struct{}, evaluation mdaiv1.Evaluation, actionName string) error {
+	if action == nil {
+		return nil
 	}
+	if action.VariableUpdate == nil {
+		return fmt.Errorf("action has to be specified for '%s', ex. 'variableUpdate', evaluation name: %s", actionName, evaluation.Name)
+	}
+	ref := action.VariableUpdate.VariableRef
+	if _, exists := storageKeys[ref]; !exists {
+		return fmt.Errorf("storage key %s does not exist, evaluation: %s", ref, evaluation.Name)
+	}
+
 	return nil
 }
