@@ -1,4 +1,4 @@
-apiVersion: mdai.mdai.ai/v1
+apiVersion: hub.mydecisive.ai/v1
 # Put a brief introduction
 kind: MdaiHub
 # Metadata section for the resource

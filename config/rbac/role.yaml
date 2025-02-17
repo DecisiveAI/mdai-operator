@@ -30,7 +30,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - mdai.mdai.ai
+  - hub.mydecisive.ai
   resources:
   - mdaihubs
   verbs:
@@ -42,13 +42,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - mdai.mdai.ai
+  - hub.mydecisive.ai
   resources:
   - mdaihubs/finalizers
   verbs:
   - update
 - apiGroups:
-  - mdai.mdai.ai
+  - hub.mydecisive.ai
   resources:
   - mdaihubs/status
   verbs:

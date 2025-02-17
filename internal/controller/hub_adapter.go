@@ -40,7 +40,7 @@ const (
 	// typeDegradedHub represents the status used when the custom resource is deleted and the finalizer operations are must occur.
 	typeDegradedHub = "Degraded"
 
-	hubFinalizer = "mdai.ai/finalizer"
+	hubFinalizer = "mydecisive.ai/finalizer"
 
 	ObjectModified  ObjectState = true
 	ObjectUnchanged ObjectState = false

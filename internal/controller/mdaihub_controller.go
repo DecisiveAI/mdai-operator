@@ -65,9 +65,9 @@ type MdaiHubReconciler struct {
 	valkeyEvents chan event.GenericEvent
 }
 
-// +kubebuilder:rbac:groups=mdai.mdai.ai,resources=mdaihubs,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=mdai.mdai.ai,resources=mdaihubs/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=mdai.mdai.ai,resources=mdaihubs/finalizers,verbs=update
+// +kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaihubs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaihubs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaihubs/finalizers,verbs=update
 // +kubebuilder:rbac:groups=opentelemetry.io,resources=opentelemetrycollectors,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=monitoring.coreos.com,resources=prometheusrules,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
