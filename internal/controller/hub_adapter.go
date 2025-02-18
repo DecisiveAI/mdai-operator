@@ -42,7 +42,7 @@ const (
 	// typeDegradedHub represents the status used when the custom resource is deleted and the finalizer operations are must occur.
 	typeDegradedHub = "Degraded"
 
-	hubFinalizer = "mdai.ai/finalizer"
+	hubFinalizer = "mydecisive.ai/finalizer"
 
 	ObjectModified  ObjectState = true
 	ObjectUnchanged ObjectState = false
@@ -161,6 +161,13 @@ func (c HubAdapter) finalizeHub(ctx context.Context) (ObjectState, error) {
 	if err := c.ensureHubFinalizerDeleted(ctx); err != nil {
 		return ObjectUnchanged, err
 	}
+
+	prefix := VariableKeyPrefix + c.mdaiCR.Name + "/"
+	c.logger.Info("Cleaning up old variables from Valkey with prefix", "prefix", prefix)
+	if err := c.deleteKeysWithPrefixUsingScan(ctx, prefix, map[string]struct{}{}); err != nil {
+		return ObjectUnchanged, err
+	}
+
 	return ObjectModified, nil
 }
 
@@ -200,13 +207,17 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 	if evals == nil {
 		if len(prometheusRuleCR.Spec.Groups[0].Rules) != 0 {
 			c.logger.Info("Rules removed from CR but still exist in prometheus, removing existing rules")
-			if err := c.deletePrometheusRule(ctx); err != nil {
+			if err = c.deletePrometheusRule(ctx); err != nil {
 				c.logger.Error(err, "Failed to remove existing rules")
 			}
 		} else {
 			c.logger.Info("No evaluation found in the CR, skipping PrometheusRule synchronization")
 		}
 		return ContinueProcessing()
+	}
+
+	if c.mdaiCR.Spec.Config != nil && c.mdaiCR.Spec.Config.EvaluationInterval != nil {
+		prometheusRuleCR.Spec.Groups[0].Interval = c.mdaiCR.Spec.Config.EvaluationInterval
 	}
 
 	rules := make([]prometheusv1.Rule, 0, len(*evals))
@@ -334,13 +345,15 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 
 	envMap := make(map[string]string)
 	valkeyClient := *c.valKeyClient
+	valkeyKeysToKeep := map[string]struct{}{}
 	for _, variable := range *variables {
 		// we should test filter processor when the variable is empty and if breaks it we may recommend to use some placeholder as default value
 		switch *variable.StorageType {
 		case mdaiv1.VariableSourceTypeBultInValkey:
 			valkeyKey := c.composeValkeyKey(variable)
-			switch variable.Type {
-			case mdaiv1.VariableTypeSet:
+			valkeyKeysToKeep[valkeyKey] = struct{}{}
+			switch {
+			case variable.Type == mdaiv1.VariableTypeSet:
 				valueAsSlice, err := valkeyClient.Do(
 					ctx,
 					valkeyClient.B().Smembers().Key(valkeyKey).Build(),
@@ -349,9 +362,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 					c.logger.Error(err, "Failed to get set value from Valkey", "key", valkeyKey)
 					return RequeueAfter(requeueTime, err)
 				}
-
 				c.logger.Info("Valkey data received", "key", valkeyKey, "valueAsSlice", valueAsSlice)
-
 				if len(valueAsSlice) == 0 {
 					if variable.DefaultValue == nil {
 						c.logger.Info("No value found in Valkey, skipping", "key", valkeyKey)
@@ -361,11 +372,9 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 					valueAsSlice = append(valueAsSlice, *variable.DefaultValue)
 				}
 
-				for _, with := range *variable.With {
+				for _, with := range variable.With {
 					exportedVariableName := with.ExportedVariableName
-					envVarName := transformKeyToVariableName(exportedVariableName)
-
-					if envMap[envVarName] != "" {
+					if envMap[exportedVariableName] != "" {
 						c.logger.Info("VariableWith configuration overrides existing configuration", "exportedVariableName", exportedVariableName)
 						continue
 					}
@@ -379,35 +388,19 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 					if join != nil {
 						delimiter := join.Delimiter
 						variableWithDelimiter := strings.Join(valueAsSlice, delimiter)
-						envMap[envVarName] = variableWithDelimiter
+						envMap[exportedVariableName] = variableWithDelimiter
 					}
 				}
-			case mdaiv1.VariableTypeString:
-				valueAsString, err := valkeyClient.Do(
-					ctx,
-					valkeyClient.B().Get().Key(valkeyKey).Build(),
-				).ToString()
-				if err != nil {
-					if !valkey.IsValkeyNil(err) {
-						c.logger.Error(err, "Failed to get valueAsString from Valkey", "key", valkeyKey)
-						return RequeueAfter(requeueTime, err)
-					}
-					if variable.DefaultValue == nil {
-						c.logger.Info("No valueAsString found in Valkey, skipping", "key", valkeyKey)
-						continue
-					}
-					c.logger.Info("Applying default valueAsString to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
-					valueAsString = *variable.DefaultValue
-				}
-
-				c.logger.Info("Valkey data received", "key", valkeyKey, "valueAsString", valueAsString)
-				envMap[transformKeyToVariableName(valkeyKey)] = valueAsString
 			default:
-				c.logger.Info("unsupported variable type", "type", variable.Type)
+				c.logger.Info("Unsupported variable type", "variableType", variable.Type, "variableStorageKey", variable.StorageKey)
+				continue
 			}
-		default:
-			c.logger.Info("unsupported storage type", "type", variable.StorageType)
 		}
+	}
+
+	c.logger.Info("Deleting old valkey keys", "valkeyKeysToKeep", valkeyKeysToKeep)
+	if err := c.deleteKeysWithPrefixUsingScan(ctx, VariableKeyPrefix+c.mdaiCR.Name+"/", valkeyKeysToKeep); err != nil {
+		return OperationResult{}, err
 	}
 
 	if len(envMap) == 0 {
@@ -469,6 +462,31 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	return ContinueProcessing()
 }
 
+func (c HubAdapter) deleteKeysWithPrefixUsingScan(ctx context.Context, prefix string, keep map[string]struct{}) error {
+	keyPattern := prefix + "*"
+	valkeyClient := *c.valKeyClient
+
+	for {
+		scanResult, err := valkeyClient.Do(ctx, valkeyClient.B().Scan().Cursor(0).Match(keyPattern).Count(100).Build()).AsScanEntry()
+		if err != nil {
+			return fmt.Errorf("failed to scan with prefix %s: %w", prefix, err)
+		}
+		for _, k := range scanResult.Elements {
+			if _, exists := keep[k]; exists {
+				continue
+			}
+			if _, err := valkeyClient.Do(ctx, valkeyClient.B().Del().Key(k).Build()).AsInt64(); err != nil {
+				return fmt.Errorf("failed to delete key %s: %w", k, err)
+			}
+		}
+		if scanResult.Cursor == 0 {
+			break
+		}
+	}
+
+	return nil
+}
+
 func (c HubAdapter) composeValkeyKey(variable mdaiv1.Variable) string {
 	return VariableKeyPrefix + c.mdaiCR.Name + "/" + variable.StorageKey
 }
@@ -503,10 +521,6 @@ func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[s
 
 	c.logger.Info("Successfully created or updated ConfigMap", "name", envConfigMapName, "namespace", namespace, "operation", operationResult)
 	return operationResult, nil
-}
-
-func transformKeyToVariableName(valkeyKey string) string {
-	return strings.ToUpper(valkeyKey)
 }
 
 func (c HubAdapter) listOtelCollectorsWithLabel(ctx context.Context, labelSelector string) ([]v1beta1.OpenTelemetryCollector, error) {

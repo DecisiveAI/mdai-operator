@@ -43,6 +43,7 @@ import (
 
 	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
 	"github.com/DecisiveAI/mdai-operator/internal/controller"
+	webhookmdaiv1 "github.com/DecisiveAI/mdai-operator/internal/webhook/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -139,7 +140,7 @@ func main() {
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "ec755d87.mdai.ai",
+		LeaderElectionID:       "ec755d87.mydecisive.ai",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
@@ -163,6 +164,13 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MdaiHub")
 		os.Exit(1)
+	}
+	// nolint:goconst
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err = webhookmdaiv1.SetupMdaiHubWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiHub")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 

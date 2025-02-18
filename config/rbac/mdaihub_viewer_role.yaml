@@ -8,7 +8,7 @@ metadata:
   name: mdaihub-viewer-role
 rules:
 - apiGroups:
-  - mdai.mdai.ai
+  - hub.mydecisive.ai
   resources:
   - mdaihubs
   verbs:
@@ -16,7 +16,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - mdai.mdai.ai
+  - hub.mydecisive.ai
   resources:
   - mdaihubs/status
   verbs:

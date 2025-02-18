@@ -1,0 +1,15 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "deployment.fullname" . }}-serving-cert
+  labels:
+  {{- include "deployment.labels" . | nindent 4 }}
+spec:
+  dnsNames:
+  - '{{ include "deployment.fullname" . }}-webhook-service.{{ .Release.Namespace }}.svc'
+  - '{{ include "deployment.fullname" . }}-webhook-service.{{ .Release.Namespace }}.svc.{{
+    .Values.kubernetesClusterDomain }}'
+  issuerRef:
+    kind: Issuer
+    name: '{{ include "deployment.fullname" . }}-selfsigned-issuer'
+  secretName: webhook-server-cert
