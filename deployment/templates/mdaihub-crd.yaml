@@ -44,9 +44,8 @@ spec:
                 description: kubebuilder:validation:Optional
                 properties:
                   evaluation_interval:
-                    description: |-
-                      EvaluationInterval Specify the interval at which all evaluations are assessed in the Prometheus infrastructure.
-                      Evaluations with explicit `Interval`s will override this value
+                    description: EvaluationInterval Specify the interval at which all
+                      evaluations within this hub are assessed in the Prometheus infrastructure.
                     pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
                     type: string
                 type: object
@@ -63,12 +62,6 @@ spec:
                       description: For Alerts are considered firing once they have been
                         returned for this long.
                       pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
-                      type: string
-                    interval:
-                      description: |-
-                        Specify the interval at which this evaluation is assessed in the Prometheus infrastructure.
-                        Interval Specify how often this evaluation is assessed in the Prometheus infrastructure.
-                      format: duration
                       type: string
                     keep_firing_for:
                       description: KeepFiringFor defines how long an alert will continue
@@ -147,6 +140,9 @@ spec:
                       pattern: ^(warning|critical)$
                       type: string
                     type:
+                      default: mdai/prometheus_alert
+                      description: Type The type of evaluation. Currently only "mdai/prometheus_alert"
+                        is supported and set as default value.
                       enum:
                       - mdai/prometheus_alert
                       type: string
@@ -247,10 +243,12 @@ spec:
                         required:
                         - exportedVariableName
                         type: object
+                      minItems: 1
                       type: array
                   required:
                   - storageKey
                   - type
+                  - with
                   type: object
                 type: array
             type: object

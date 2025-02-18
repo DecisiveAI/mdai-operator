@@ -1,10 +1,10 @@
 [![E2E Tests](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test-e2e.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test-e2e.yml)
 [![Tests](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml)
 [![Lint](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml)
-# mdai-operator
+# Mdai K8s Operator
 manages MDAI Hub
 ## Description
-Operator 
+Mdai k8s operator: 
 
 - Monitors OTEL collectors with labels matching the hub name.
 - Creates alerting rules for the Prometheus operator.
@@ -41,6 +41,10 @@ export GOPRIVATE=github.com/decisiveai/*
 - docker version 17.03+.
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
+- Mdai OTEL operator CRD installed into cluster.
+- Prometheus operator CRD installed into cluster.
+- Valkey secret created (see below)
+- Valkey is installed
 
 ### To run locally
 make sure the following env variable is set
@@ -49,7 +53,25 @@ export VALKEY_ENDPOINT=127.0.0.1:6379
 export VALKEY_PASSWORD=abc
 ```
 
-### To Deploy on the cluster
+### To Deploy on the local cluster
+**Create cluster**
+```shell
+kind create cluster -n  mdai-operator-test
+```
+**Cert manager**
+```shell
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.1/cert-manager.yaml
+```
+**Otel operator**   
+TBD  
+**valkey**
+```shell
+helm install valkey oci://registry-1.docker.io/bitnamicharts/valkey --set auth.password=abc
+```
+**prometheus operator**
+```shell
+helm install prometheus prometheus-community/kube-prometheus-stack
+```
 **Generate valkey secret**
 ```shell
 kubectl create secret generic valkey-secret \
@@ -95,7 +117,6 @@ kubectl apply -k config/samples/
 Create namespace for OTEL collector and mdai hub sample
 ```shell
 kubectl create namespace otel
-kubectl create namespace mdai
 ```
 Deploy test otel collectors:
 ```sh
@@ -131,7 +152,24 @@ make uninstall
 ```sh
 make undeploy
 ```
-
+## Helm
+- Regenerate from the latest manifests:
+```shell
+make helm
+```
+- update chart and app version in `deployment/Chart.yaml`
+- update image version in `deployment/values.yaml`
+- package chart
+```shell
+helm package -u deployment
+```
+- from https://github.com/DecisiveAI/mdai-helm-charts 
+```shell
+cd ../mdai-helm-charts
+helm repo index ../mdai-operator --merge index.yaml
+mv ../mdai-operator/index.yaml ../mdai-operator/mdai-operator-0.1.4.tgz .
+cd -
+```
 ## Project Distribution
 
 Following are the steps to build the installer and distribute this project to users.

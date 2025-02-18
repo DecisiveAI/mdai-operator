@@ -43,6 +43,7 @@ import (
 
 	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
 	"github.com/DecisiveAI/mdai-operator/internal/controller"
+	webhookmdaiv1 "github.com/DecisiveAI/mdai-operator/internal/webhook/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -163,6 +164,13 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MdaiHub")
 		os.Exit(1)
+	}
+	// nolint:goconst
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err = webhookmdaiv1.SetupMdaiHubWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiHub")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 
