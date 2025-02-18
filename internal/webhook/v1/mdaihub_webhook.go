@@ -98,7 +98,7 @@ func (v *MdaiHubCustomValidator) ValidateCreate(_ context.Context, obj runtime.O
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type MdaiHub.
-func (v *MdaiHubCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (v *MdaiHubCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	mdaihub, ok := newObj.(*mdaiv1.MdaiHub)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiHub object for the newObj but got %T", newObj)
