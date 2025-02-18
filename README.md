@@ -167,7 +167,7 @@ helm package -u deployment
 ```shell
 cd ../mdai-helm-charts
 helm repo index ../mdai-operator --merge index.yaml
-mv ../mdai-operator/index.yaml ../mdai-operator/mdai-operator-0.1.3.tgz .
+mv ../mdai-operator/index.yaml ../mdai-operator/mdai-operator-0.1.4.tgz .
 cd -
 ```
 ## Project Distribution

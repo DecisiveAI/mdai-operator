@@ -10,8 +10,8 @@ controllerManager:
         drop:
         - ALL
     image:
-      repository: mdai-operator
-      tag: v0.0.1
+      repository: public.ecr.aws/p3k6k6h3/mdai-operator
+      tag: 0.1.4
     resources:
       limits:
         cpu: 500m
