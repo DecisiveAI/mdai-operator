@@ -87,7 +87,7 @@ type MdaiHubCustomValidator struct {
 var _ webhook.CustomValidator = &MdaiHubCustomValidator{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type MdaiHub.
-func (v *MdaiHubCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *MdaiHubCustomValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	mdaihub, ok := obj.(*mdaiv1.MdaiHub)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiHub object but got %T", obj)
