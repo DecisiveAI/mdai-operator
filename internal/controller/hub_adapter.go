@@ -454,7 +454,6 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 func (c HubAdapter) deleteKeysWithPrefixUsingScan(ctx context.Context, prefix string, keep map[string]struct{}) error {
 	keyPattern := prefix + "*"
 	valkeyClient := *c.valKeyClient
-	cursor := uint64(0)
 
 	for {
 		scanResult, err := valkeyClient.Do(ctx, valkeyClient.B().Scan().Cursor(0).Match(keyPattern).Count(100).Build()).AsScanEntry()
@@ -465,13 +464,11 @@ func (c HubAdapter) deleteKeysWithPrefixUsingScan(ctx context.Context, prefix st
 			if _, exists := keep[k]; exists {
 				continue
 			}
-			_, err := valkeyClient.Do(ctx, valkeyClient.B().Del().Key(k).Build()).AsInt64()
-			if err != nil {
+			if _, err := valkeyClient.Do(ctx, valkeyClient.B().Del().Key(k).Build()).AsInt64(); err != nil {
 				return fmt.Errorf("failed to delete key %s: %w", k, err)
 			}
 		}
-		cursor = scanResult.Cursor
-		if cursor == 0 {
+		if scanResult.Cursor == 0 {
 			break
 		}
 	}
