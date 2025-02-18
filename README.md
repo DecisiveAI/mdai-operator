@@ -41,6 +41,10 @@ export GOPRIVATE=github.com/decisiveai/*
 - docker version 17.03+.
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
+- Mdai OTEL operator CRD installed into cluster.
+- Prometheus operator CRD installed into cluster.
+- Valkey secret created (see below)
+- Valkey is installed
 
 ### To run locally
 make sure the following env variable is set
