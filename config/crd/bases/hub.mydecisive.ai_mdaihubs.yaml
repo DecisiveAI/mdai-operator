@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.1
-  name: mdaihubs.mdai.mdai.ai
+  name: mdaihubs.hub.mydecisive.ai
 spec:
-  group: mdai.mdai.ai
+  group: hub.mydecisive.ai
   names:
     kind: MdaiHub
     listKind: MdaiHubList

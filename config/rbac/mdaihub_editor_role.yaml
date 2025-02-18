@@ -8,7 +8,7 @@ metadata:
   name: mdaihub-editor-role
 rules:
 - apiGroups:
-  - mdai.mdai.ai
+  - hub.mydecisive.ai
   resources:
   - mdaihubs
   verbs:
@@ -20,7 +20,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - mdai.mdai.ai
+  - hub.mydecisive.ai
   resources:
   - mdaihubs/status
   verbs:
