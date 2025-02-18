@@ -109,7 +109,7 @@ func (v *MdaiHubCustomValidator) ValidateUpdate(_ context.Context, oldObj, newOb
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type MdaiHub.
-func (v *MdaiHubCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *MdaiHubCustomValidator) ValidateDelete(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	mdaihub, ok := obj.(*mdaiv1.MdaiHub)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiHub object but got %T", obj)
