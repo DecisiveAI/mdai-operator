@@ -13,12 +13,12 @@ webhooks:
     service:
       name: '{{ include "deployment.fullname" . }}-webhook-service'
       namespace: '{{ .Release.Namespace }}'
-      path: /mutate-mdai-mdai-ai-v1-mdaihub
+      path: /mutate-hub-mydecisive-ai-v1-mdaihub
   failurePolicy: Fail
   name: mmdaihub-v1.kb.io
   rules:
   - apiGroups:
-    - mdai.mdai.ai
+    - hub.mydecisive.ai
     apiVersions:
     - v1
     operations:

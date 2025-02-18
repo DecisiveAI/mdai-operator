@@ -43,7 +43,7 @@ func SetupMdaiHubWebhookWithManager(mgr ctrl.Manager) error {
 
 // TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
-// +kubebuilder:webhook:path=/mutate-mdai-mdai-ai-v1-mdaihub,mutating=true,failurePolicy=fail,sideEffects=None,groups=mdai.mdai.ai,resources=mdaihubs,verbs=create;update,versions=v1,name=mmdaihub-v1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate-hub-mydecisive-ai-v1-mdaihub,mutating=true,failurePolicy=fail,sideEffects=None,groups=hub.mydecisive.ai,resources=mdaihubs,verbs=create;update,versions=v1,name=mmdaihub-v1.kb.io,admissionReviewVersions=v1
 
 // MdaiHubCustomDefaulter struct is responsible for setting default values on the custom resource of the
 // Kind MdaiHub when those are created or updated.
@@ -73,7 +73,7 @@ func (d *MdaiHubCustomDefaulter) Default(ctx context.Context, obj runtime.Object
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 // NOTE: The 'path' attribute must follow a specific pattern and should not be modified directly here.
 // Modifying the path for an invalid path can cause API server errors; failing to locate the webhook.
-// +kubebuilder:webhook:path=/validate-mdai-mdai-ai-v1-mdaihub,mutating=false,failurePolicy=fail,sideEffects=None,groups=mdai.mdai.ai,resources=mdaihubs,verbs=create;update,versions=v1,name=vmdaihub-v1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-hub-mydecisive-ai-v1-mdaihub,mutating=false,failurePolicy=fail,sideEffects=None,groups=hub.mydecisive.ai,resources=mdaihubs,verbs=create;update,versions=v1,name=vmdaihub-v1.kb.io,admissionReviewVersions=v1
 
 // MdaiHubCustomValidator struct is responsible for validating the MdaiHub resource
 // when it is created, updated, or deleted.
