@@ -455,8 +455,9 @@ func (c HubAdapter) deleteKeysWithPrefixUsingScan(ctx context.Context, prefix st
 	keyPattern := prefix + "*"
 	valkeyClient := *c.valKeyClient
 
+	var cursor uint64
 	for {
-		scanResult, err := valkeyClient.Do(ctx, valkeyClient.B().Scan().Cursor(0).Match(keyPattern).Count(100).Build()).AsScanEntry()
+		scanResult, err := valkeyClient.Do(ctx, valkeyClient.B().Scan().Cursor(cursor).Match(keyPattern).Count(100).Build()).AsScanEntry()
 		if err != nil {
 			return fmt.Errorf("failed to scan with prefix %s: %w", prefix, err)
 		}
@@ -468,7 +469,8 @@ func (c HubAdapter) deleteKeysWithPrefixUsingScan(ctx context.Context, prefix st
 				return fmt.Errorf("failed to delete key %s: %w", k, err)
 			}
 		}
-		if scanResult.Cursor == 0 {
+		cursor = scanResult.Cursor
+		if cursor == 0 {
 			break
 		}
 	}
