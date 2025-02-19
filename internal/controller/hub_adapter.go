@@ -58,7 +58,7 @@ type HubAdapter struct {
 	client       client.Client
 	recorder     record.EventRecorder
 	scheme       *runtime.Scheme
-	valKeyClient *valkey.Client
+	valKeyClient valkey.Client
 }
 
 type ObjectState bool
@@ -69,7 +69,7 @@ func NewHubAdapter(
 	client client.Client,
 	recorder record.EventRecorder,
 	scheme *runtime.Scheme,
-	valkeyClient *valkey.Client,
+	valkeyClient valkey.Client,
 ) *HubAdapter {
 	return &HubAdapter{
 		mdaiCR:       cr,
@@ -119,8 +119,6 @@ func (c HubAdapter) finalizeHub(ctx context.Context) (ObjectState, error) {
 	}
 
 	c.logger.Info("Performing Finalizer Operations for Cluster before delete CR")
-
-	c.logger.Info("Here we are doing some real finalization")
 
 	err := c.deletePrometheusRule(ctx)
 	if err != nil {
@@ -194,44 +192,8 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 	defaultPrometheusRuleName := "mdai-" + c.mdaiCR.Name + "-alert-rules"
 	c.logger.Info("EnsurePrometheusRuleSynchronized")
 
-	prometheusRuleCR, err := c.getOrCreatePrometheusRuleCR(ctx, defaultPrometheusRuleName)
-	if err != nil {
-		c.logger.Error(err, "Failed to get/create PrometheusRule")
-		return RequeueAfter(requeueTime, err)
-	}
-
 	evals := c.mdaiCR.Spec.Evaluations
-	if evals == nil {
-		if len(prometheusRuleCR.Spec.Groups[0].Rules) != 0 {
-			c.logger.Info("Rules removed from CR but still exist in prometheus, removing existing rules")
-			if err = c.deletePrometheusRule(ctx); err != nil {
-				c.logger.Error(err, "Failed to remove existing rules")
-			}
-		} else {
-			c.logger.Info("No evaluation found in the CR, skipping PrometheusRule synchronization")
-		}
-		return ContinueProcessing()
-	}
 
-	if c.mdaiCR.Spec.Config != nil && c.mdaiCR.Spec.Config.EvaluationInterval != nil {
-		prometheusRuleCR.Spec.Groups[0].Interval = c.mdaiCR.Spec.Config.EvaluationInterval
-	}
-
-	rules := make([]prometheusv1.Rule, 0, len(*evals))
-	for _, eval := range *evals {
-		rule := c.composePrometheusRule(eval)
-		rules = append(rules, rule)
-	}
-
-	prometheusRuleCR.Spec.Groups[0].Rules = rules
-	if err = c.client.Update(ctx, prometheusRuleCR); err != nil {
-		c.logger.Error(err, "Failed to update PrometheusRule")
-	}
-
-	return ContinueProcessing()
-}
-
-func (c HubAdapter) getOrCreatePrometheusRuleCR(ctx context.Context, defaultPrometheusRuleName string) (*prometheusv1.PrometheusRule, error) {
 	prometheusRule := &prometheusv1.PrometheusRule{}
 	err := c.client.Get(
 		ctx,
@@ -239,8 +201,21 @@ func (c HubAdapter) getOrCreatePrometheusRuleCR(ctx context.Context, defaultProm
 		prometheusRule,
 	)
 
+	// rules exist, but no evaluations
+	if evals == nil {
+		c.logger.Info("No evaluations found, skipping PrometheusRule creation")
+		if err == nil {
+			c.logger.Info("Removing existing rules")
+			if err := c.deletePrometheusRule(ctx); err != nil {
+				c.logger.Error(err, "Failed to remove existing rules")
+			}
+		}
+		return ContinueProcessing()
+	}
+
+	// create new prometheus rule
 	if apierrors.IsNotFound(err) {
-		prometheusRule := &prometheusv1.PrometheusRule{
+		prometheusRule = &prometheusv1.PrometheusRule{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      defaultPrometheusRuleName,
 				Namespace: c.mdaiCR.Namespace,
@@ -256,16 +231,30 @@ func (c HubAdapter) getOrCreatePrometheusRuleCR(ctx context.Context, defaultProm
 		}
 		if err := c.client.Create(ctx, prometheusRule); err != nil {
 			c.logger.Error(err, "Failed to create PrometheusRule"+defaultPrometheusRuleName, "prometheus_rule_name", defaultPrometheusRuleName)
-			return nil, err
+			return RequeueAfter(requeueTime, err)
 		}
 		c.logger.Info("Created new PrometheusRule:"+defaultPrometheusRuleName, "prometheus_rule_name", defaultPrometheusRuleName)
-		return prometheusRule, nil
 	} else if err != nil {
 		c.logger.Error(err, "Failed to get PrometheusRule:"+defaultPrometheusRuleName, "prometheus_rule_name", defaultPrometheusRuleName)
-		return nil, err
+		return RequeueAfter(requeueTime, err)
 	}
 
-	return prometheusRule, nil
+	if c.mdaiCR.Spec.Config != nil && c.mdaiCR.Spec.Config.EvaluationInterval != nil {
+		prometheusRule.Spec.Groups[0].Interval = c.mdaiCR.Spec.Config.EvaluationInterval
+	}
+
+	rules := make([]prometheusv1.Rule, 0, len(*evals))
+	for _, eval := range *evals {
+		rule := c.composePrometheusRule(eval)
+		rules = append(rules, rule)
+	}
+
+	prometheusRule.Spec.Groups[0].Rules = rules
+	if err = c.client.Update(ctx, prometheusRule); err != nil {
+		c.logger.Error(err, "Failed to update PrometheusRule")
+	}
+
+	return ContinueProcessing()
 }
 
 func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation) prometheusv1.Rule {
@@ -335,13 +324,8 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 		return ContinueProcessing()
 	}
 
-	if c.valKeyClient == nil {
-		c.logger.Info("ValkeyClient not initialized, cannot sync variables")
-		return ContinueProcessing()
-	}
-
 	envMap := make(map[string]string)
-	valkeyClient := *c.valKeyClient
+	valkeyClient := c.valKeyClient
 	valkeyKeysToKeep := map[string]struct{}{}
 	for _, variable := range *variables {
 		// we should test filter processor when the variable is empty and if breaks it we may recommend to use some placeholder as default value
@@ -422,7 +406,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 		if err != nil {
 			return OperationResult{}, err
 		}
-		if operationResult == controllerutil.OperationResultUpdated || operationResult == controllerutil.OperationResultUpdatedStatus {
+		if operationResult == controllerutil.OperationResultCreated || operationResult == controllerutil.OperationResultUpdated {
 			namespaceToRestart[namespace] = struct{}{}
 		}
 	}
@@ -453,7 +437,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 
 func (c HubAdapter) deleteKeysWithPrefixUsingScan(ctx context.Context, prefix string, keep map[string]struct{}) error {
 	keyPattern := prefix + "*"
-	valkeyClient := *c.valKeyClient
+	valkeyClient := c.valKeyClient
 
 	var cursor uint64
 	for {
