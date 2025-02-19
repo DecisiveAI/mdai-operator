@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.uber.org/zap"
 	"os"
 	"strconv"
 	"strings"
@@ -28,6 +27,7 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/go-logr/logr"
+	"go.uber.org/zap"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	appsv1 "k8s.io/api/apps/v1"
