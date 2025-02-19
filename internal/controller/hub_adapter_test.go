@@ -104,8 +104,7 @@ func TestFinalizeHub_Success(t *testing.T) {
 	}
 
 	updatedCR := &v1.MdaiHub{}
-	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-hub", Namespace: "default"}, updatedCR)
-	if err != nil {
+	if err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-hub", Namespace: "default"}, updatedCR); err != nil {
 		t.Fatalf("failed to get updated CR: %v", err)
 	}
 	for _, f := range updatedCR.Finalizers {
