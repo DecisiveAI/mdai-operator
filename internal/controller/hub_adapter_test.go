@@ -5,7 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/DecisiveAI/mdai-operator/api/v1" // adjust the import path as needed
+
+	"strings"
+	"testing"
+	"time"
+
+	v1 "github.com/DecisiveAI/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/go-logr/logr"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -23,16 +28,13 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"strings"
-	"testing"
-	"time"
 )
 
-func newTestMdaiCR(name, namespace string) *v1.MdaiHub {
+func newTestMdaiCR() *v1.MdaiHub {
 	return &v1.MdaiHub{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
+			Name:      "test-hub",
+			Namespace: "default",
 		},
 		Spec:   v1.MdaiHubSpec{},
 		Status: v1.MdaiHubStatus{},
@@ -196,7 +198,7 @@ func TestEnsureFinalizerInitialized_AlreadyPresent(t *testing.T) {
 func TestEnsureStatusInitialized_SetsInitialStatus(t *testing.T) {
 	ctx := context.TODO()
 	scheme := createTestScheme()
-	mdaiCR := newTestMdaiCR("test-hub", "default")
+	mdaiCR := newTestMdaiCR()
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
 
@@ -272,7 +274,7 @@ func TestDeleteFinalizer(t *testing.T) {
 func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 	ctx := context.TODO()
 	scheme := createTestScheme()
-	mdaiCR := newTestMdaiCR("test-hub", "default")
+	mdaiCR := newTestMdaiCR()
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
 
@@ -295,7 +297,7 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 }
 
 func TestBuildCollectorConfig(t *testing.T) {
-	mdaiCR := newTestMdaiCR("test-hub", "default")
+	mdaiCR := newTestMdaiCR()
 	mdaiCR.Spec.Observers =
 		&[]v1.Observer{
 			{
@@ -338,7 +340,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 		DefaultValue: &defaultVal,
 		With:         []v1.VariableWith{varWith},
 	}
-	mdaiCR := newTestMdaiCR("test-hub", "default")
+	mdaiCR := newTestMdaiCR()
 	mdaiCR.Spec.Variables = &[]v1.Variable{variable}
 
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
@@ -489,7 +491,7 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 func TestEnsureEvaluationsSynchronized_NoEvaluations(t *testing.T) {
 	ctx := context.TODO()
 	scheme := createTestScheme()
-	mdaiCR := newTestMdaiCR("test-hub", "default")
+	mdaiCR := newTestMdaiCR()
 	ruleName := "mdai-" + mdaiCR.Name + "-alert-rules"
 	promRule := &prometheusv1.PrometheusRule{
 		ObjectMeta: metav1.ObjectMeta{
@@ -658,7 +660,7 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 func TestEnsureStatusSetToDone(t *testing.T) {
 	ctx := context.TODO()
 	scheme := createTestScheme()
-	mdaiCR := newTestMdaiCR("test-hub", "default")
+	mdaiCR := newTestMdaiCR()
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
 
@@ -679,9 +681,6 @@ func TestEnsureStatusSetToDone(t *testing.T) {
 	}
 
 	cond := meta.FindStatusCondition(updatedCR.Status.Conditions, typeAvailableHub)
-	if cond == nil {
-		t.Fatalf("expected condition %q to be set", typeAvailableHub)
-	}
 	if cond.Status != metav1.ConditionTrue {
 		t.Errorf("expected condition %q to be True, got: %v", typeAvailableHub, cond.Status)
 	}
