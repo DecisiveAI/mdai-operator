@@ -27,7 +27,6 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/go-logr/logr"
-	"go.uber.org/zap"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -149,7 +148,7 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return err
 		}
 		valkeyAuditStreamExpiry = time.Duration(envExpiryMs) * time.Millisecond
-		log.Info("Using custom "+mdaiHubEventHistoryStreamName+" expiration threshold MS", zap.Int64("valkeyAuditStreamExpiryMs", valkeyAuditStreamExpiry.Milliseconds()))
+		log.Info("Using custom "+mdaiHubEventHistoryStreamName+" expiration threshold MS", "valkeyAuditStreamExpiryMs", valkeyAuditStreamExpiry.Milliseconds())
 	}
 
 	// watch collectors which have the hub label
