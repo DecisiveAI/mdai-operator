@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 
 	"strings"
 	"testing"
@@ -56,15 +57,6 @@ func newFakeClientForCR(cr *v1.MdaiHub, scheme *runtime.Scheme) client.Client {
 		WithObjects(cr, collector).
 		WithStatusSubresource(cr).
 		Build()
-}
-
-func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
 }
 
 func createTestScheme() *runtime.Scheme {
@@ -158,7 +150,7 @@ func TestEnsureFinalizerInitialized_AddsFinalizer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get updated CR: %v", err)
 	}
-	if !contains(updatedCR.Finalizers, hubFinalizer) {
+	if !slices.Contains(updatedCR.Finalizers, hubFinalizer) {
 		t.Errorf("Expected finalizer %q to be added", hubFinalizer)
 	}
 }
@@ -190,7 +182,7 @@ func TestEnsureFinalizerInitialized_AlreadyPresent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get updated CR: %v", err)
 	}
-	if len(updatedCR.Finalizers) != 1 || !contains(updatedCR.Finalizers, hubFinalizer) {
+	if len(updatedCR.Finalizers) != 1 || !slices.Contains(updatedCR.Finalizers, hubFinalizer) {
 		t.Errorf("Expected finalizers to contain only %q, got %v", hubFinalizer, updatedCR.Finalizers)
 	}
 }
@@ -263,10 +255,10 @@ func TestDeleteFinalizer(t *testing.T) {
 		t.Fatalf("deleteFinalizer returned error: %v", err)
 	}
 
-	if contains(mdaiCR.Finalizers, hubFinalizer) {
+	if slices.Contains(mdaiCR.Finalizers, hubFinalizer) {
 		t.Errorf("Expected finalizer %q to be removed", hubFinalizer)
 	}
-	if !contains(mdaiCR.Finalizers, "other") {
+	if !slices.Contains(mdaiCR.Finalizers, "other") {
 		t.Errorf("Expected finalizer %q to remain", "other")
 	}
 }

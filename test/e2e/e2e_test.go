@@ -61,8 +61,8 @@ var _ = Describe("Manager", Ordered, func() {
 		By("creating a empty secret for the controller-manager")
 		cmd = exec.Command("kubectl", "create", "secret", "generic", "valkey-secret",
 			"--namespace", namespace,
-			"--from-literal=VALKEY_ENDPOINT=",
-			"--from-literal=VALKEY_PASSWORD=")
+			"--from-literal=VALKEY_ENDPOINT=endpoint.valkey.decisive.ai",
+			"--from-literal=VALKEY_PASSWORD=admin")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create secret")
 
