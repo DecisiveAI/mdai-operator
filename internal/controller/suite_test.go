@@ -70,9 +70,9 @@ var _ = BeforeSuite(func() {
 		BinaryAssetsDirectory: filepath.Join("..", "..", "bin", "k8s",
 			fmt.Sprintf("1.31.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
 		// uncomment if you want webhook config deployed
-		//WebhookInstallOptions: envtest.WebhookInstallOptions{
+		// WebhookInstallOptions: envtest.WebhookInstallOptions{
 		//	Paths: []string{filepath.Join("..", "..", "..", "config", "webhook")},
-		//},
+		// },
 	}
 
 	var err error
