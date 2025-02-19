@@ -455,7 +455,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 				return OperationResult{}, err
 			}
 			valkeyClient := *c.valKeyClient
-			thresholdID := strconv.FormatInt(time.Now().UnixMilli()-valkeyAuditStreamExpiry.Milliseconds(), 10)
+			thresholdID := strconv.FormatInt(time.Now().Add(-valkeyAuditStreamExpiry).UnixMilli(), 10)
 			if result := valkeyClient.Do(ctx, valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(thresholdID).Id("*").FieldValue().FieldValueIter(composeValkeyStreamIterFromMap(mdaiHubEvent)).Build()); result.Error() != nil {
 				c.logger.Error(err, "Failed to write audit log entry!", "mdaiHubEvent", mdaiHubEvent)
 			}
