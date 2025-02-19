@@ -24,6 +24,8 @@ spec:
         command:
         - /manager
         env:
+        - name: VALKEY_AUDIT_STREAM_EXPIRY_MS
+          value: {{ .Values.auditStreamExpiryMs }}
         - name: VALKEY_ENDPOINT
           valueFrom:
             secretKeyRef:

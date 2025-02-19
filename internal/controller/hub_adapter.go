@@ -56,12 +56,13 @@ const (
 )
 
 type HubAdapter struct {
-	mdaiCR       *mdaiv1.MdaiHub
-	logger       logr.Logger
-	client       client.Client
-	recorder     record.EventRecorder
-	scheme       *runtime.Scheme
-	valKeyClient *valkey.Client
+	mdaiCR                  *mdaiv1.MdaiHub
+	logger                  logr.Logger
+	client                  client.Client
+	recorder                record.EventRecorder
+	scheme                  *runtime.Scheme
+	valKeyClient            *valkey.Client
+	valkeyAuditStreamExpiry time.Duration
 }
 
 type ObjectState bool
@@ -73,14 +74,16 @@ func NewHubAdapter(
 	recorder record.EventRecorder,
 	scheme *runtime.Scheme,
 	valkeyClient *valkey.Client,
+	valkeyAuditStreamExpiry time.Duration,
 ) *HubAdapter {
 	return &HubAdapter{
-		mdaiCR:       cr,
-		logger:       log,
-		client:       client,
-		recorder:     recorder,
-		scheme:       scheme,
-		valKeyClient: valkeyClient,
+		mdaiCR:                  cr,
+		logger:                  log,
+		client:                  client,
+		recorder:                recorder,
+		scheme:                  scheme,
+		valKeyClient:            valkeyClient,
+		valkeyAuditStreamExpiry: valkeyAuditStreamExpiry,
 	}
 }
 
