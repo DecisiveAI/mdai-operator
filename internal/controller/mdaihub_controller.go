@@ -56,6 +56,10 @@ const (
 	VariableKeyPrefix = "variable/"
 )
 
+var (
+	valkeyAuditStreamExpiry = 30 * 24 * time.Hour
+)
+
 // MdaiHubReconciler reconciles a MdaiHub object
 type MdaiHubReconciler struct {
 	client.Client
@@ -95,7 +99,7 @@ func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	_, err := r.ReconcileHandler(ctx, *NewHubAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme, r.ValKeyClient))
+	_, err := r.ReconcileHandler(ctx, *NewHubAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme, r.ValKeyClient, valkeyAuditStreamExpiry))
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -131,8 +135,20 @@ type ReconcileOperation func(context.Context) (OperationResult, error)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	log := mgr.GetLogger()
 	if err := r.initializeValkey(); err != nil {
 		return err
+	}
+
+	valkeyStreamExpiryMsStr := os.Getenv("VALKEY_AUDIT_STREAM_EXPIRY_MS")
+	if valkeyStreamExpiryMsStr != "" {
+		envExpiryMs, err := strconv.Atoi(valkeyStreamExpiryMsStr)
+		if err != nil {
+			log.Error(err, "Failed to parse valkeyStreamExpiryMs env var")
+			return err
+		}
+		valkeyAuditStreamExpiry = time.Duration(envExpiryMs) * time.Millisecond
+		log.Info("Using custom "+mdaiHubEventHistoryStreamName+" expiration threshold MS", "valkeyAuditStreamExpiryMs", valkeyAuditStreamExpiry.Milliseconds())
 	}
 
 	// watch collectors which have the hub label
@@ -193,9 +209,9 @@ func mdaiResourcesPredicate() predicate.Predicate {
 			return false // assuming only mdai operator creates managed resources
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			shouldReconsile := predicate.GenerationChangedPredicate{}.Update(e)
-			log.Info("<UpdateFunc> " + e.ObjectNew.GetName() + " shouldReconsile: " + strconv.FormatBool(shouldReconsile))
-			return shouldReconsile
+			shouldReconcile := predicate.GenerationChangedPredicate{}.Update(e)
+			log.Info("<UpdateFunc> " + e.ObjectNew.GetName() + " shouldReconcile: " + strconv.FormatBool(shouldReconcile))
+			return shouldReconcile
 		},
 		DeleteFunc: func(_ event.DeleteEvent) bool {
 			// log.Info("<DeleteFunc> " + e.Object.GetName() + " ignored")
