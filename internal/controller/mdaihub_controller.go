@@ -148,7 +148,7 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return err
 		}
 		valkeyAuditStreamExpiry = time.Duration(envExpiryMs) * time.Millisecond
-		log.Info("Using custom "+mdaiHubEventHistoryStreamName+" expiration threshold MS", "valkeyAuditStreamExpiryMs", valkeyAuditStreamExpiry.Milliseconds())
+		log.Info("Using custom "+MdaiHubEventHistoryStreamName+" expiration threshold MS", "valkeyAuditStreamExpiryMs", valkeyAuditStreamExpiry.Milliseconds())
 	}
 
 	// watch collectors which have the hub label

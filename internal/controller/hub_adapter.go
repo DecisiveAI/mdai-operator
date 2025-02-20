@@ -51,7 +51,7 @@ const (
 	watcherConfigMapPostfix = "-watcher-collector-config"
 
 	observerDefaultImage          = "public.ecr.aws/decisiveai/watcher-collector:0.1"
-	mdaiHubEventHistoryStreamName = "mdai_hub_event_history"
+	MdaiHubEventHistoryStreamName = "mdai_hub_event_history"
 	requeueTime                   = time.Second * 10
 )
 
@@ -438,9 +438,9 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 				c.logger.Error(err, "Failed to update OpenTelemetry Collector", "name", collectorCopy.Name)
 				return OperationResult{}, err
 			}
-			valkeyClient := *c.valKeyClient
+			valkeyClient := c.valKeyClient
 			thresholdID := strconv.FormatInt(time.Now().Add(-valkeyAuditStreamExpiry).UnixMilli(), 10)
-			if result := valkeyClient.Do(ctx, valkeyClient.B().Xadd().Key(mdaiHubEventHistoryStreamName).Minid().Threshold(thresholdID).Id("*").FieldValue().FieldValueIter(composeValkeyStreamIterFromMap(mdaiHubEvent)).Build()); result.Error() != nil {
+			if result := valkeyClient.Do(ctx, valkeyClient.B().Xadd().Key(MdaiHubEventHistoryStreamName).Minid().Threshold(thresholdID).Id("*").FieldValue().FieldValueIter(composeValkeyStreamIterFromMap(mdaiHubEvent)).Build()); result.Error() != nil {
 				c.logger.Error(err, "Failed to write audit log entry!", "mdaiHubEvent", mdaiHubEvent)
 			}
 		}
