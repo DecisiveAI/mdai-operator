@@ -70,11 +70,6 @@ test: manifests generate fmt vet envtest ## Run tests and generate code coverage
 	pushd gocover-cobertura && go build && popd
 	@echo "Converting coverage to Cobertura format..."
 	./gocover-cobertura/gocover-cobertura < cover.txt > coverage.xml
-#
-#	# Generate code coverage report using irongut/CodeCoverageSummary
-#	@echo "Generating coverage summary report..."
-#	curl -sL https://github.com/irongut/CodeCoverageSummary/archive/refs/tags/v1.3.0.tar.gz | tar xz
-#	./CodeCoverageSummary-1.3.0 --filename=coverage.xml --badge=false --fail-below-min=false --format=markdown --hide-branch-rate=false --hide-complexity=true --indicators=true --output=both --thresholds='60 80'
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
