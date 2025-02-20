@@ -32,8 +32,11 @@ const (
 	prometheusOperatorURL     = "https://github.com/prometheus-operator/prometheus-operator/" +
 		"releases/download/%s/bundle.yaml"
 
-	certmanagerVersion = "v1.16.0"
+	certmanagerVersion = "v1.17.0"
 	certmanagerURLTmpl = "https://github.com/jetstack/cert-manager/releases/download/%s/cert-manager.yaml"
+
+	otelUrl = "https://github.com/open-telemetry/opentelemetry-operator/releases/latest/" +
+		"download/opentelemetry-operator.yaml"
 )
 
 func warnError(err error) {
@@ -248,4 +251,42 @@ func UncommentCode(filename, target, prefix string) error {
 	// false positive
 	// nolint:gosec
 	return os.WriteFile(filename, out.Bytes(), 0644)
+}
+
+func InstallValkey() error {
+	cmd := exec.Command("helm", "install", "valkey",
+		"oci://registry-1.docker.io/bitnamicharts/valkey", "--set", "auth.password=abc")
+	_, err := Run(cmd)
+	return err
+}
+
+func UninstallValkey() {
+	cmd := exec.Command("helm", "uninstall", "valkey")
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
+}
+
+func InstallOtelOperator() error {
+	cmd := exec.Command("kubectl", "apply", "-f", otelUrl)
+	if _, err := Run(cmd); err != nil {
+		return err
+	}
+
+	// Wait for otel-operator to be ready
+	cmd = exec.Command("kubectl", "wait", "deployment.apps/opentelemetry-operator-controller-manager",
+		"--for", "condition=Available",
+		"--namespace", "opentelemetry-operator-system",
+		"--timeout", "5m",
+	)
+
+	_, err := Run(cmd)
+	return err
+}
+
+func UninstallOtelOperator() {
+	cmd := exec.Command("kubectl", "delete", "namespace", "opentelemetry-operator-system")
+	if _, err := Run(cmd); err != nil {
+		warnError(err)
+	}
 }

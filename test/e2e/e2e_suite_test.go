@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -106,6 +107,15 @@ var _ = BeforeSuite(func() {
 		}
 	}
 
+	_, _ = fmt.Fprintf(GinkgoWriter, "Installing Valkey...\n")
+	Expect(utils.InstallValkey()).To(Succeed(), "Failed to install Valkey")
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for certificates...\n")
+	time.Sleep(60 * time.Second)
+
+	_, _ = fmt.Fprintf(GinkgoWriter, "Installing OTEL...\n")
+	Expect(utils.InstallOtelOperator()).To(Succeed(), "Failed to install OpenTelemetry Operator")
+
 })
 
 var _ = AfterSuite(func() {
@@ -118,5 +128,8 @@ var _ = AfterSuite(func() {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")
 		utils.UninstallCertManager()
 	}
+
+	utils.UninstallOtelOperator()
+	utils.UninstallValkey()
 
 })

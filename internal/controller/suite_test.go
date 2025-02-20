@@ -59,7 +59,9 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "config", "crd", "bases"),
+		},
 		ErrorIfCRDPathMissing: true,
 
 		// The BinaryAssetsDirectory is only required if you want to run the tests directly
@@ -69,9 +71,8 @@ var _ = BeforeSuite(func() {
 		// the tests directly. When we run make test it will be setup and used automatically.
 		BinaryAssetsDirectory: filepath.Join("..", "..", "bin", "k8s",
 			fmt.Sprintf("1.31.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
-		// uncomment if you want webhook config deployed
 		// WebhookInstallOptions: envtest.WebhookInstallOptions{
-		//	Paths: []string{filepath.Join("..", "..", "..", "config", "webhook")},
+		//	Paths: []string{filepath.Join("..", "..", "config", "webhook")},
 		// },
 	}
 
