@@ -66,7 +66,7 @@ helm upgrade prometheus prometheus-community/kube-prometheus-stack -f test/test-
 kubectl create namespace otel
 kubectl create namespace mdai
 kubectl create secret generic valkey-secret \
-  --from-literal=VALKEY_ENDPOINT=valkey-primary.default.svc.cluster.local:6379 \
+  --from-literal=VALKEY_URI=redis://mdai-valkey-node-0.mdai-valkey-headless.mdai.svc.cluster.local:26379?master_set=myprimary \
   --from-literal=VALKEY_PASSWORD=abc \
   --namespace=mdai \
   --dry-run=client -o yaml | kubectl apply -f -

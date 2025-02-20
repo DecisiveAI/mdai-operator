@@ -65,13 +65,11 @@ spec:
           - --health-probe-bind-address=:8081
         image: controller:latest
         env:
-          - name: VALKEY_AUDIT_STREAM_EXPIRY_MS
-            value: "2592000000"
-          - name: VALKEY_ENDPOINT
+          - name: VALKEY_URI
             valueFrom:
               secretKeyRef:
                 name: valkey-secret
-                key: VALKEY_ENDPOINT
+                key: VALKEY_URI
           - name: VALKEY_PASSWORD
             valueFrom:
               secretKeyRef:

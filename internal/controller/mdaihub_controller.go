@@ -272,17 +272,20 @@ func (r *MdaiHubReconciler) initializeValkey() error {
 	retryCount := 0
 
 	// for built-in valkey storage we read the environment variable to get connection string
-	valkeyEndpoint := os.Getenv("VALKEY_ENDPOINT")
 	valkeyPassword := os.Getenv("VALKEY_PASSWORD")
-	if valkeyEndpoint == "" || valkeyPassword == "" {
-		return errors.New("VALKEY_ENDPOINT and VALKEY_PASSWORD environment variables must be set to enable ValKey client")
+	valkeyURI := os.Getenv("VALKEY_URI")
+	if valkeyURI == "" || valkeyPassword == "" {
+		log.Info("ValKey client is not enabled; skipping initialization")
+		return nil
 	}
-	log.Info("Initializing ValKey client", "endpoint", valkeyEndpoint)
+
+	log.Info("Initializing ValKey client", "uri", valkeyURI)
 	operation := func() (string, error) {
-		valkeyClient, err := valkey.NewClient(valkey.ClientOption{
-			InitAddress: []string{valkeyEndpoint},
-			Password:    valkeyPassword,
-		})
+		clientOption := valkey.MustParseURL(valkeyURI)
+		clientOption.Sentinel.Password = valkeyPassword
+		clientOption.SendToReplicas = func(cmd valkey.Completed) bool { return cmd.IsReadOnly() }
+		clientOption.Password = valkeyPassword
+		valkeyClient, err := valkey.NewClient(clientOption)
 		if err != nil {
 			retryCount++
 			log.Error(err, "Failed to initialize ValKey client. Retrying...")

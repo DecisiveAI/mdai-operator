@@ -27,12 +27,11 @@ spec:
         - /manager
         env:
         - name: VALKEY_AUDIT_STREAM_EXPIRY_MS
-          value: {{ quote .Values.controllerManager.manager.env.valkeyAuditStreamExpiryMs
-            }}
-        - name: VALKEY_ENDPOINT
+          value: "{{ .Values.auditStreamExpiryMs }}"
+        - name: VALKEY_URI
           valueFrom:
             secretKeyRef:
-              key: VALKEY_ENDPOINT
+              key: VALKEY_URI
               name: valkey-secret
         - name: VALKEY_PASSWORD
           valueFrom:
