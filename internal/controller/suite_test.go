@@ -71,9 +71,9 @@ var _ = BeforeSuite(func() {
 		// the tests directly. When we run make test it will be setup and used automatically.
 		BinaryAssetsDirectory: filepath.Join("..", "..", "bin", "k8s",
 			fmt.Sprintf("1.31.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
-		//WebhookInstallOptions: envtest.WebhookInstallOptions{
+		// WebhookInstallOptions: envtest.WebhookInstallOptions{
 		//	Paths: []string{filepath.Join("..", "..", "config", "webhook")},
-		//},
+		// },
 	}
 
 	var err error

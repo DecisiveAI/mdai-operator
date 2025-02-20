@@ -34,6 +34,9 @@ const (
 
 	certmanagerVersion = "v1.17.0"
 	certmanagerURLTmpl = "https://github.com/jetstack/cert-manager/releases/download/%s/cert-manager.yaml"
+
+	otelUrl = "https://github.com/open-telemetry/opentelemetry-operator/releases/latest/" +
+		"download/opentelemetry-operator.yaml"
 )
 
 func warnError(err error) {
@@ -251,7 +254,8 @@ func UncommentCode(filename, target, prefix string) error {
 }
 
 func InstallValkey() error {
-	cmd := exec.Command("helm", "install", "valkey", "oci://registry-1.docker.io/bitnamicharts/valkey", "--set", "auth.password=abc")
+	cmd := exec.Command("helm", "install", "valkey",
+		"oci://registry-1.docker.io/bitnamicharts/valkey", "--set", "auth.password=abc")
 	_, err := Run(cmd)
 	return err
 }
@@ -264,8 +268,7 @@ func UninstallValkey() {
 }
 
 func InstallOtelOperator() error {
-	//kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releases/latest/download/opentelemetry-operator.yaml
-	cmd := exec.Command("kubectl", "apply", "-f", "https://github.com/open-telemetry/opentelemetry-operator/releases/latest/download/opentelemetry-operator.yaml")
+	cmd := exec.Command("kubectl", "apply", "-f", otelUrl)
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
