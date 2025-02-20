@@ -60,8 +60,21 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+test: manifests generate fmt vet envtest ## Run tests and generate code coverage.
+	# Run Go tests and produce coverage report
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile=cover.txt
+
+	# Install gocover-cobertura and convert the Go coverage to Cobertura format
+	@echo "Installing gocover-cobertura..."
+	git clone https://github.com/eldondev/gocover-cobertura
+	pushd gocover-cobertura && go build && popd
+	@echo "Converting coverage to Cobertura format..."
+	./gocover-cobertura/gocover-cobertura < cover.txt > coverage.xml
+
+	# Generate code coverage report using irongut/CodeCoverageSummary
+	@echo "Generating coverage summary report..."
+	curl -sL https://github.com/irongut/CodeCoverageSummary/releases/download/v1.3.0/codecov_summary_linux_amd64.tar.gz | tar xz
+	./codecov_summary_linux_amd64 --filename=coverage.xml --badge=false --fail-below-min=false --format=markdown --hide-branch-rate=false --hide-complexity=true --indicators=true --output=both --thresholds='60 80'
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
