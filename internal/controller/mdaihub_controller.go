@@ -65,7 +65,7 @@ type MdaiHubReconciler struct {
 	client.Client
 	Scheme       *runtime.Scheme
 	Recorder     record.EventRecorder
-	ValKeyClient *valkey.Client
+	ValKeyClient valkey.Client
 	valkeyEvents chan event.GenericEvent
 }
 
@@ -148,7 +148,7 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return err
 		}
 		valkeyAuditStreamExpiry = time.Duration(envExpiryMs) * time.Millisecond
-		log.Info("Using custom "+mdaiHubEventHistoryStreamName+" expiration threshold MS", "valkeyAuditStreamExpiryMs", valkeyAuditStreamExpiry.Milliseconds())
+		log.Info("Using custom "+MdaiHubEventHistoryStreamName+" expiration threshold MS", "valkeyAuditStreamExpiryMs", valkeyAuditStreamExpiry.Milliseconds())
 	}
 
 	// watch collectors which have the hub label
@@ -228,7 +228,7 @@ func (r *MdaiHubReconciler) startValkeySubscription() {
 	ctx := context.Background()
 	log := logger.FromContext(ctx)
 	pattern := "__keyspace@0__:" + VariableKeyPrefix + "*"
-	valkeyClient := *r.ValKeyClient
+	valkeyClient := r.ValKeyClient
 	log.Info("Starting ValKey subscription", "pattern", pattern)
 	// Subscribe to all ValKey events targeting any key
 	// later, we can switch to dynamically subscribing to events targeting specific keys
@@ -275,8 +275,7 @@ func (r *MdaiHubReconciler) initializeValkey() error {
 	valkeyEndpoint := os.Getenv("VALKEY_ENDPOINT")
 	valkeyPassword := os.Getenv("VALKEY_PASSWORD")
 	if valkeyEndpoint == "" || valkeyPassword == "" {
-		log.Info("ValKey client is not enabled; skipping initialization")
-		return nil
+		return errors.New("VALKEY_ENDPOINT and VALKEY_PASSWORD environment variables must be set to enable ValKey client")
 	}
 	log.Info("Initializing ValKey client", "endpoint", valkeyEndpoint)
 	operation := func() (string, error) {
@@ -289,7 +288,7 @@ func (r *MdaiHubReconciler) initializeValkey() error {
 			log.Error(err, "Failed to initialize ValKey client. Retrying...")
 			return "", err
 		}
-		r.ValKeyClient = &valkeyClient
+		r.ValKeyClient = valkeyClient
 		return "", nil
 	}
 
