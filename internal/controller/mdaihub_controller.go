@@ -275,8 +275,7 @@ func (r *MdaiHubReconciler) initializeValkey() error {
 	valkeyPassword := os.Getenv("VALKEY_PASSWORD")
 	valkeyURI := os.Getenv("VALKEY_URI")
 	if valkeyURI == "" || valkeyPassword == "" {
-		log.Info("ValKey client is not enabled; skipping initialization")
-		return nil
+		return errors.New("VALKEY_URI and VALKEY_PASSWORD environment variables must be set to enable ValKey client")
 	}
 
 	log.Info("Initializing ValKey client", "uri", valkeyURI)
