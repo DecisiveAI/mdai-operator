@@ -59,17 +59,23 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
+.PHONY: test-coverage
+test-coverage: manifests generate fmt vet envtest ## Run tests and generate code coverage.
+	# Run Go tests and produce coverage report
+	@command -v kind >/dev/null 2>&1 || { \
+		echo "Kind is not installed. Please install Kind manually."; \
+		exit 1; \
+	}
+	@kind get clusters | grep -q 'kind' || { \
+		echo "No Kind cluster is running. Please start a Kind cluster before running the e2e tests."; \
+		exit 1; \
+	}
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v -E "/test/utils|cmd") -coverprofile=cover.txt
+
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests and generate code coverage.
 	# Run Go tests and produce coverage report
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile=cover.txt
-
-	# Install gocover-cobertura and convert the Go coverage to Cobertura format
-	@echo "Installing gocover-cobertura..."
-	git clone https://github.com/eldondev/gocover-cobertura
-	pushd gocover-cobertura && go build && popd
-	@echo "Converting coverage to Cobertura format..."
-	./gocover-cobertura/gocover-cobertura < cover.txt > coverage.xml
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
