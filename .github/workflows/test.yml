@@ -73,4 +73,18 @@ jobs:
         with:
           name: code-coverage
           path: coverage.xml
-          overwrite: 'true'
+          overwrite: true
+
+      - name: Deploy Coverage Report to GitHub Pages
+        if: github.event.pull_request.merged == true && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          publish_branch: gh-pages
+
+      - name: Add Coverage Report to GitHub Pages
+        if: github.event.pull_request.merged == true && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p coverage-report
+          mv coverage.xml coverage-report/
