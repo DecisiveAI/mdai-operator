@@ -78,3 +78,11 @@ jobs:
         with:
           recreate: true
           path: code-coverage-results.md
+
+      - name: Upload coverage report as artifact
+        if: github.event.pull_request.merged == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-coverage
+          path: coverage.xml
+          overwrite: 'true'
