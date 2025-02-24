@@ -137,11 +137,11 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 				}
 				storageKeys[variable.StorageKey] = struct{}{}
 
-				for _, with := range variable.With {
-					if _, exists := exportedVariableNames[with.ExportedVariableName]; exists {
-						return warnings, fmt.Errorf("variable %s: exported variable name %s is duplicated", variable.StorageKey, with.ExportedVariableName)
+				for _, with := range variable.SerializeAs {
+					if _, exists := exportedVariableNames[with.Name]; exists {
+						return warnings, fmt.Errorf("variable %s: exported variable name %s is duplicated", variable.StorageKey, with.Name)
 					}
-					exportedVariableNames[with.ExportedVariableName] = struct{}{}
+					exportedVariableNames[with.Name] = struct{}{}
 
 					transformer := with.Transformer
 					switch variable.Type {

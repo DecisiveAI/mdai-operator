@@ -359,10 +359,10 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 					valueAsSlice = append(valueAsSlice, *variable.DefaultValue)
 				}
 
-				for _, with := range variable.With {
-					exportedVariableName := with.ExportedVariableName
+				for _, with := range variable.SerializeAs {
+					exportedVariableName := with.Name
 					if envMap[exportedVariableName] != "" {
-						c.logger.Info("VariableWith configuration overrides existing configuration", "exportedVariableName", exportedVariableName)
+						c.logger.Info("Serializer configuration overrides existing configuration", "exportedVariableName", exportedVariableName)
 						continue
 					}
 
