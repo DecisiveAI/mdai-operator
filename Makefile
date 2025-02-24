@@ -61,7 +61,7 @@ vet: ## Run go vet against code.
 
 .PHONY: test-coverage
 test-coverage: manifests generate fmt vet envtest ## Run tests and generate code coverage.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v -E "/test/utils|cmd") -coverprofile=coverage.txt
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v -E "/e2e|/test/utils|cmd") -coverprofile=coverage.txt
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests and generate code coverage.
@@ -83,7 +83,7 @@ test-e2e: manifests generate fmt vet ## Run the e2e tests. Expected an isolated 
 		echo "No Kind cluster is running. Please start a Kind cluster before running the e2e tests."; \
 		exit 1; \
 	}
-	go test ./test/e2e/ -v -ginkgo.v
+	go test ./test/e2e/ -v -ginkgo.v -coverprofile=e2e-coverage.txt
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
