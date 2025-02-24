@@ -61,16 +61,7 @@ vet: ## Run go vet against code.
 
 .PHONY: test-coverage
 test-coverage: manifests generate fmt vet envtest ## Run tests and generate code coverage.
-	# Run Go tests and produce coverage report
-	@command -v kind >/dev/null 2>&1 || { \
-		echo "Kind is not installed. Please install Kind manually."; \
-		exit 1; \
-	}
-	@kind get clusters | grep -q 'kind' || { \
-		echo "No Kind cluster is running. Please start a Kind cluster before running the e2e tests."; \
-		exit 1; \
-	}
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v -E "/test/utils|cmd") -coverprofile=cover.txt
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v -E "/test/utils|cmd") -coverprofile=coverage.txt
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests and generate code coverage.
