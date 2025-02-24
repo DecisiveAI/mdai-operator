@@ -98,5 +98,5 @@ jobs:
       - name: Add Coverage Report to GitHub Pages
         if: github.event.pull_request.merged == true && github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          mkdir -p coverage-report
-          mv coverage.xml coverage-report/
+          mkdir -p public
+          mv coverage.xml public/
