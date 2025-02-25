@@ -24,14 +24,14 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/DecisiveAI/mdai-operator/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/DecisiveAI/mdai-operator/test/utils"
 )
 
 // namespace where the project is deployed in
 const namespace = "mdai"
+const otelNamespace = "otel"
 
 // serviceAccountName created for the project
 const serviceAccountName = "mdai-operator-controller-manager"
@@ -51,6 +51,11 @@ var _ = Describe("Manager", Ordered, func() {
 		By("creating manager namespace")
 		cmd := exec.Command("kubectl", "create", "ns", namespace)
 		_, err := utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to create namespace")
+
+		By("creating otel namespace")
+		cmd = exec.Command("kubectl", "create", "ns", otelNamespace)
+		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create namespace")
 
 		By("installing CRDs")
@@ -90,6 +95,7 @@ var _ = Describe("Manager", Ordered, func() {
 		By("removing manager namespace")
 		cmd = exec.Command("kubectl", "delete", "ns", namespace)
 		_, _ = utils.Run(cmd)
+
 	})
 
 	// After each test, check for failures and collect logs, events,
@@ -282,14 +288,91 @@ var _ = Describe("Manager", Ordered, func() {
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput := getMetricsOutput()
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+		It("should apply MdaiHub CRs successfully", func() {
+			By("applying a MdaiHub CR")
+			verifyMdaiHub := func(g Gomega) {
+				cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/mdai_v1_mdaihub.yaml", "-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyMdaiHub).Should(Succeed())
+		})
+
+		It("should apply OTEL CRs successfully", func() {
+			By("applying a MdaiHub CR")
+			verifyMdaiHub := func(g Gomega) {
+				cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/collector.yaml", "-n", otelNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyMdaiHub).Should(Succeed())
+		})
+
+		It("should have the MdaiHub CR in Ready state", func() {
+			By("verifying the status of the MdaiHub CR")
+			verifyStatus := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "mdaihub", "mdaihub-sample", "-n", namespace,
+					"-o", "jsonpath='{.status.conditions[?(@.type=='Available')].status}'")
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(out).To(ContainSubstring("True"))
+			}
+			Eventually(verifyStatus, "2m", "5s").Should(Succeed())
+		})
+
+		It("should create the config map for variables", func() {
+			By("verifying the config map exists")
+			verifyConfigMap := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "configmap", "mdaihub-sample-variables", "-n", otelNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyConfigMap, "1m", "5s").Should(Succeed())
+			// TODO check configmap content
+
+		})
+
+		It("should create the config map for watcher", func() {
+			By("verifying the config map exists")
+			verifyConfigMap := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "configmap", "mdaihub-sample-watcher-collector-config", "-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyConfigMap, "1m", "5s").Should(Succeed())
+			// TODO check configmap content
+		})
+
+		It("should deploy the watcher", func() {
+			By("verifying the watcher deployment exists")
+			verifyWatcher := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployment", "mdaihub-sample-watcher-collector", "-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyWatcher, "1m", "5s").Should(Succeed())
+			// TODO check that it's running without errors
+		})
+
+		It("should delete MdaiHub CRs", func() {
+			By("applying a MdaiHub CR")
+			verifyMdaiHub := func(g Gomega) {
+				cmd := exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/mdai_v1_mdaihub.yaml", "-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyMdaiHub).Should(Succeed())
+		})
+
+		It("should delete OTEL CRs", func() {
+			By("applying a MdaiHub CR")
+			verifyMdaiHub := func(g Gomega) {
+				cmd := exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/collector.yaml", "-n", otelNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyMdaiHub).Should(Succeed())
+		})
 	})
 })
 
