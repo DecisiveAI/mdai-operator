@@ -75,6 +75,13 @@ jobs:
           path: coverage.xml
           overwrite: true
 
+      - name: Add Coverage Report to GitHub Pages
+        if: github.event_name == 'pull_request'
+        run: |
+          ls
+          mkdir -p public
+          mv code-coverage-results.md public/
+
       - name: Deploy Coverage Report to GitHub Pages
         if: github.event_name == 'pull_request'
         uses: peaceiris/actions-gh-pages@v4
@@ -82,9 +89,3 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./public
           publish_branch: gh-pages
-
-      - name: Add Coverage Report to GitHub Pages
-        if: github.event_name == 'pull_request'
-        run: |
-          mkdir -p public
-          mv code-coverage-results.md public/
