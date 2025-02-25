@@ -11,7 +11,7 @@ controllerManager:
         - ALL
     image:
       repository: public.ecr.aws/p3k6k6h3/mdai-operator
-      tag: 0.1.4
+      tag: 0.1.5
     resources:
       limits:
         cpu: 500m

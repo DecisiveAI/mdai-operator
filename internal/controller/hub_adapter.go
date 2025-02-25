@@ -359,14 +359,14 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 					valueAsSlice = append(valueAsSlice, *variable.DefaultValue)
 				}
 
-				for _, with := range variable.SerializeAs {
-					exportedVariableName := with.Name
+				for _, serializer := range variable.SerializeAs {
+					exportedVariableName := serializer.Name
 					if envMap[exportedVariableName] != "" {
 						c.logger.Info("Serializer configuration overrides existing configuration", "exportedVariableName", exportedVariableName)
 						continue
 					}
 
-					transformer := with.Transformer
+					transformer := serializer.Transformer
 					if transformer == nil {
 						c.logger.Info("No Transformer configured", "exportedVariableName", exportedVariableName)
 						continue

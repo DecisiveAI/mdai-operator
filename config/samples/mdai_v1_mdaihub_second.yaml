@@ -13,8 +13,8 @@ spec:
       defaultValue: "n/a"
       type: set
       storageType: "mdai-valkey"
-      with:
-        - exportedVariableName: "SERVICE_LIST_REGEX"
+      serializeAs:
+        - name: "SERVICE_LIST_REGEX"
           transformer:
             join:
               delimiter: "|"
