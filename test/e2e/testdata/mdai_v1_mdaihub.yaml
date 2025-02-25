@@ -11,11 +11,11 @@ spec:
     - storageKey: service_list_1
       defaultValue: "n/a"
       serializeAs:
-        - exportedVariableName: "SERVICE_LIST_REGEX"
+        - name: "SERVICE_LIST_REGEX"
           transformer:
             join:
               delimiter: "|"
-        - exportedVariableName: "SERVICE_LIST_CSV"
+        - name: "SERVICE_LIST_CSV"
           transformer:
             join:
               delimiter: ","
@@ -24,11 +24,11 @@ spec:
     - storageKey: service_list_2
       defaultValue: "n/a"
       serializeAs:
-        - exportedVariableName: "SERVICE_LIST_2_REGEX"
+        - name: "SERVICE_LIST_2_REGEX"
           transformer:
             join:
               delimiter: "|"
-        - exportedVariableName: "SERVICE_LIST_2_CSV"
+        - name: "SERVICE_LIST_2_CSV"
           transformer:
             join:
               delimiter: ","
