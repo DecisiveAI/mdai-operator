@@ -87,4 +87,4 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           mkdir -p public
-          mv coverage.xml public/
+          mv code-coverage-results.md public/
