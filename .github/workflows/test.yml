@@ -68,7 +68,7 @@ jobs:
           path: code-coverage-results.md
 
       - name: Upload coverage report as artifact
-        if: github.event.pull_request.merged == true
+        if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: code-coverage
@@ -76,7 +76,7 @@ jobs:
           overwrite: true
 
       - name: Deploy Coverage Report to GitHub Pages
-        if: github.event.pull_request.merged == true && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'pull_request'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -84,7 +84,7 @@ jobs:
           publish_branch: gh-pages
 
       - name: Add Coverage Report to GitHub Pages
-        if: github.event.pull_request.merged == true && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'pull_request'
         run: |
-          mkdir -p coverage-report
-          mv coverage.xml coverage-report/
+          mkdir -p public
+          mv coverage.xml public/
