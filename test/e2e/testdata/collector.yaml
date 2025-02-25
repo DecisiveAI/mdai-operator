@@ -1,0 +1,74 @@
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  labels:
+    mdaihub-name: mdaihub-sample
+  name: gateway-3
+  namespace: otel
+spec:
+  envFrom:
+    - configMapRef:
+        name: mdaihub-sample-variables
+  config:
+    exporters:
+      debug:
+        sampling_initial: 2
+        sampling_thereafter: 100
+        verbosity: detailed
+      otlp/mdai_datalyzer:
+        endpoint: mdaihub-sample-watcher-collector-service.mdai.svc.cluster.local:4317
+        tls:
+          insecure: true
+    processors:
+      filter/ottl:
+        logs:
+          log_record:
+            - 'IsMatch(resource.attributes["service.name"], "${env:SERVICE_LIST_REGEX}") and severity_number < SEVERITY_NUMBER_WARN'
+      batch/mdai_datalyzer:
+        send_batch_size: 100
+        timeout: 15s
+      resource:
+        attributes:
+          - action: insert
+            from_attribute: k8s.pod.uid
+            key: service.instance.id
+      resource/mdai_datalyzer:
+        attributes:
+          - action: insert
+            key: mdai_received
+            value: "1"
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    service:
+      pipelines:
+        logs:
+          exporters:
+            - debug
+            - otlp/mdai_datalyzer
+          processors:
+            - resource
+            - filter/ottl
+          receivers:
+            - otlp
+        metrics:
+          exporters:
+            - debug
+            - otlp/mdai_datalyzer
+          processors:
+            - resource
+          receivers:
+            - otlp
+        traces:
+          exporters:
+            - debug
+            - otlp/mdai_datalyzer
+          processors:
+            - resource
+          receivers:
+            - otlp
+

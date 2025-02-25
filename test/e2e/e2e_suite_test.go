@@ -48,7 +48,7 @@ var (
 )
 
 // TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
-// temporary environment to validate project changes with the the purposed to be used in CI jobs.
+// temporary environment to validate project changes with the purposed to be used in CI jobs.
 // The default setup requires Kind, builds/loads the Manager Docker image locally, and installs
 // CertManager and Prometheus.
 func TestE2E(t *testing.T) {
@@ -76,8 +76,6 @@ var _ = BeforeSuite(func() {
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) image")
 
-	// TODO(user): If you want to change the e2e test vendor from Kind, ensure the image is
-	// built and available before running the tests. Also, remove the following block.
 	By("loading the manager(Operator) image on Kind")
 	err = utils.LoadImageToKindClusterWithName(projectImage)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager(Operator) image into Kind")
@@ -111,7 +109,7 @@ var _ = BeforeSuite(func() {
 	Expect(utils.InstallValkey()).To(Succeed(), "Failed to install Valkey")
 
 	_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for certificates...\n")
-	time.Sleep(60 * time.Second)
+	time.Sleep(15 * time.Second)
 
 	_, _ = fmt.Fprintf(GinkgoWriter, "Installing OTEL...\n")
 	Expect(utils.InstallOtelOperator()).To(Succeed(), "Failed to install OpenTelemetry Operator")
