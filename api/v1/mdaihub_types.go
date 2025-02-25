@@ -22,12 +22,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-type VariableWith struct {
-	// ExportedVariableName The environment variable name to be used to access the variable's value.
+type Serializer struct {
+	// Name The environment variable name to be used to access the variable's value.
 	// +kubeuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubebuilder:validation:MinLength=1
 	// +kubeuilder:validation:Required
-	ExportedVariableName string `json:"exportedVariableName" yaml:"exportedVariableName"`
+	Name string `json:"name" yaml:"name"`
 	// Transformer The transformation applied to the value of the variable before it is assigned as an environment variable.
 	// +kubebuilder:validation:Optional
 	Transformer *VariableTransformer `json:"transformer,omitempty" yaml:"transformer,omitempty"`
@@ -65,7 +65,7 @@ type Variable struct {
 	DefaultValue *string `json:"defaultValue,omitempty" yaml:"defaultValue,omitempty"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems=1
-	With []VariableWith `json:"with" yaml:"with"`
+	SerializeAs []Serializer `json:"serializeAs" yaml:"serializeAs"`
 }
 
 type VariableUpdate struct {

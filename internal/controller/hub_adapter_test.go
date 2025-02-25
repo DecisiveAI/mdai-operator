@@ -317,8 +317,8 @@ func TestEnsureVariableSynced(t *testing.T) {
 	storageType := v1.VariableSourceTypeBultInValkey
 	variableType := v1.VariableTypeSet
 	defaultVal := "default"
-	varWith := v1.VariableWith{
-		ExportedVariableName: "MY_ENV",
+	varWith := v1.Serializer{
+		Name: "MY_ENV",
 		Transformer: &v1.VariableTransformer{
 			Join: &v1.JoinFunction{
 				Delimiter: ",",
@@ -330,7 +330,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 		Type:         variableType,
 		StorageKey:   "mykey",
 		DefaultValue: &defaultVal,
-		With:         []v1.VariableWith{varWith},
+		SerializeAs:  []v1.Serializer{varWith},
 	}
 	mdaiCR := newTestMdaiCR()
 	mdaiCR.Spec.Variables = &[]v1.Variable{variable}

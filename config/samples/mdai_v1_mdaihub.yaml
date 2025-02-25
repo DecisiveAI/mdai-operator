@@ -14,12 +14,12 @@ spec:
   variables:
     - storageKey: service_list_1
       defaultValue: "n/a"
-      with:
-        - exportedVariableName: "SERVICE_LIST_REGEX"
+      serializeAs:
+        - name: "SERVICE_LIST_REGEX"
           transformer:
             join:
               delimiter: "|"
-        - exportedVariableName: "SERVICE_LIST_CSV"
+        - name: "SERVICE_LIST_CSV"
           transformer:
             join:
               delimiter: ","
@@ -28,12 +28,12 @@ spec:
       storageType: "mdai-valkey"
     - storageKey: service_list_2
       defaultValue: "n/a"
-      with:
-        - exportedVariableName: "SERVICE_LIST_2_REGEX"
+      serializeAs:
+        - name: "SERVICE_LIST_2_REGEX"
           transformer:
             join:
               delimiter: "|"
-        - exportedVariableName: "SERVICE_LIST_2_CSV"
+        - name: "SERVICE_LIST_2_CSV"
           transformer:
             join:
               delimiter: ","
