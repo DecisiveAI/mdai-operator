@@ -10,7 +10,7 @@ spec:
   variables:
     - storageKey: service_list_1
       defaultValue: "n/a"
-      with:
+      serializeAs:
         - exportedVariableName: "SERVICE_LIST_REGEX"
           transformer:
             join:
@@ -23,7 +23,7 @@ spec:
       storageType: "mdai-valkey"
     - storageKey: service_list_2
       defaultValue: "n/a"
-      with:
+      serializeAs:
         - exportedVariableName: "SERVICE_LIST_2_REGEX"
           transformer:
             join:
