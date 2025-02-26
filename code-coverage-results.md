@@ -5,6 +5,6 @@ Package | Line Rate | Health
 github.com/DecisiveAI/mdai-operator/api/v1 | 57% | ➖
 github.com/DecisiveAI/mdai-operator/internal/controller | 52% | ➖
 github.com/DecisiveAI/mdai-operator/internal/webhook/v1 | 0% | ❌
-**Summary** | **49%** (685 / 1392) | ➖
+**Summary** | **49%** (685 / 1395) | ➖
 
 _Minimum allowed line rate is `40%`_
