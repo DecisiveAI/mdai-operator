@@ -36,47 +36,46 @@ jobs:
           go mod tidy
           make test-coverage
 
-      - name: Install gocover-covertura
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-coverage
+          path: coverage.txt
+
+  comment:
+    name: Comment code coverage
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      actions: read  # to download code coverage results from "test" job
+      pull-requests: write # write permission needed to comment on PR
+    steps:
+      - name: Create coverage report
+        uses: fgrosse/go-coverage-report@v1.1.1 # Consider using a Git revision for maximum security
+        with:
+          coverage-artifact-name: "code-coverage" # can be omitted if you used this default value
+          coverage-file-name: "coverage.txt" # can be omitted if you used this default value
+      - name: Verify report
         run: |
-          #!/usr/bin/env bash
-          git clone https://github.com/eldondev/gocover-cobertura
-          pushd gocover-cobertura
-          go build
-          popd
+          ls
+#      - name: Archive coverage report
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: code-coverage-results
+#          path: coverage.md # TODO: find correct file name
 
-      - name: Convert go coverage to corbetura format
-        run: ./gocover-cobertura/gocover-cobertura < coverage.txt > coverage.xml
-
-      - name: Generate Code Coverage Report
-        uses: irongut/CodeCoverageSummary@v1.3.0
-        with:
-          filename: coverage.xml
-          badge: true
-          fail_below_min: true
-          format: markdown
-          hide_branch_rate: false
-          hide_complexity: true
-          indicators: true
-          output: both
-          thresholds: '40 60'
-
-      - name: Add Coverage PR Comment
-        uses: marocchino/sticky-pull-request-comment@v2
-        if: github.event_name == 'pull_request'
-        with:
-          recreate: true
-          path: code-coverage-results.md
-
-      - name: Add Coverage Report to GitHub Pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          mkdir -p public
-          mv code-coverage-results.md public/
-
-      - name: Deploy Coverage Report to GitHub Pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./public
-          publish_branch: gh-pages
+#      - name: Add Coverage Report to GitHub Pages
+#        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+#        run: |
+#          mkdir -p public
+#          mv code-coverage-results.md public/
+#
+#      - name: Deploy Coverage Report to GitHub Pages
+#        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+#        uses: peaceiris/actions-gh-pages@v4
+#        with:
+#          github_token: ${{ secrets.GITHUB_TOKEN }}
+#          publish_dir: ./public
+#          publish_branch: gh-pages
