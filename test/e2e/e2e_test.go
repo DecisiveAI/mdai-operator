@@ -288,7 +288,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
-		It("should apply MdaiHub CRs successfully", func() {
+		It("should reconcile successfully", func() {
 			By("applying a MdaiHub CR")
 			verifyMdaiHub := func(g Gomega) {
 				cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/mdai_v1_mdaihub.yaml", "-n", namespace)
@@ -296,10 +296,22 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 			}
 			Eventually(verifyMdaiHub).Should(Succeed())
+
+			By("checking manager's metrics")
+			verifyMetrics := func(g Gomega) {
+				metricsOutput := getMetricsOutputFull()
+				Expect(metricsOutput).To(SatisfyAny(
+					// there is some variability in the numbers of reconciles, so we check for a range
+					ContainSubstring(`controller_runtime_reconcile_total{controller="mdaihub",result="success"} 4`),
+					ContainSubstring(`controller_runtime_reconcile_total{controller="mdaihub",result="success"} 5`),
+				))
+			}
+			Eventually(verifyMetrics, "30s", "10s").Should(Succeed())
+
 		})
 
-		It("should apply OTEL CRs successfully", func() {
-			By("applying a MdaiHub CR")
+		It("should trigger another reconcile on OTEL CR created", func() {
+			By("applying a OTEL CR")
 			verifyMdaiHub := func(g Gomega) {
 				cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/collector.yaml", "-n", otelNamespace)
 				_, err := utils.Run(cmd)
@@ -318,10 +330,17 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(out).To(ContainSubstring("True"))
 			}
 			Eventually(verifyStatus, "2m", "5s").Should(Succeed())
+			metricsOutput := getMetricsOutputFull()
+			Expect(metricsOutput).To(SatisfyAny(
+				// there is some variability in the numbers of reconciles, so we check for a range
+				ContainSubstring(`controller_runtime_reconcile_total{controller="mdaihub",result="success"} 5`),
+				ContainSubstring(`controller_runtime_reconcile_total{controller="mdaihub",result="success"} 6`)))
+			Expect(metricsOutput).To(ContainSubstring(`controller_runtime_reconcile_errors_total{controller="mdaihub"} 0`))
+			Expect(metricsOutput).To(ContainSubstring(`controller_runtime_reconcile_panics_total{controller="mdaihub"} 0`))
 		})
 
 		It("should create the config map for variables", func() {
-			By("verifying the config map exists")
+			By("verifying the config map for variables exists")
 			verifyConfigMap := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "configmap", "mdaihub-sample-variables", "-n", otelNamespace)
 				_, err := utils.Run(cmd)
@@ -333,7 +352,7 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 
 		It("should create the config map for watcher", func() {
-			By("verifying the config map exists")
+			By("verifying the config map for watcher exists")
 			verifyConfigMap := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "configmap", "mdaihub-sample-watcher-collector-config", "-n", namespace)
 				_, err := utils.Run(cmd)
@@ -355,7 +374,7 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 
 		It("should delete MdaiHub CRs", func() {
-			By("applying a MdaiHub CR")
+			By("deleting a MdaiHub CR")
 			verifyMdaiHub := func(g Gomega) {
 				cmd := exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/mdai_v1_mdaihub.yaml", "-n", namespace)
 				_, err := utils.Run(cmd)
@@ -365,7 +384,7 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 
 		It("should delete OTEL CRs", func() {
-			By("applying a MdaiHub CR")
+			By("deleting an OTEL CR")
 			verifyMdaiHub := func(g Gomega) {
 				cmd := exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/collector.yaml", "-n", otelNamespace)
 				_, err := utils.Run(cmd)
@@ -424,6 +443,23 @@ func getMetricsOutput() string {
 	metricsOutput, err := utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
 	Expect(metricsOutput).To(ContainSubstring("< HTTP/1.1 200 OK"))
+	return metricsOutput
+}
+
+func getMetricsOutputFull() string {
+	By("running curl to get fresh metrics")
+	token, err := serviceAccountToken()
+	Expect(err).NotTo(HaveOccurred(), "Failed to get service account token")
+	cmd := exec.Command("kubectl", "run", "--rm", "-it", "curl-metrics-temp",
+		"--restart=Never",
+		"--namespace", namespace,
+		"--image=curlimages/curl:7.78.0",
+		"--command", "--",
+		"curl", "-s", "-k",
+		"-H", fmt.Sprintf("Authorization: Bearer %s", token),
+		fmt.Sprintf("https://%s.%s.svc.cluster.local:8443/metrics", metricsServiceName, namespace))
+	metricsOutput, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to run curl command for metrics")
 	return metricsOutput
 }
 

@@ -64,22 +64,22 @@ spec:
           log_record:
             - 'attributes["log_level"] == "INFO"'
 
-#  evaluations:
-#    - name: logBytesOutTooHighBySvc
-#      type: mdai/prometheus_alert
-#      expr: 'increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024'
-#      severity: warning
-#      onStatus:
-#        firing:
-#          variableUpdate:
-#            variableRef: service_list_1
-#            operation: mdai/add_element
-#        resolved:
-#          variableUpdate:
-#            variableRef: service_list_1
-#            operation: mdai/remove_element
-#      for: 5m
-#      keep_firing_for: 10m
-#      relevantLabels:
-#        - "service_name"
+  evaluations:
+    - name: logBytesOutTooHighBySvc
+      type: mdai/prometheus_alert
+      expr: 'increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024'
+      severity: warning
+      onStatus:
+        firing:
+          variableUpdate:
+            variableRef: service_list_1
+            operation: mdai/add_element
+        resolved:
+          variableUpdate:
+            variableRef: service_list_1
+            operation: mdai/remove_element
+      for: 5m
+      keep_firing_for: 10m
+      relevantLabels:
+        - "service_name"
 

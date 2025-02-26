@@ -435,6 +435,10 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 			collectorCopy.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
 
 			if err := c.client.Update(ctx, collectorCopy); err != nil {
+				if apierrors.IsConflict(err) {
+					c.logger.Info("Conflict while updating OpenTelemetry Collector, will retry", "name", collectorCopy.Name)
+					return RequeueAfter(requeueTime, nil)
+				}
 				c.logger.Error(err, "Failed to update OpenTelemetry Collector", "name", collectorCopy.Name)
 				return OperationResult{}, err
 			}
