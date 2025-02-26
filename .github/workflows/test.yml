@@ -68,13 +68,13 @@ jobs:
           path: code-coverage-results.md
 
       - name: Add Coverage Report to GitHub Pages
-        if: github.event.pull_request.merged == true
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           mkdir -p public
           mv code-coverage-results.md public/
 
       - name: Deploy Coverage Report to GitHub Pages
-        if: github.event.pull_request.merged == true
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
