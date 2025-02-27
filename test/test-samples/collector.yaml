@@ -2,13 +2,13 @@ apiVersion: opentelemetry.io/v1beta1
 kind: OpenTelemetryCollector
 metadata:
   labels:
-    mdaihub-name: mdaihub-dynamic-data-filtering-sample
+    mdaihub-name: mdaihub-sample
   name: gateway-3
   namespace: otel
 spec:
   envFrom:
     - configMapRef:
-        name: mdaihub-dynamic-data-filtering-sample-variables
+        name: mdaihub-sample-variables
   config:
     exporters:
       debug:
@@ -16,7 +16,7 @@ spec:
         sampling_thereafter: 100
         verbosity: detailed
       otlp/mdai_datalyzer:
-        endpoint: mdaihub-dynamic-data-filtering-sample-watcher-collector-service.mdai.svc.cluster.local:4317
+        endpoint: mdaihub-sample-watcher-collector-service.mdai.svc.cluster.local:4317
         tls:
           insecure: true
     processors:

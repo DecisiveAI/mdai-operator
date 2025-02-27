@@ -251,6 +251,7 @@ spec:
                   required:
                   - serializeAs
                   - storageKey
+                  - storageType
                   - type
                   type: object
                 type: array

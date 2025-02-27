@@ -20,7 +20,6 @@ spec:
             join:
               delimiter: ","
       type: set
-      storageType: "mdai-valkey"
     - storageKey: service_list_2
       defaultValue: "n/a"
       serializeAs:
