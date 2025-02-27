@@ -114,7 +114,8 @@ func (v *MdaiHubCustomValidator) ValidateDelete(_ context.Context, obj runtime.O
 	}
 	mdaihublog.Info("Validation for MdaiHub upon deletion", "name", mdaihub.GetName())
 
-	return v.Validate(mdaihub)
+	// TODO(user): fill in your validation logic upon object deletion.
+	return nil, nil
 }
 
 func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Warnings, error) {
