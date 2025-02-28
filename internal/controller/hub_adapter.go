@@ -535,6 +535,25 @@ func (c HubAdapter) listOtelCollectorsWithLabel(ctx context.Context, labelSelect
 	return collectorList.Items, nil
 }
 
+func (c HubAdapter) listOtelCollectorReplicaSetsWithLabel(ctx context.Context, labelSelector string) ([]appsv1.ReplicaSet, error) {
+	var replicaSetList appsv1.ReplicaSetList
+
+	selector, err := labels.Parse(labelSelector)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse label selector: %w", err)
+	}
+
+	listOptions := &client.ListOptions{
+		LabelSelector: selector,
+	}
+
+	if err := c.client.List(ctx, &replicaSetList, listOptions); err != nil {
+		return nil, fmt.Errorf("failed to list OpenTelemetryCollector ReplicaSets: %w", err)
+	}
+
+	return replicaSetList.Items, nil
+}
+
 // ensureHubDeletionProcessed deletes Cluster in cases a deletion was triggered
 func (c HubAdapter) ensureHubDeletionProcessed(ctx context.Context) (OperationResult, error) {
 	if !c.mdaiCR.DeletionTimestamp.IsZero() {
@@ -557,6 +576,18 @@ func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationR
 		return ContinueProcessing()
 	}
 
+	collectorReplicaSets, err := c.listOtelCollectorReplicaSetsWithLabel(ctx, fmt.Sprintf("%s=%s,app.kubernetes.io/component=opentelemetry-collector", LabelMdaiHubName, c.mdaiCR.Name))
+	if err != nil {
+		return OperationResult{}, err
+	}
+	replicaCount := int32(0)
+	for _, replicaSet := range collectorReplicaSets {
+		replicaCount += *replicaSet.Spec.Replicas
+	}
+	if replicaCount == 0 {
+		replicaCount = 1
+	}
+
 	// for now assuming one collector holds all observers
 	hash, err := c.createOrUpdateWatcherCollectorConfigMap(ctx)
 	if err != nil {
@@ -564,7 +595,7 @@ func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationR
 	}
 
 	// for now assuming one collector holds all observers
-	if err := c.createOrUpdateWatcherCollectorDeployment(ctx, c.mdaiCR.Namespace, hash); err != nil {
+	if err := c.createOrUpdateWatcherCollectorDeployment(ctx, c.mdaiCR.Namespace, hash, replicaCount); err != nil {
 		if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
 			c.logger.Info("re-queuing due to resource conflict")
 			return Requeue()
@@ -600,11 +631,11 @@ func (c HubAdapter) createOrUpdateWatcherCollectorService(ctx context.Context, n
 			service.Labels = make(map[string]string)
 		}
 		service.Labels["app"] = appLabel
-
 		service.Spec = v1.ServiceSpec{
 			Selector: map[string]string{
 				"app": appLabel,
 			},
+
 			Ports: []v1.ServicePort{
 				{
 					Name:       "otlp-grpc",
@@ -677,7 +708,7 @@ func getConfigMapSHA(config v1.ConfigMap) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context, namespace string, hash string) error {
+func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context, namespace string, hash string, replicas int32) error {
 	name := c.mdaiCR.Name + "-watcher-collector"
 
 	deployment := &appsv1.Deployment{
@@ -698,7 +729,7 @@ func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context
 		}
 		deployment.Labels["app"] = name
 
-		deployment.Spec.Replicas = int32Ptr(1)
+		deployment.Spec.Replicas = int32Ptr(replicas)
 		if deployment.Spec.Selector == nil {
 			deployment.Spec.Selector = &metav1.LabelSelector{}
 		}
