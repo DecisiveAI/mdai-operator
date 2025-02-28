@@ -376,7 +376,7 @@ var createPredicate = predicate.Funcs{
 		return true
 	},
 	UpdateFunc: func(_ event.UpdateEvent) bool {
-		return false
+		return true
 	},
 	DeleteFunc: func(_ event.DeleteEvent) bool {
 		return false // Skip delete events
