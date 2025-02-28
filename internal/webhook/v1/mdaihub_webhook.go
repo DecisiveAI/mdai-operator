@@ -114,7 +114,8 @@ func (v *MdaiHubCustomValidator) ValidateDelete(_ context.Context, obj runtime.O
 	}
 	mdaihublog.Info("Validation for MdaiHub upon deletion", "name", mdaihub.GetName())
 
-	return v.Validate(mdaihub)
+	// TODO(user): fill in your validation logic upon object deletion.
+	return nil, nil
 }
 
 func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Warnings, error) {
@@ -128,7 +129,7 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 	} else {
 		for _, variable := range *variables {
 			// TODO validate change of storage type, change between types
-			switch *variable.StorageType {
+			switch variable.StorageType {
 			case mdaiv1.VariableSourceTypeBultInValkey:
 				if _, exists := storageKeys[variable.StorageKey]; exists {
 					return warnings, fmt.Errorf("storage key %s is duplicated", variable.StorageKey)

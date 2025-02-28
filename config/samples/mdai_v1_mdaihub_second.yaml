@@ -7,20 +7,16 @@ metadata:
   name: mdaihub-second
   namespace: mdai
 spec:
-  # Variables whose values are managed by MDAI. Typical use is update by Action and converted to environment variables by the MDAI Operator.
   variables:
     - storageKey: service_list
       defaultValue: "n/a"
       type: set
-      storageType: "mdai-valkey"
       serializeAs:
         - name: "SERVICE_LIST_REGEX"
           transformer:
             join:
               delimiter: "|"
 
-
-  # Observers that watch telemetry and contribute metrics to Prometheus. Typical use is to query these metrics in Evaluations.
   observers:
     - name: service-bytes-watcher1
       image: public.ecr.aws/p3k6k6h3/watcher-observer
@@ -36,7 +32,6 @@ spec:
           log_record:
             - 'attributes["log_level"] == "INFO"'
 
-  # Evaluations define the conditions to check. Currently, supported Evaluations are only Prometheus Alerts.
   evaluations:
     - name: logBytesOutTooHighBySvc
       type: mdai/prometheus_alert
@@ -51,7 +46,6 @@ spec:
           variableUpdate:
             variableRef: service_list
             operation: mdai/remove_element
-      # Optional below here
       for: 5m
       keep_firing_for: 10m
       relevantLabels:

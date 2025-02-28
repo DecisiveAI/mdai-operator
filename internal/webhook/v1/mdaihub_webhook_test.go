@@ -19,10 +19,139 @@ package v1
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
 	// TODO (user): Add any additional imports if needed
 )
+
+func createSampleMdaiHub() *mdaiv1.MdaiHub {
+	storageType := "mdai-valkey"
+	relevantLabels := []string{"service_name"}
+	defaultValue := "n/a"
+	var duration1 prometheusv1.Duration = "5m"
+
+	return &mdaiv1.MdaiHub{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mdaihub-sample",
+			Namespace: "mdai",
+			Labels: map[string]string{
+				"app.kubernetes.io/name":       "mdai-operator",
+				"app.kubernetes.io/managed-by": "kustomize",
+			},
+		},
+		Spec: mdaiv1.MdaiHubSpec{
+			Variables: &[]mdaiv1.Variable{
+				{
+					StorageKey:   "service_list_1",
+					DefaultValue: &defaultValue,
+					SerializeAs: []mdaiv1.Serializer{
+						{
+							Name: "SERVICE_LIST_REGEX",
+							Transformer: &mdaiv1.VariableTransformer{
+								Join: &mdaiv1.JoinFunction{
+									Delimiter: "|",
+								},
+							},
+						},
+						{
+							Name: "SERVICE_LIST_CSV",
+							Transformer: &mdaiv1.VariableTransformer{
+								Join: &mdaiv1.JoinFunction{
+									Delimiter: ",",
+								},
+							},
+						},
+					},
+					Type:        mdaiv1.VariableTypeSet,
+					StorageType: mdaiv1.VariableStorageType(storageType),
+				},
+				{
+					StorageKey:   "service_list_2",
+					DefaultValue: &defaultValue,
+					SerializeAs: []mdaiv1.Serializer{
+						{
+							Name: "SERVICE_LIST_2_REGEX",
+							Transformer: &mdaiv1.VariableTransformer{
+								Join: &mdaiv1.JoinFunction{
+									Delimiter: "|",
+								},
+							},
+						},
+						{
+							Name: "SERVICE_LIST_2_CSV",
+							Transformer: &mdaiv1.VariableTransformer{
+								Join: &mdaiv1.JoinFunction{
+									Delimiter: ",",
+								},
+							},
+						},
+					},
+					Type:        mdaiv1.VariableTypeSet,
+					StorageType: mdaiv1.VariableStorageType(storageType),
+				},
+			},
+			Observers: &[]mdaiv1.Observer{
+				{
+					Name:                    "watcher1",
+					LabelResourceAttributes: []string{"service.name"},
+					CountMetricName:         ptr("mdai_watcher_one_count_total"),
+					BytesMetricName:         ptr("mdai_watcher_one_bytes_total"),
+				},
+				{
+					Name:                    "watcher2",
+					LabelResourceAttributes: []string{"team", "log_level"},
+					CountMetricName:         ptr("mdai_watcher_two_count_total"),
+				},
+				{
+					Name:                    "watcher3",
+					LabelResourceAttributes: []string{"region", "log_level"},
+					BytesMetricName:         ptr("mdai_watcher_three_count_total"),
+				},
+				{
+					Name:                    "watcher4",
+					Image:                   ptr("public.ecr.aws/p3k6k6h3/watcher-observer"),
+					LabelResourceAttributes: []string{"service.name", "team", "region"},
+					CountMetricName:         ptr("mdai_watcher_four_count_total"),
+					BytesMetricName:         ptr("mdai_watcher_four_bytes_total"),
+					Filter: &mdaiv1.ObserverFilter{
+						ErrorMode: ptr("ignore"),
+						Logs: &mdaiv1.ObserverLogsFilter{
+							LogRecord: []string{`attributes["log_level"] == "INFO"`},
+						},
+					},
+				},
+			},
+			Evaluations: &[]mdaiv1.Evaluation{
+				{
+					Name:     "logBytesOutTooHighBySvc",
+					Type:     "mdai/prometheus_alert",
+					Expr:     intstr.FromString("increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024"),
+					Severity: "warning",
+					OnStatus: &mdaiv1.PrometheusAlertEvaluationStatus{
+						Firing: &mdaiv1.Action{
+							VariableUpdate: &mdaiv1.VariableUpdate{
+								VariableRef: "service_list_1",
+								Operation:   "mdai/add_element",
+							},
+						},
+						Resolved: &mdaiv1.Action{
+							VariableUpdate: &mdaiv1.VariableUpdate{
+								VariableRef: "service_list_1",
+								Operation:   "mdai/remove_element",
+							},
+						},
+					},
+					For:            &duration1,
+					RelevantLabels: &relevantLabels,
+				},
+			},
+		},
+	}
+}
 
 var _ = Describe("MdaiHub Webhook", func() {
 	var (
@@ -62,26 +191,35 @@ var _ = Describe("MdaiHub Webhook", func() {
 	})
 
 	Context("When creating or updating MdaiHub under Validating Webhook", func() {
-		// TODO (user): Add logic for validating webhooks
-		// Example:
-		// It("Should deny creation if a required field is missing", func() {
-		//     By("simulating an invalid creation scenario")
-		//     obj.SomeRequiredField = ""
-		//     Expect(validator.ValidateCreate(ctx, obj)).Error().To(HaveOccurred())
-		// })
-		//
-		// It("Should admit creation if all required fields are present", func() {
-		//     By("simulating an invalid creation scenario")
-		//     obj.SomeRequiredField = "valid_value"
-		//     Expect(validator.ValidateCreate(ctx, obj)).To(BeNil())
-		// })
-		//
-		// It("Should validate updates correctly", func() {
-		//     By("simulating a valid update scenario")
-		//     oldObj.SomeRequiredField = "updated_value"
-		//     obj.SomeRequiredField = "updated_value"
-		//     Expect(validator.ValidateUpdate(ctx, oldObj, obj)).To(BeNil())
-		// })
+		It("Should deny creation if a required field is missing", func() {
+			By("simulating an invalid creation scenario")
+			obj := createSampleMdaiHub()
+			(*obj.Spec.Variables)[0].StorageKey = "service_list_2"
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).Error().To(HaveOccurred())
+		})
+
+		It("Should admit creation if all required fields are present", func() {
+			By("simulating a valid creation scenario")
+			obj := createSampleMdaiHub()
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should validate updates correctly", func() {
+			By("simulating a valid update scenario")
+			oldObj = createSampleMdaiHub()
+			obj := createSampleMdaiHub()
+			(*obj.Spec.Variables)[1].StorageKey = "service_list_3"
+			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
 	})
 
 })
+
+func ptr(s string) *string {
+	return &s
+}

@@ -335,7 +335,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	valkeyKeysToKeep := map[string]struct{}{}
 	for _, variable := range *variables {
 		// we should test filter processor when the variable is empty and if breaks it we may recommend to use some placeholder as default value
-		switch *variable.StorageType {
+		switch variable.StorageType {
 		case mdaiv1.VariableSourceTypeBultInValkey:
 			valkeyKey := c.composeValkeyKey(variable)
 			valkeyKeysToKeep[valkeyKey] = struct{}{}

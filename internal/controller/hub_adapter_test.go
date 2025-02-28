@@ -326,7 +326,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 		},
 	}
 	variable := v1.Variable{
-		StorageType:  &storageType,
+		StorageType:  storageType,
 		Type:         variableType,
 		StorageKey:   "mykey",
 		DefaultValue: &defaultVal,
