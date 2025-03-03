@@ -161,9 +161,9 @@ type ObserverResource struct {
 	// +kubebuilder:validation:Required
 	Image *string `json:"image" yaml:"image"`
 	// +kubebuilder:validation:Optional
-	Replicas *int32 `json:"replicas" yaml:"replicas"`
+	Replicas *int32 `json:"replicas,omitempty" yaml:"replicas,omitempty"`
 	// +kubebuilder:validation:Optional
-	Resources *v1.ResourceRequirements `json:"resources" yaml:"resources"`
+	Resources *v1.ResourceRequirements `json:"resources,omitempty" yaml:"resources,omitempty"`
 }
 
 type Config struct {
