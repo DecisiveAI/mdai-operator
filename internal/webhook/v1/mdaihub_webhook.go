@@ -130,7 +130,7 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 		for _, variable := range *variables {
 			// TODO validate change of storage type, change between types
 			switch variable.StorageType {
-			case mdaiv1.VariableSourceTypeBultInValkey:
+			case mdaiv1.VariableSourceTypeBuiltInValkey:
 				if _, exists := storageKeys[variable.StorageKey]; exists {
 					return warnings, fmt.Errorf("storage key %s is duplicated", variable.StorageKey)
 				}

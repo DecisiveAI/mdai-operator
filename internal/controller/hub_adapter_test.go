@@ -290,19 +290,20 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 
 func TestBuildCollectorConfig(t *testing.T) {
 	mdaiCR := newTestMdaiCR()
-	mdaiCR.Spec.Observers =
-		&[]v1.Observer{
-			{
-				Name:                    "obs1",
-				LabelResourceAttributes: []string{"label1", "label2"},
-			},
-		}
+	observers := &[]v1.Observer{
+		{
+			Name:                    "obs1",
+			LabelResourceAttributes: []string{"label1", "label2"},
+		},
+	}
+	mdaiCR.Spec.Observers = observers
+
 	scheme := createTestScheme()
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
-	config, err := adapter.buildCollectorConfig()
+	config, err := adapter.buildCollectorConfig(observers)
 	if err != nil {
 		t.Fatalf("buildCollectorConfig returned error: %v", err)
 	}
@@ -314,7 +315,7 @@ func TestBuildCollectorConfig(t *testing.T) {
 func TestEnsureVariableSynced(t *testing.T) {
 	ctx := context.TODO()
 	scheme := createTestScheme()
-	storageType := v1.VariableSourceTypeBultInValkey
+	storageType := v1.VariableSourceTypeBuiltInValkey
 	variableType := v1.VariableTypeSet
 	defaultVal := "default"
 	varWith := v1.Serializer{
@@ -593,7 +594,6 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 
 	observer := v1.Observer{
 		Name:                    "watcher4",
-		Image:                   ptr("public.ecr.aws/p3k6k6h3/watcher-observer"),
 		LabelResourceAttributes: []string{"service.name", "team", "region"},
 		CountMetricName:         ptr("mdai_watcher_four_count_total"),
 		BytesMetricName:         ptr("mdai_watcher_four_bytes_total"),
@@ -605,6 +605,11 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 		},
 	}
 	observers := []v1.Observer{observer}
+	observerResource := v1.ObserverResource{
+		Name:  "watcher-collector",
+		Image: ptr("public.ecr.aws/p3k6k6h3/watcher-observer"),
+	}
+	observerResources := []v1.ObserverResource{observerResource}
 
 	mdaiCR := &v1.MdaiHub{
 		ObjectMeta: metav1.ObjectMeta{
@@ -612,7 +617,8 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: v1.MdaiHubSpec{
-			Observers: &observers,
+			Observers:         &observers,
+			ObserverResources: &observerResources,
 		},
 		Status: v1.MdaiHubStatus{},
 	}
@@ -630,7 +636,7 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 		t.Errorf("expected ContinueOperationResult, got: %v", opResult)
 	}
 
-	configMapName := mdaiCR.Name + watcherConfigMapPostfix
+	configMapName := adapter.GetScopedObserverResourceName(observerResource, "")
 	cm := &v1core.ConfigMap{}
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: mdaiCR.Namespace}, cm); err != nil {
 		t.Fatalf("failed to get ConfigMap %q: %v", configMapName, err)

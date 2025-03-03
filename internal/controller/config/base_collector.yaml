@@ -9,7 +9,6 @@ processors:
   deltatocumulative: {}
 
 exporters:
-  debug: {}
   prometheus:
     endpoint: "0.0.0.0:8899"
     metric_expiration: "180m"
