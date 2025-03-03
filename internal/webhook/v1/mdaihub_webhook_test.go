@@ -136,11 +136,20 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					Name:     "watcher-collector",
 					Image:    ptr("watcher-image:9.9.9"),
 					Replicas: pointer.Int32Ptr(3),
+					Resources: &v1.ResourceRequirements{
+						Limits: v1.ResourceList{
+							"Cpu":    resource.MustParse("500m"),
+							"Memory": resource.MustParse("1Gi"),
+						},
+						Requests: v1.ResourceList{
+							"Cpu":    resource.MustParse("200m"),
+							"Memory": resource.MustParse("256Mi")},
+					},
 				},
 				{
 					Name:     "watcher-nother-collector",
 					Image:    ptr("watcher-image:4.2.0"),
-					Replicas: pointer.Int32Ptr(3),
+					Replicas: pointer.Int32Ptr(2),
 					Resources: &v1.ResourceRequirements{
 						Limits: v1.ResourceList{
 							"Cpu":    resource.MustParse("300m"),

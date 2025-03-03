@@ -19,6 +19,7 @@ package v1
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -181,6 +182,41 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 				return warnings, fmt.Errorf("evaluation %s: unsupported type", evaluation.Name)
 			}
 
+		}
+	}
+
+	observers := mdaihub.Spec.Observers
+	observerResources := mdaihub.Spec.ObserverResources
+	observerResourceNames := make([]string, 0)
+	if observerResources == nil || len(*observerResources) == 0 {
+		warnings = append(warnings, "ObserverResources are not specified")
+	} else {
+		for _, observerResource := range *observerResources {
+			if observerResource.Replicas == nil {
+				return warnings, fmt.Errorf("observerResource %s: no image specified, so observer cannot be deployed", observerResource.Name)
+			}
+			observerResourceNames = append(observerResourceNames, observerResource.Name)
+			if observerResource.Replicas == nil {
+				warnings = append(warnings, "ObserverResource "+observerResource.Name+" does not define a replica count")
+			}
+			if observerResource.Resources == nil {
+				warnings = append(warnings, "ObserverResource "+observerResource.Name+" does not define resource requests/limits")
+			}
+		}
+	}
+	if observers == nil || len(*observers) == 0 {
+		warnings = append(warnings, "Observers are not specified")
+	} else {
+		for _, observer := range *observers {
+			if observer.Resource == "" || !slices.Contains(observerResourceNames, observer.Resource) {
+				return warnings, fmt.Errorf("observer %s does not reference a valid resource", observer.Name)
+			}
+			if observer.BytesMetricName == nil && observer.CountMetricName == nil {
+				return warnings, fmt.Errorf("observer %s must have either a bytesMetricName or countMetricName", observer.Name)
+			}
+			if observer.LabelResourceAttributes == nil || len(observer.LabelResourceAttributes) == 0 {
+				warnings = append(warnings, "observer "+observer.Name+" does not define any labels to apply to counts")
+			}
 		}
 	}
 
