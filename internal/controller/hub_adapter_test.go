@@ -290,13 +290,13 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 
 func TestBuildCollectorConfig(t *testing.T) {
 	mdaiCR := newTestMdaiCR()
-	observers := &[]v1.Observer{
+	observers := []v1.Observer{
 		{
 			Name:                    "obs1",
 			LabelResourceAttributes: []string{"label1", "label2"},
 		},
 	}
-	mdaiCR.Spec.Observers = observers
+	mdaiCR.Spec.Observers = &observers
 
 	scheme := createTestScheme()
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
@@ -594,6 +594,7 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 
 	observer := v1.Observer{
 		Name:                    "watcher4",
+		Resource:                "watcher-collector",
 		LabelResourceAttributes: []string{"service.name", "team", "region"},
 		CountMetricName:         ptr("mdai_watcher_four_count_total"),
 		BytesMetricName:         ptr("mdai_watcher_four_bytes_total"),
@@ -636,7 +637,7 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 		t.Errorf("expected ContinueOperationResult, got: %v", opResult)
 	}
 
-	configMapName := adapter.GetScopedObserverResourceName(observerResource, "")
+	configMapName := adapter.GetScopedObserverResourceName(observerResource, "config")
 	cm := &v1core.ConfigMap{}
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: mdaiCR.Namespace}, cm); err != nil {
 		t.Fatalf("failed to get ConfigMap %q: %v", configMapName, err)
@@ -664,8 +665,8 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 	if svc.Spec.Selector["app"] != expectedAppLabel {
 		t.Errorf("expected service selector app to be %q, got: %q", expectedAppLabel, svc.Spec.Selector["app"])
 	}
-	if len(svc.Spec.Ports) != 1 {
-		t.Errorf("expected service to have 1 port, got %d", len(svc.Spec.Ports))
+	if len(svc.Spec.Ports) != 2 {
+		t.Errorf("expected service to have two ports, got %d", len(svc.Spec.Ports))
 	} else {
 		port := svc.Spec.Ports[0]
 		if port.Name != "otlp-grpc" || port.Port != 4317 || port.TargetPort.String() != "otlp-grpc" {
