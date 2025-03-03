@@ -222,10 +222,10 @@ var _ = Describe("Manager", Ordered, func() {
 				cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(ContainSubstring("controller-runtime.metrics\tServing metrics server"),
+				g.Expect(output).To(ContainSubstring(`"msg":"Serving metrics server"`),
 					"Metrics server not yet started")
 			}
-			Eventually(verifyMetricsServerStarted, 30*time.Second, 5*time.Second).Should(Succeed())
+			Eventually(verifyMetricsServerStarted).Should(Succeed())
 
 			By("creating the curl-metrics pod to access the metrics endpoint")
 			cmd = exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
@@ -333,7 +333,7 @@ var _ = Describe("Manager", Ordered, func() {
 					ContainSubstring(`controller_runtime_reconcile_total{controller="mdaihub",result="success"} 5`),
 				))
 			}
-			Eventually(verifyMetrics, "60s", "10s").Should(Succeed())
+			Eventually(verifyMetrics, "30s", "10s").Should(Succeed())
 
 		})
 
