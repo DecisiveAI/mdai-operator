@@ -11,6 +11,8 @@ controllerManager:
       capabilities:
         drop:
         - ALL
+    env:
+      valkeyAuditStreamExpiryMs: "2592000000"
     image:
       repository: public.ecr.aws/p3k6k6h3/mdai-operator
       tag: 0.1.5
