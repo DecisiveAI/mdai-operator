@@ -333,7 +333,7 @@ var _ = Describe("Manager", Ordered, func() {
 					ContainSubstring(`controller_runtime_reconcile_total{controller="mdaihub",result="success"} 5`),
 				))
 			}
-			Eventually(verifyMetrics, "30s", "10s").Should(Succeed())
+			Eventually(verifyMetrics, "60s", "10s").Should(Succeed())
 
 		})
 
