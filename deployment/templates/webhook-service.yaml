@@ -7,6 +7,7 @@ metadata:
 spec:
   type: {{ .Values.webhookService.type }}
   selector:
+    app.kubernetes.io/name: mdai-operator
     control-plane: controller-manager
     {{- include "deployment.selectorLabels" . | nindent 4 }}
   ports:

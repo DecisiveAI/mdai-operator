@@ -1,0 +1,31 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "deployment.fullname" . }}-controller-manager-metrics-monitor
+  labels:
+    control-plane: controller-manager
+  {{- include "deployment.labels" . | nindent 4 }}
+spec:
+  endpoints:
+  - bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    path: /metrics
+    port: https
+    scheme: https
+    tlsConfig:
+      ca:
+        secret:
+          key: ca.crt
+          name: metrics-server-cert
+      cert:
+        secret:
+          key: tls.crt
+          name: metrics-server-cert
+      insecureSkipVerify: false
+      keySecret:
+        key: tls.key
+        name: metrics-server-cert
+      serverName: mdai-operator-controller-manager-metrics-service.mdai.svc
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mdai-operator
+      control-plane: controller-manager

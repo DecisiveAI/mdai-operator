@@ -60,7 +60,7 @@ kind create cluster -n  mdai-operator-test
 ```
 **Cert manager**
 ```shell
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.1/cert-manager.yaml
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.0/cert-manager.yaml
 ```
 **Otel operator**   
 TBD  
@@ -71,6 +71,11 @@ helm install valkey oci://registry-1.docker.io/bitnamicharts/valkey --set auth.p
 **prometheus operator**
 ```shell
 helm install prometheus prometheus-community/kube-prometheus-stack
+```
+**Create namespaces**
+```shell
+kubectl create namespace otel
+kubectl create namespace mdai
 ```
 **Generate valkey secret**
 ```shell
@@ -86,6 +91,7 @@ kubectl create secret generic valkey-secret \
 go mod vendor
 make docker-build IMG=mdai-operator:v0.0.1
 kind load docker-image mdai-operator:v0.0.1 --name mdai-operator-test
+kubectl rollout restart deployment mdai-operator-controller-manager -n mdai
 ```
 
 **NOTE:** This image ought to be published in the personal registry you specified.
@@ -114,10 +120,6 @@ You can apply the samples (examples) from the config/sample:
 kubectl apply -k config/samples/
 ```
 ### Testing
-Create namespace for OTEL collector and mdai hub sample
-```shell
-kubectl create namespace otel
-```
 Deploy test otel collectors:
 ```sh
 kubectl apply -k test/test-samples/
@@ -172,7 +174,9 @@ cd -
 ```
 ## Project Distribution
 
-Following are the steps to build the installer and distribute this project to users.
+Following the options to release and provide this solution to the users.
+
+### By providing a bundle with all YAML files
 
 1. Build the installer for the image built and published in the registry:
 
@@ -180,14 +184,15 @@ Following are the steps to build the installer and distribute this project to us
 make build-installer IMG=mdai-operator:v0.0.1
 ```
 
-NOTE: The makefile target mentioned above generates an 'install.yaml'
+**NOTE:** The makefile target mentioned above generates an 'install.yaml'
 file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without
-its dependencies.
+with Kustomize, which are necessary to install this project without its
+dependencies.
 
 2. Using the installer
 
-Users can just run kubectl apply -f <URL for YAML BUNDLE> to install the project, i.e.:
+Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
+the project, i.e.:
 
 ```sh
 kubectl apply -f https://raw.githubusercontent.com/<org>/mdai-operator/<tag or branch>/dist/install.yaml
@@ -202,7 +207,7 @@ More information can be found via the [Kubebuilder Documentation](https://book.k
 
 ## License
 
-Copyright 2024.
+Copyright 2025.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
