@@ -42,7 +42,7 @@ webhookService:
   type: ClusterIP
 webhooks:
   certManager:
-    enabled: false
-  autoGenerateCert:
     enabled: true
+  autoGenerateCert:
+    enabled: false
     certValidDays: 3650
