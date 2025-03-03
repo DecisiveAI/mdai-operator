@@ -39,7 +39,12 @@ jobs:
       - name: Convert coverage file format
         run: | 
           go tool cover -func=coverage.out > coverage.txt
-          ls
+
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-coverage
+          path: coverage.txt
 
       - name: Generate Code Coverage Report
         uses: fgrosse/go-coverage-report@v1.1.1
