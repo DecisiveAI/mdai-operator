@@ -480,11 +480,32 @@ func getMetricsOutputFull() string {
 	cmd := exec.Command("kubectl", "run", "--rm", "-it", "curl-metrics-temp",
 		"--restart=Never",
 		"--namespace", namespace,
-		"--image=curlimages/curl:7.78.0",
-		"--command", "--",
-		"curl", "-s", "-k",
-		"-H", fmt.Sprintf("Authorization: Bearer %s", token),
-		fmt.Sprintf("https://%s.%s.svc.cluster.local:8443/metrics", metricsServiceName, namespace))
+		"--image=curlimages/curl:latest",
+		fmt.Sprintf("--overrides=%s",
+			fmt.Sprintf(`{
+					"spec": {
+						"containers": [{
+							"name": "curl",
+							"image": "curlimages/curl:latest",
+							"command": ["/bin/sh", "-c"],
+							"args": ["curl -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics"],
+							"securityContext": {
+								"allowPrivilegeEscalation": false,
+								"capabilities": {
+									"drop": ["ALL"]
+								},
+								"runAsNonRoot": true,
+								"runAsUser": 1000,
+								"seccompProfile": {
+									"type": "RuntimeDefault"
+								}
+							}
+						}],
+						"serviceAccount": "%s"
+					}
+				}`, token, metricsServiceName, namespace, serviceAccountName)),
+	)
+
 	metricsOutput, err := utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to run curl command for metrics")
 	return metricsOutput

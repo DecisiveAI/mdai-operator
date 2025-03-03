@@ -30,7 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -746,11 +746,11 @@ func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context
 					SeccompProfile: &v1.SeccompProfile{
 						Type: v1.SeccompProfileTypeRuntimeDefault,
 					},
-					AllowPrivilegeEscalation: pointer.Bool(false),
+					AllowPrivilegeEscalation: ptr.To(false),
 					Capabilities: &v1.Capabilities{
 						Drop: []v1.Capability{"ALL"},
 					},
-					RunAsNonRoot: pointer.Bool(true),
+					RunAsNonRoot: ptr.To(true),
 				},
 			},
 		}
