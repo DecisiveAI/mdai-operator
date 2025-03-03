@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -741,16 +742,16 @@ func (c HubAdapter) createOrUpdateWatcherCollectorDeployment(ctx context.Context
 					"/mdai-watcher-collector",
 					"--config=/conf/collector.yaml",
 				},
-				//SecurityContext: &v1.SecurityContext{
-				//	SeccompProfile: &v1.SeccompProfile{
-				//		Type: v1.SeccompProfileTypeRuntimeDefault,
-				//	},
-				//	AllowPrivilegeEscalation: pointer.Bool(false),
-				//	Capabilities: &v1.Capabilities{
-				//		Drop: []v1.Capability{"ALL"},
-				//	},
-				//	RunAsNonRoot: pointer.Bool(true),
-				//},
+				SecurityContext: &v1.SecurityContext{
+					SeccompProfile: &v1.SeccompProfile{
+						Type: v1.SeccompProfileTypeRuntimeDefault,
+					},
+					AllowPrivilegeEscalation: pointer.Bool(false),
+					Capabilities: &v1.Capabilities{
+						Drop: []v1.Capability{"ALL"},
+					},
+					RunAsNonRoot: pointer.Bool(true),
+				},
 			},
 		}
 		deployment.Spec.Template.Spec.Volumes = []v1.Volume{
