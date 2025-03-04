@@ -1,4 +1,5 @@
 [![E2E Tests](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test-e2e.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test-e2e.yml)
+![Coverage](https://img.shields.io/badge/Coverage-1-red)
 [![Tests](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml)
 [![Lint](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml)
 # Mdai K8s Operator
@@ -170,7 +171,7 @@ helm repo index ../mdai-operator --merge index.yaml
 mv ../mdai-operator/index.yaml ../mdai-operator/mdai-operator-0.1.4.tgz .
 cd -
 ```
-## Project Distribution
+## Project Distribution 
 
 Following are the steps to build the installer and distribute this project to users.
 

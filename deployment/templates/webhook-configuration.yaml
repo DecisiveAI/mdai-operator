@@ -1,0 +1,84 @@
+{{- if (not .Values.webhooks.certManager.enabled) }}
+{{- $cert := fromYaml (include "deployment.webhookCert" .) }}
+{{- $caCertEnc := $cert.ca }}
+{{- $certCrtEnc := $cert.crt }}
+{{- $certKeyEnc := $cert.key }}
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/tls
+metadata:
+  annotations:
+    "helm.sh/hook": "pre-install,pre-upgrade"
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+  labels:
+    {{- include "deployment.labels" . | nindent 4 }}
+    app.kubernetes.io/component: webhook
+  name: webhook-server-cert
+  namespace: {{ .Release.Namespace }}
+data:
+  tls.crt: {{ $certCrtEnc }}
+  tls.key: {{ $certKeyEnc }}
+  ca.crt: {{ $caCertEnc }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "deployment.fullname" . }}-validating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "deployment.fullname" . }}-serving-cert
+  labels:
+  {{- include "deployment.labels" . | nindent 4 }}
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      caBundle: {{ $caCertEnc }}
+      service:
+        name: '{{ include "deployment.fullname" . }}-webhook-service'
+        namespace: '{{ .Release.Namespace }}'
+        path: /validate-hub-mydecisive-ai-v1-mdaihub
+    failurePolicy: Fail
+    name: vmdaihub-v1.kb.io
+    rules:
+      - apiGroups:
+          - hub.mydecisive.ai
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - mdaihubs
+    sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "deployment.fullname" . }}-mutating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/{{ include "deployment.fullname" . }}-serving-cert
+  labels:
+  {{- include "deployment.labels" . | nindent 4 }}
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      caBundle: {{ $caCertEnc }}
+      service:
+        name: '{{ include "deployment.fullname" . }}-webhook-service'
+        namespace: '{{ .Release.Namespace }}'
+        path: /mutate-hub-mydecisive-ai-v1-mdaihub
+    failurePolicy: Fail
+    name: mmdaihub-v1.kb.io
+    rules:
+      - apiGroups:
+          - hub.mydecisive.ai
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - mdaihubs
+    sideEffects: None
+{{- end }}
