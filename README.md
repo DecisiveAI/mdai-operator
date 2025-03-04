@@ -170,7 +170,7 @@ helm repo index ../mdai-operator --merge index.yaml
 mv ../mdai-operator/index.yaml ../mdai-operator/mdai-operator-0.1.4.tgz .
 cd -
 ```
-## Project Distribution
+## Project Distribution 
 
 Following are the steps to build the installer and distribute this project to users.
 
