@@ -2,7 +2,7 @@
 [![Tests](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml)
 [![Lint](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml)
 # Mdai K8s Operator
-manages MDAI Hub --- testing gh workflow
+manages MDAI Hub
 ## Description
 Mdai k8s operator: 
 
