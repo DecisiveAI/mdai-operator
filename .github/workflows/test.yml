@@ -36,28 +36,24 @@ jobs:
           go mod tidy
           make test-coverage
 
-      - name: Convert coverage file format
-        run: | 
-          go tool cover -func=coverage.out > coverage.txt
-
       - name: Archive code coverage results
         uses: actions/upload-artifact@v4
         with:
           name: code-coverage
           path: coverage.out
 
-#      - name: Generate Code Coverage Report
-#        uses: fgrosse/go-coverage-report@v1.1.1
-#        with:
-#          coverage-artifact-name: code-coverage # can be omitted if you used this default value
-#          coverage-file-name: coverage.out # can be omitted if you used this default value
-#
-#      - name: Add Coverage PR Comment
-#        uses: marocchino/sticky-pull-request-comment@v2
-#        if: github.event_name == 'pull_request'
-#        with:
-#          recreate: true
-#          path: code-coverage-results.md
+      - name: Generate Code Coverage Report
+        uses: fgrosse/go-coverage-report@v1.1.1
+        with:
+          coverage-artifact-name: code-coverage # can be omitted if you used this default value
+          coverage-file-name: coverage.out # can be omitted if you used this default value
+
+      - name: Add Coverage PR Comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request'
+        with:
+          recreate: true
+          path: code-coverage-results.md
 
       # Step to create a coverage badge in README.md
       - name: Generate Go Coverage Badge  # Pass the `coverage.out` output to this action
