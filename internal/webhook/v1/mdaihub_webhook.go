@@ -192,7 +192,7 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 		warnings = append(warnings, "ObserverResources are not specified")
 	} else {
 		for _, observerResource := range *observerResources {
-			if observerResource.Replicas == nil {
+			if observerResource.Image == nil {
 				return warnings, fmt.Errorf("observerResource %s: no image specified, so observer cannot be deployed", observerResource.Name)
 			}
 			observerResourceNames = append(observerResourceNames, observerResource.Name)
