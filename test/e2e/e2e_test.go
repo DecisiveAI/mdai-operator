@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/DecisiveAI/mdai-operator/test/utils"
@@ -397,7 +398,33 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 			}
 			Eventually(verifyWatcher, "1m", "5s").Should(Succeed())
-			// TODO check that it's running without errors
+			verifyWatcherPods := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l", "app=mdaihub-sample-watcher-collector")
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(strings.Contains(out, "Running")).To(BeTrue())
+			}
+			Eventually(verifyWatcherPods, "1m", "5s").Should(Succeed())
+
+			verifyWatcherLogs := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l",
+					"app=mdaihub-sample-watcher-collector", "-o", "jsonpath={.items[*].metadata.name}")
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+
+				podNames := strings.Fields(out)
+				for _, pod := range podNames {
+					if pod == "" {
+						continue
+					}
+					logCmd := exec.Command("kubectl", "logs", pod, "-n", namespace)
+					logOut, err := utils.Run(logCmd)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					g.Expect(strings.Contains(strings.ToLower(logOut), "error")).To(BeFalse(), "Log for pod %s contains error", pod)
+				}
+			}
+			Eventually(verifyWatcherLogs).Should(Succeed())
 		})
 
 		It("should delete MdaiHub CRs", func() {
