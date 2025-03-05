@@ -144,7 +144,7 @@ type Observer struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
 	// +kubebuilder:validation:Required
-	Resource string `json:"resource" yaml:"resource"`
+	ResourceRef string `json:"resourceRef" yaml:"resourceRef"`
 	// +kubebuilder:validation:Required
 	LabelResourceAttributes []string `json:"labelResourceAttributes" yaml:"labelResourceAttributes"`
 	// +kubebuilder:validation:Optional

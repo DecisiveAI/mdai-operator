@@ -19,7 +19,7 @@ spec:
 
   observers:
     - name: service-bytes-watcher1
-      resource: watcher-collector
+      resourceRef: watcher-collector
       labelResourceAttributes:
       - service.name
       - team

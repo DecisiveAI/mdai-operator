@@ -570,7 +570,7 @@ func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationR
 		configObserverResources = append(configObserverResources, observerResource.Name)
 		observersForResource := make([]mdaiv1.Observer, 0)
 		for _, observer := range *observers {
-			if observer.Resource == observerResource.Name {
+			if observer.ResourceRef == observerResource.Name {
 				observersForResource = append(observersForResource, observer)
 			}
 		}

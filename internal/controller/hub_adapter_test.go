@@ -594,7 +594,7 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 
 	observer := v1.Observer{
 		Name:                    "watcher4",
-		Resource:                "watcher-collector",
+		ResourceRef:             "watcher-collector",
 		LabelResourceAttributes: []string{"service.name", "team", "region"},
 		CountMetricName:         ptr("mdai_watcher_four_count_total"),
 		BytesMetricName:         ptr("mdai_watcher_four_bytes_total"),

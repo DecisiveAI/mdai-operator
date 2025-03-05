@@ -257,12 +257,12 @@ spec:
                       type: array
                     name:
                       type: string
-                    resource:
+                    resourceRef:
                       type: string
                   required:
                   - labelResourceAttributes
                   - name
-                  - resource
+                  - resourceRef
                   type: object
                 type: array
               variables:

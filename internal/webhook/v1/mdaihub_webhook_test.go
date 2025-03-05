@@ -100,26 +100,26 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 			Observers: &[]mdaiv1.Observer{
 				{
 					Name:                    "watcher1",
-					Resource:                "watcher-collector",
+					ResourceRef:             "watcher-collector",
 					LabelResourceAttributes: []string{"service.name"},
 					CountMetricName:         stringToStringPointer("mdai_watcher_one_count_total"),
 					BytesMetricName:         stringToStringPointer("mdai_watcher_one_bytes_total"),
 				},
 				{
 					Name:                    "watcher2",
-					Resource:                "watcher-collector",
+					ResourceRef:             "watcher-collector",
 					LabelResourceAttributes: []string{"team", "log_level"},
 					CountMetricName:         stringToStringPointer("mdai_watcher_two_count_total"),
 				},
 				{
 					Name:                    "watcher3",
-					Resource:                "watcher-nother-collector",
+					ResourceRef:             "watcher-nother-collector",
 					LabelResourceAttributes: []string{"region", "log_level"},
 					BytesMetricName:         stringToStringPointer("mdai_watcher_three_count_total"),
 				},
 				{
 					Name:                    "watcher4",
-					Resource:                "watcher-collector",
+					ResourceRef:             "watcher-collector",
 					LabelResourceAttributes: []string{"service.name", "team", "region"},
 					CountMetricName:         stringToStringPointer("mdai_watcher_four_count_total"),
 					BytesMetricName:         stringToStringPointer("mdai_watcher_four_bytes_total"),

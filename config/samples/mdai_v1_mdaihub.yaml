@@ -37,24 +37,25 @@ spec:
 
   observers:
     - name: watcher1
-      resource: watcher-collector
+      resourceRef: watcher-collector
       labelResourceAttributes:
         - service.name
       countMetricName: mdai_watcher_one_count_total
       bytesMetricName: mdai_watcher_one_bytes_total
     - name: watcher2
+      resourceRef: watcher-collector
       labelResourceAttributes:
       - team
       - log_level
       countMetricName: mdai_watcher_two_count_total
     - name: watcher3
-      resource: watcher-collector
+      resourceRef: watcher-collector
       labelResourceAttributes:
       - region
       - log_level
       bytesMetricName: mdai_watcher_three_count_total
     - name: watcher4
-      resource: watcher-collector
+      resourceRef: watcher-collector
       labelResourceAttributes:
       - service.name
       - team
