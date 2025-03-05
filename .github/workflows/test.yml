@@ -55,6 +55,10 @@ jobs:
         with:
           coverage-artifact-name: code-coverage # can be omitted if you used this default value
           coverage-file-name: coverage.out # can be omitted if you used this default value
+          skip-comment: 'true'
+
+      - name: Debug
+        run: ls
 
       - name: Add Coverage PR Comment
         uses: marocchino/sticky-pull-request-comment@v2
