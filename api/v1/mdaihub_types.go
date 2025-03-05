@@ -159,7 +159,7 @@ type ObserverResource struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
 	// +kubebuilder:validation:Required
-	Image *string `json:"image" yaml:"image"`
+	Image string `json:"image" yaml:"image"`
 	// +kubebuilder:validation:Optional
 	Replicas *int32 `json:"replicas,omitempty" yaml:"replicas,omitempty"`
 	// +kubebuilder:validation:Optional

@@ -608,7 +608,7 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 	observers := []v1.Observer{observer}
 	observerResource := v1.ObserverResource{
 		Name:  "watcher-collector",
-		Image: ptr("public.ecr.aws/p3k6k6h3/watcher-observer"),
+		Image: "public.ecr.aws/p3k6k6h3/watcher-observer",
 	}
 	observerResources := []v1.ObserverResource{observerResource}
 

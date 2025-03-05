@@ -798,8 +798,8 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 			},
 		}
 
-		if observerResource.Image != nil {
-			containerSpec.Image = *observerResource.Image
+		if observerResource.Image != "" {
+			containerSpec.Image = observerResource.Image
 		}
 
 		if observerResource.Resources != nil {
