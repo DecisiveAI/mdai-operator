@@ -185,57 +185,59 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 		}
 	}
 
-	warnings, a, err := v.validateObserversAndObserverResources(mdaihub, warnings)
+	warnings, err := v.validateObserversAndObserverResources(mdaihub, warnings)
 	if err != nil {
-		return a, err
+		return warnings, err
 	}
 
 	return warnings, nil
 }
 
-func (v *MdaiHubCustomValidator) validateObserversAndObserverResources(mdaihub *mdaiv1.MdaiHub, warnings admission.Warnings) (admission.Warnings, admission.Warnings, error) {
+func (v *MdaiHubCustomValidator) validateObserversAndObserverResources(mdaihub *mdaiv1.MdaiHub, existingWarnings admission.Warnings) (admission.Warnings, error) {
+	newWarnings := admission.Warnings{}
 	observers := mdaihub.Spec.Observers
 	observerResources := mdaihub.Spec.ObserverResources
 	observerResourceNames := make([]string, 0)
 	observerResourcesUsedInObservers := make([]string, 0)
 	if observerResources == nil || len(*observerResources) == 0 {
-		warnings = append(warnings, "ObserverResources are not specified")
+		newWarnings = append(newWarnings, "ObserverResources are not specified")
 	} else {
 		for _, observerResource := range *observerResources {
 			if observerResource.Image == nil {
-				return nil, warnings, fmt.Errorf("observerResource %s: no image specified, so observer cannot be deployed", observerResource.Name)
+				return newWarnings, fmt.Errorf("observerResource %s: no image specified, so observer cannot be deployed", observerResource.Name)
 			}
 			observerResourceNames = append(observerResourceNames, observerResource.Name)
 			if observerResource.Replicas == nil {
-				warnings = append(warnings, "ObserverResource "+observerResource.Name+" does not define a replica count")
+				newWarnings = append(newWarnings, "ObserverResource "+observerResource.Name+" does not define a replica count")
 			}
 			if observerResource.Resources == nil {
-				warnings = append(warnings, "ObserverResource "+observerResource.Name+" does not define resource requests/limits")
+				newWarnings = append(newWarnings, "ObserverResource "+observerResource.Name+" does not define resource requests/limits")
 			}
 		}
 	}
 	if observers == nil || len(*observers) == 0 {
-		warnings = append(warnings, "Observers are not specified")
+		newWarnings = append(newWarnings, "Observers are not specified")
 	} else {
 		for _, observer := range *observers {
-			if observer.Resource == "" || !slices.Contains(observerResourceNames, observer.Resource) {
-				return nil, warnings, fmt.Errorf("observer %s does not reference a valid resource", observer.Name)
+			if observer.ResourceRef == "" || !slices.Contains(observerResourceNames, observer.ResourceRef) {
+				return newWarnings, fmt.Errorf("observer %s does not reference a valid resource", observer.Name)
 			}
 			if observer.BytesMetricName == nil && observer.CountMetricName == nil {
-				return nil, warnings, fmt.Errorf("observer %s must have either a bytesMetricName or countMetricName", observer.Name)
+				return newWarnings, fmt.Errorf("observer %s must have either a bytesMetricName or countMetricName", observer.Name)
 			}
 			if len(observer.LabelResourceAttributes) == 0 {
-				warnings = append(warnings, "observer "+observer.Name+" does not define any labels to apply to counts")
+				newWarnings = append(newWarnings, "observer "+observer.Name+" does not define any labels to apply to counts")
 			}
-			observerResourcesUsedInObservers = append(observerResourcesUsedInObservers, observer.Resource)
+			observerResourcesUsedInObservers = append(observerResourcesUsedInObservers, observer.ResourceRef)
 		}
 	}
 	for _, observerResource := range observerResourceNames {
 		if !slices.Contains(observerResourcesUsedInObservers, observerResource) {
-			warnings = append(warnings, "observerResource "+observerResource+" is not used in any observers")
+			newWarnings = append(newWarnings, "observerResource "+observerResource+" is not used in any observers")
 		}
 	}
-	return warnings, nil, nil
+
+	return append(existingWarnings, newWarnings...), nil
 }
 
 func (v *MdaiHubCustomValidator) validateOnStatus(action *mdaiv1.Action, storageKeys map[string]struct{}, evaluation mdaiv1.Evaluation, actionName string) error {
