@@ -19,6 +19,7 @@ package v1
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -130,7 +131,7 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 		for _, variable := range *variables {
 			// TODO validate change of storage type, change between types
 			switch variable.StorageType {
-			case mdaiv1.VariableSourceTypeBultInValkey:
+			case mdaiv1.VariableSourceTypeBuiltInValkey:
 				if _, exists := storageKeys[variable.StorageKey]; exists {
 					return warnings, fmt.Errorf("storage key %s is duplicated", variable.StorageKey)
 				}
@@ -184,7 +185,59 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 		}
 	}
 
+	warnings, err := v.validateObserversAndObserverResources(mdaihub, warnings)
+	if err != nil {
+		return warnings, err
+	}
+
 	return warnings, nil
+}
+
+func (v *MdaiHubCustomValidator) validateObserversAndObserverResources(mdaihub *mdaiv1.MdaiHub, existingWarnings admission.Warnings) (admission.Warnings, error) {
+	newWarnings := admission.Warnings{}
+	observers := mdaihub.Spec.Observers
+	observerResources := mdaihub.Spec.ObserverResources
+	observerResourceNames := make([]string, 0)
+	observerResourcesUsedInObservers := make([]string, 0)
+	if observerResources == nil || len(*observerResources) == 0 {
+		newWarnings = append(newWarnings, "ObserverResources are not specified")
+	} else {
+		for _, observerResource := range *observerResources {
+			if observerResource.Image == "" {
+				return newWarnings, fmt.Errorf("observerResource %s: no image specified, so observer cannot be deployed", observerResource.Name)
+			}
+			observerResourceNames = append(observerResourceNames, observerResource.Name)
+			if observerResource.Replicas == nil {
+				newWarnings = append(newWarnings, "ObserverResource "+observerResource.Name+" does not define a replica count")
+			}
+			if observerResource.Resources == nil {
+				newWarnings = append(newWarnings, "ObserverResource "+observerResource.Name+" does not define resource requests/limits")
+			}
+		}
+	}
+	if observers == nil || len(*observers) == 0 {
+		newWarnings = append(newWarnings, "Observers are not specified")
+	} else {
+		for _, observer := range *observers {
+			if observer.ResourceRef == "" || !slices.Contains(observerResourceNames, observer.ResourceRef) {
+				return newWarnings, fmt.Errorf("observer %s does not reference a valid resource", observer.Name)
+			}
+			if observer.BytesMetricName == nil && observer.CountMetricName == nil {
+				return newWarnings, fmt.Errorf("observer %s must have either a bytesMetricName or countMetricName", observer.Name)
+			}
+			if len(observer.LabelResourceAttributes) == 0 {
+				newWarnings = append(newWarnings, "observer "+observer.Name+" does not define any labels to apply to counts")
+			}
+			observerResourcesUsedInObservers = append(observerResourcesUsedInObservers, observer.ResourceRef)
+		}
+	}
+	for _, observerResource := range observerResourceNames {
+		if !slices.Contains(observerResourcesUsedInObservers, observerResource) {
+			newWarnings = append(newWarnings, "observerResource "+observerResource+" is not used in any observers")
+		}
+	}
+
+	return append(existingWarnings, newWarnings...), nil
 }
 
 func (v *MdaiHubCustomValidator) validateOnStatus(action *mdaiv1.Action, storageKeys map[string]struct{}, evaluation mdaiv1.Evaluation, actionName string) error {

@@ -19,7 +19,7 @@ spec:
 
   observers:
     - name: service-bytes-watcher1
-      image: public.ecr.aws/p3k6k6h3/watcher-observer
+      resourceRef: watcher-collector
       labelResourceAttributes:
       - service.name
       - team
@@ -31,6 +31,10 @@ spec:
         logs:
           log_record:
             - 'attributes["log_level"] == "INFO"'
+
+  observerResources:
+    - name: watcher-collector
+      image: public.ecr.aws/decisiveai/watcher-collector:0.1
 
   evaluations:
     - name: logBytesOutTooHighBySvc

@@ -35,22 +35,25 @@ spec:
       storageType: "mdai-valkey"
   observers:
     - name: watcher1
+      resourceRef: watcher-collector
       labelResourceAttributes:
         - service.name
       countMetricName: mdai_watcher_one_count_total
       bytesMetricName: mdai_watcher_one_bytes_total
     - name: watcher2
+      resourceRef: watcher-collector
       labelResourceAttributes:
       - team
       - log_level
       countMetricName: mdai_watcher_two_count_total
     - name: watcher3
+      resourceRef: watcher-collector
       labelResourceAttributes:
       - region
       - log_level
       bytesMetricName: mdai_watcher_three_count_total
     - name: watcher4
-      image: public.ecr.aws/p3k6k6h3/watcher-observer
+      resourceRef: watcher-collector
       labelResourceAttributes:
       - service.name
       - team
@@ -62,6 +65,11 @@ spec:
         logs:
           log_record:
             - 'attributes["log_level"] == "INFO"'
+
+  observerResources:
+    - name: watcher-collector
+      image: public.ecr.aws/decisiveai/watcher-collector:0.1
+      replicas: 2
 
   evaluations:
     - name: logBytesOutTooHighBySvc

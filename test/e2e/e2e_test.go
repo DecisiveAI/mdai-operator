@@ -366,7 +366,8 @@ var _ = Describe("Manager", Ordered, func() {
 			By("verifying the watcher deployment exists")
 			verifyWatcher := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "deployment", "mdaihub-sample-watcher-collector", "-n", namespace)
-				_, err := utils.Run(cmd)
+				response, err := utils.Run(cmd)
+				g.Expect(response).To(ContainSubstring("mdaihub-sample-watcher-collector   2/2"))
 				g.Expect(err).NotTo(HaveOccurred())
 			}
 			Eventually(verifyWatcher, "1m", "5s").Should(Succeed())
