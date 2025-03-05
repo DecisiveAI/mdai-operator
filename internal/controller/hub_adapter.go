@@ -52,6 +52,9 @@ const (
 	observerDefaultImage          = "public.ecr.aws/decisiveai/watcher-collector:0.1"
 	MdaiHubEventHistoryStreamName = "mdai_hub_event_history"
 	requeueTime                   = time.Second * 10
+
+	hubNameLabel          = "mdai-hub-name"
+	observerResourceLabel = "mdai_observer_resource"
 )
 
 type HubAdapter struct {
@@ -562,7 +565,9 @@ func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationR
 		return ContinueProcessing()
 	}
 
+	configObserverResources := make([]string, 0)
 	for _, observerResource := range *observerResources {
+		configObserverResources = append(configObserverResources, observerResource.Name)
 		observersForResource := make([]mdaiv1.Observer, 0)
 		for _, observer := range *observers {
 			if observer.Resource == observerResource.Name {
@@ -576,13 +581,11 @@ func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationR
 			continue
 		}
 
-		// for now assuming one collector holds all observers
 		hash, err := c.createOrUpdateObserverResourceConfigMap(ctx, observerResource, observersForResource)
 		if err != nil {
 			return OperationResult{}, err
 		}
 
-		// for now assuming one collector holds all observers
 		if err := c.createOrUpdateObserverResourceDeployment(ctx, c.mdaiCR.Namespace, hash, observerResource); err != nil {
 			if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
 				c.logger.Info("re-queuing due to resource conflict")
@@ -594,6 +597,10 @@ func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationR
 		if err := c.createOrUpdateObserverResourceService(ctx, c.mdaiCR.Namespace, observerResource); err != nil {
 			return OperationResult{}, err
 		}
+	}
+
+	if err := c.cleanupOrphanedObserverResources(ctx, configObserverResources); err != nil {
+		return OperationResult{}, err
 	}
 
 	return ContinueProcessing()
@@ -620,6 +627,8 @@ func (c HubAdapter) createOrUpdateObserverResourceService(ctx context.Context, n
 			service.Labels = make(map[string]string)
 		}
 		service.Labels["app"] = appLabel
+		service.Labels[hubNameLabel] = c.mdaiCR.Name
+		service.Labels[observerResourceLabel] = observerResource.Name
 
 		service.Spec = v1.ServiceSpec{
 			Selector: map[string]string{
@@ -672,7 +681,9 @@ func (c HubAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Context,
 			Name:      configMapName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				"app": c.GetScopedObserverResourceName(observerResource, ""),
+				"app":                 c.GetScopedObserverResourceName(observerResource, ""),
+				hubNameLabel:          c.mdaiCR.Name,
+				observerResourceLabel: observerResource.Name,
 			},
 		},
 		Data: map[string]string{
@@ -730,6 +741,8 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 			deployment.Labels = make(map[string]string)
 		}
 		deployment.Labels["app"] = name
+		deployment.Labels[hubNameLabel] = c.mdaiCR.Name
+		deployment.Labels[observerResourceLabel] = observerResource.Name
 
 		if observerResource.Replicas != nil {
 			deployment.Spec.Replicas = observerResource.Replicas
@@ -756,7 +769,7 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 		deployment.Spec.Template.Annotations["prometheus.io/path"] = "/metrics"
 		deployment.Spec.Template.Annotations["prometheus.io/port"] = "8899"
 		deployment.Spec.Template.Annotations["prometheus.io/scrape"] = "true"
-		// FIXME: update name away from watcher
+		// FIXME: replace this annotation with mdai_observer_resource in other hub components (prometheus scraping config)
 		deployment.Spec.Template.Annotations["mdai_component_type"] = "mdai-watcher"
 		deployment.Spec.Template.Annotations["mdai-collector-config/sha256"] = hash
 
@@ -908,6 +921,70 @@ func (c HubAdapter) ensureStatusSetToDone(ctx context.Context) (OperationResult,
 	}
 	c.logger.Info("Status set to done for mdai hub", "mdaiHub", c.mdaiCR.Name)
 	return ContinueProcessing()
+}
+
+func (c HubAdapter) cleanupOrphanedObserverResources(ctx context.Context, resources []string) error {
+	labelSelector := &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			hubNameLabel: c.mdaiCR.Name,
+		},
+		MatchExpressions: []metav1.LabelSelectorRequirement{
+			{
+				Key:      observerResourceLabel,
+				Operator: metav1.LabelSelectorOpNotIn,
+				Values:   resources,
+			},
+		},
+	}
+	selector, err := metav1.LabelSelectorAsSelector(labelSelector)
+	if err != nil {
+		c.logger.Error(err, "could not build selector to delete orphaned hub observer resources")
+		return err
+	}
+
+	serviceList := v1.ServiceList{}
+	if err := c.client.List(ctx, &serviceList, client.MatchingLabelsSelector{Selector: selector}); err != nil {
+		c.logger.Error(err, "could not query for orphaned hub observer resource services")
+		return err
+	}
+
+	deploymentList := appsv1.DeploymentList{}
+	if err := c.client.List(ctx, &deploymentList, client.MatchingLabelsSelector{Selector: selector}); err != nil {
+		c.logger.Error(err, "could not query for orphaned hub observer resource deployments")
+		return err
+	}
+
+	configMapList := v1.ConfigMapList{}
+	if err := c.client.List(ctx, &configMapList, client.MatchingLabelsSelector{Selector: selector}); err != nil {
+		c.logger.Error(err, "could not query for orphaned hub observer resource configmaps")
+		return err
+	}
+
+	for _, service := range serviceList.Items {
+		c.logger.Info("Deleting orphaned observer resource service", "service", service.Name)
+		if err := c.client.Delete(ctx, &service); err != nil {
+			c.logger.Error(err, "could not delete orphaned observer resource service %s", "service", service.Name)
+			return err
+		}
+	}
+
+	for _, deployment := range deploymentList.Items {
+		c.logger.Info("Deleting orphaned observer resource deployment", "deployment", deployment.Name)
+		if err := c.client.Delete(ctx, &deployment); err != nil {
+			c.logger.Error(err, "could not delete orphaned observer resource deployment", "deployment", deployment.Name)
+			return err
+		}
+	}
+
+	for _, configMap := range configMapList.Items {
+		c.logger.Info("Deleting orphaned observer resource configMap", "configMap", configMap.Name)
+		if err := c.client.Delete(ctx, &configMap); err != nil {
+			c.logger.Error(err, "could not delete orphaned observer resource configMap %s", "configMap", configMap.Name)
+			return err
+		}
+	}
+
+	return nil
 }
 
 func buildFilterProcessorMap(filter *mdaiv1.ObserverFilter) map[string]any {

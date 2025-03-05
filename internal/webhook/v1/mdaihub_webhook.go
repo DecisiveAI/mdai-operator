@@ -188,6 +188,7 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 	observers := mdaihub.Spec.Observers
 	observerResources := mdaihub.Spec.ObserverResources
 	observerResourceNames := make([]string, 0)
+	observerResourcesUsedInObservers := make([]string, 0)
 	if observerResources == nil || len(*observerResources) == 0 {
 		warnings = append(warnings, "ObserverResources are not specified")
 	} else {
@@ -217,6 +218,12 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 			if observer.LabelResourceAttributes == nil || len(observer.LabelResourceAttributes) == 0 {
 				warnings = append(warnings, "observer "+observer.Name+" does not define any labels to apply to counts")
 			}
+			observerResourcesUsedInObservers = append(observerResourcesUsedInObservers, observer.Resource)
+		}
+	}
+	for _, observerResource := range observerResourceNames {
+		if !slices.Contains(observerResourcesUsedInObservers, observerResource) {
+			warnings = append(warnings, "observerResource "+observerResource+" is not used in any observers")
 		}
 	}
 
