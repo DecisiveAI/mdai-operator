@@ -274,6 +274,7 @@ func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation) promet
 			"alert_name":    alertName,
 			"hub_name":      c.mdaiCR.Name,
 			"current_value": "{{ $value | printf \"%.2f\" }}",
+			"expression":    alertingRule.Expr.StrVal,
 		},
 		Labels: map[string]string{
 			"severity": alertingRule.Severity,
@@ -421,6 +422,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 		if _, shouldRestart := namespaceToRestart[collector.Namespace]; shouldRestart {
 			mdaiHubEvent := map[string]string{
 				"timestamp": time.Now().UTC().Format(time.RFC3339),
+				"hub_name":  c.mdaiCR.Name,
 				"type":      "collector_restart",
 			}
 			for key, value := range envMap {
