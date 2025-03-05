@@ -744,10 +744,9 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 		deployment.Labels[hubNameLabel] = c.mdaiCR.Name
 		deployment.Labels[observerResourceLabel] = observerResource.Name
 
+		deployment.Spec.Replicas = int32Ptr(1)
 		if observerResource.Replicas != nil {
 			deployment.Spec.Replicas = observerResource.Replicas
-		} else {
-			deployment.Spec.Replicas = int32Ptr(1)
 		}
 		if deployment.Spec.Selector == nil {
 			deployment.Spec.Selector = &metav1.LabelSelector{}
