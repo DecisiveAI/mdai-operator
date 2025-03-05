@@ -185,6 +185,15 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 		}
 	}
 
+	warnings, a, err := v.validateObserversAndObserverResources(mdaihub, warnings)
+	if err != nil {
+		return a, err
+	}
+
+	return warnings, nil
+}
+
+func (v *MdaiHubCustomValidator) validateObserversAndObserverResources(mdaihub *mdaiv1.MdaiHub, warnings admission.Warnings) (admission.Warnings, admission.Warnings, error) {
 	observers := mdaihub.Spec.Observers
 	observerResources := mdaihub.Spec.ObserverResources
 	observerResourceNames := make([]string, 0)
@@ -194,7 +203,7 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 	} else {
 		for _, observerResource := range *observerResources {
 			if observerResource.Image == nil {
-				return warnings, fmt.Errorf("observerResource %s: no image specified, so observer cannot be deployed", observerResource.Name)
+				return nil, warnings, fmt.Errorf("observerResource %s: no image specified, so observer cannot be deployed", observerResource.Name)
 			}
 			observerResourceNames = append(observerResourceNames, observerResource.Name)
 			if observerResource.Replicas == nil {
@@ -210,12 +219,12 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 	} else {
 		for _, observer := range *observers {
 			if observer.Resource == "" || !slices.Contains(observerResourceNames, observer.Resource) {
-				return warnings, fmt.Errorf("observer %s does not reference a valid resource", observer.Name)
+				return nil, warnings, fmt.Errorf("observer %s does not reference a valid resource", observer.Name)
 			}
 			if observer.BytesMetricName == nil && observer.CountMetricName == nil {
-				return warnings, fmt.Errorf("observer %s must have either a bytesMetricName or countMetricName", observer.Name)
+				return nil, warnings, fmt.Errorf("observer %s must have either a bytesMetricName or countMetricName", observer.Name)
 			}
-			if observer.LabelResourceAttributes == nil || len(observer.LabelResourceAttributes) == 0 {
+			if len(observer.LabelResourceAttributes) == 0 {
 				warnings = append(warnings, "observer "+observer.Name+" does not define any labels to apply to counts")
 			}
 			observerResourcesUsedInObservers = append(observerResourcesUsedInObservers, observer.Resource)
@@ -226,8 +235,7 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 			warnings = append(warnings, "observerResource "+observerResource+" is not used in any observers")
 		}
 	}
-
-	return warnings, nil
+	return warnings, nil, nil
 }
 
 func (v *MdaiHubCustomValidator) validateOnStatus(action *mdaiv1.Action, storageKeys map[string]struct{}, evaluation mdaiv1.Evaluation, actionName string) error {

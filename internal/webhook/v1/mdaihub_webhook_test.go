@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
@@ -102,29 +102,29 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					Name:                    "watcher1",
 					Resource:                "watcher-collector",
 					LabelResourceAttributes: []string{"service.name"},
-					CountMetricName:         ptr("mdai_watcher_one_count_total"),
-					BytesMetricName:         ptr("mdai_watcher_one_bytes_total"),
+					CountMetricName:         stringToStringPointer("mdai_watcher_one_count_total"),
+					BytesMetricName:         stringToStringPointer("mdai_watcher_one_bytes_total"),
 				},
 				{
 					Name:                    "watcher2",
 					Resource:                "watcher-collector",
 					LabelResourceAttributes: []string{"team", "log_level"},
-					CountMetricName:         ptr("mdai_watcher_two_count_total"),
+					CountMetricName:         stringToStringPointer("mdai_watcher_two_count_total"),
 				},
 				{
 					Name:                    "watcher3",
 					Resource:                "watcher-nother-collector",
 					LabelResourceAttributes: []string{"region", "log_level"},
-					BytesMetricName:         ptr("mdai_watcher_three_count_total"),
+					BytesMetricName:         stringToStringPointer("mdai_watcher_three_count_total"),
 				},
 				{
 					Name:                    "watcher4",
 					Resource:                "watcher-collector",
 					LabelResourceAttributes: []string{"service.name", "team", "region"},
-					CountMetricName:         ptr("mdai_watcher_four_count_total"),
-					BytesMetricName:         ptr("mdai_watcher_four_bytes_total"),
+					CountMetricName:         stringToStringPointer("mdai_watcher_four_count_total"),
+					BytesMetricName:         stringToStringPointer("mdai_watcher_four_bytes_total"),
 					Filter: &mdaiv1.ObserverFilter{
-						ErrorMode: ptr("ignore"),
+						ErrorMode: stringToStringPointer("ignore"),
 						Logs: &mdaiv1.ObserverLogsFilter{
 							LogRecord: []string{`attributes["log_level"] == "INFO"`},
 						},
@@ -134,8 +134,8 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 			ObserverResources: &[]mdaiv1.ObserverResource{
 				{
 					Name:     "watcher-collector",
-					Image:    ptr("watcher-image:9.9.9"),
-					Replicas: pointer.Int32Ptr(3),
+					Image:    stringToStringPointer("watcher-image:9.9.9"),
+					Replicas: ptr.To(int32(3)),
 					Resources: &v1.ResourceRequirements{
 						Limits: v1.ResourceList{
 							"Cpu":    resource.MustParse("500m"),
@@ -148,8 +148,8 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 				},
 				{
 					Name:     "watcher-nother-collector",
-					Image:    ptr("watcher-image:4.2.0"),
-					Replicas: pointer.Int32Ptr(2),
+					Image:    stringToStringPointer("watcher-image:4.2.0"),
+					Replicas: ptr.To(int32(2)),
 					Resources: &v1.ResourceRequirements{
 						Limits: v1.ResourceList{
 							"Cpu":    resource.MustParse("300m"),
@@ -256,6 +256,6 @@ var _ = Describe("MdaiHub Webhook", func() {
 
 })
 
-func ptr(s string) *string {
+func stringToStringPointer(s string) *string {
 	return &s
 }
