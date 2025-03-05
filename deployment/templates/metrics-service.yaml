@@ -8,6 +8,7 @@ metadata:
 spec:
   type: {{ .Values.metricsService.type }}
   selector:
+    app.kubernetes.io/name: mdai-operator
     control-plane: controller-manager
     {{- include "deployment.selectorLabels" . | nindent 4 }}
   ports:
