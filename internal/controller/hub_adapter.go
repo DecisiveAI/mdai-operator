@@ -14,24 +14,23 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v3"
-	"k8s.io/apimachinery/pkg/util/intstr"
-
-	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
-	"github.com/valkey-io/valkey-go"
-	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
-
 	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
+	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/go-logr/logr"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/valkey-io/valkey-go"
+	"gopkg.in/yaml.v3"
+	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -49,7 +48,7 @@ const (
 
 	envConfigMapNamePostfix = "-variables"
 
-	observerDefaultImage          = "public.ecr.aws/decisiveai/watcher-collector:0.1"
+	observerDefaultImage          = "public.ecr.aws/decisiveai/watcher-collector:0.1.1"
 	MdaiHubEventHistoryStreamName = "mdai_hub_event_history"
 	requeueTime                   = time.Second * 10
 
@@ -796,6 +795,16 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 				// FIXME: update name away from watcher
 				"/mdai-watcher-collector",
 				"--config=/conf/collector.yaml",
+			},
+			SecurityContext: &v1.SecurityContext{
+				SeccompProfile: &v1.SeccompProfile{
+					Type: v1.SeccompProfileTypeRuntimeDefault,
+				},
+				AllowPrivilegeEscalation: ptr.To(false),
+				Capabilities: &v1.Capabilities{
+					Drop: []v1.Capability{"ALL"},
+				},
+				RunAsNonRoot: ptr.To(true),
 			},
 		}
 

@@ -33,7 +33,7 @@ const (
 		"releases/download/%s/bundle.yaml"
 
 	certmanagerVersion = "v1.17.0"
-	certmanagerURLTmpl = "https://github.com/jetstack/cert-manager/releases/download/%s/cert-manager.yaml"
+	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
 
 	otelUrl = "https://github.com/open-telemetry/opentelemetry-operator/releases/latest/" +
 		"download/opentelemetry-operator.yaml"

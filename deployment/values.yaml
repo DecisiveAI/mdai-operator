@@ -4,6 +4,8 @@ controllerManager:
     - --metrics-bind-address=:8443
     - --leader-elect=false
     - --health-probe-bind-address=:8081
+    - --metrics-cert-path=/tmp/k8s-metrics-server/metrics-certs
+    - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
     containerSecurityContext:
       allowPrivilegeEscalation: false
       capabilities:
@@ -23,6 +25,8 @@ controllerManager:
         memory: 64Mi
   podSecurityContext:
     runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
   replicas: 1
   serviceAccount:
     annotations: {}

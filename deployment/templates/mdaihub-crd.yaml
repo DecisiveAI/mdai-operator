@@ -3,7 +3,7 @@ kind: CustomResourceDefinition
 metadata:
   name: mdaihubs.hub.mydecisive.ai
   annotations:
-    controller-gen.kubebuilder.io/version: v0.17.1
+    controller-gen.kubebuilder.io/version: v0.17.2
   labels:
   {{- include "deployment.labels" . | nindent 4 }}
 spec:

@@ -5,6 +5,8 @@
 domain: mydecisive.ai
 layout:
 - go.kubebuilder.io/v4
+plugins:
+  grafana.kubebuilder.io/v1-alpha: {}
 projectName: mdai-operator
 repo: github.com/DecisiveAI/mdai-operator
 resources:

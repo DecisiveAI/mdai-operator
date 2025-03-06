@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/valkey-io/valkey-go"
+	"k8s.io/utils/ptr"
 
 	v1 "github.com/DecisiveAI/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
@@ -596,10 +597,10 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 		Name:                    "watcher4",
 		ResourceRef:             "watcher-collector",
 		LabelResourceAttributes: []string{"service.name", "team", "region"},
-		CountMetricName:         ptr("mdai_watcher_four_count_total"),
-		BytesMetricName:         ptr("mdai_watcher_four_bytes_total"),
+		CountMetricName:         ptr.To("mdai_watcher_four_count_total"),
+		BytesMetricName:         ptr.To("mdai_watcher_four_bytes_total"),
 		Filter: &v1.ObserverFilter{
-			ErrorMode: ptr("ignore"),
+			ErrorMode: ptr.To("ignore"),
 			Logs: &v1.ObserverLogsFilter{
 				LogRecord: []string{`attributes["log_level"] == "INFO"`},
 			},
@@ -708,8 +709,4 @@ func TestEnsureStatusSetToDone(t *testing.T) {
 	if cond.Message != "reconciled successfully" {
 		t.Errorf("expected message 'reconciled successfully', got: %q", cond.Message)
 	}
-}
-
-func ptr(s string) *string {
-	return &s
 }

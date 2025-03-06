@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/DecisiveAI/mdai-operator/test/utils"
@@ -46,12 +47,19 @@ var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
 
 	// Before running the tests, set up the environment by creating the namespace,
-	// installing CRDs, and deploying the controller.
+	// enforce the restricted security policy to the namespace, installing CRDs,
+	// and deploying the controller.
 	BeforeAll(func() {
 		By("creating manager namespace")
 		cmd := exec.Command("kubectl", "create", "ns", namespace)
 		_, err := utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create namespace")
+
+		By("labeling the namespace to enforce the restricted security policy")
+		cmd = exec.Command("kubectl", "label", "--overwrite", "ns", namespace,
+			"pod-security.kubernetes.io/enforce=restricted")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
 
 		By("creating otel namespace")
 		cmd = exec.Command("kubectl", "create", "ns", otelNamespace)
@@ -63,7 +71,7 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
-		By("creating a empty secret for the controller-manager")
+		By("creating a valkey secret for the controller-manager")
 		cmd = exec.Command("kubectl", "create", "secret", "generic", "valkey-secret",
 			"--namespace", namespace,
 			"--from-literal=VALKEY_ENDPOINT=valkey-primary.default.svc.cluster.local:6379",
@@ -109,7 +117,7 @@ var _ = Describe("Manager", Ordered, func() {
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Controller logs:\n %s", controllerLogs)
 			} else {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get Controller logs: \n%s", err)
+				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get Controller logs: %s", err)
 			}
 
 			By("Fetching Kubernetes events")
@@ -118,7 +126,7 @@ var _ = Describe("Manager", Ordered, func() {
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Kubernetes events:\n%s", eventsOutput)
 			} else {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get Kubernetes events: \n%s", err)
+				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get Kubernetes events: %s", err)
 			}
 
 			By("Fetching curl-metrics logs")
@@ -127,7 +135,7 @@ var _ = Describe("Manager", Ordered, func() {
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Metrics logs:\n %s", metricsOutput)
 			} else {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get curl-metrics logs: \n %s", err)
+				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get curl-metrics logs: %s", err)
 			}
 
 			By("Fetching controller manager pod description")
@@ -223,10 +231,30 @@ var _ = Describe("Manager", Ordered, func() {
 			By("creating the curl-metrics pod to access the metrics endpoint")
 			cmd = exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
 				"--namespace", namespace,
-				"--image=curlimages/curl:7.78.0",
-				"--", "/bin/sh", "-c", fmt.Sprintf(
-					"curl -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics",
-					token, metricsServiceName, namespace))
+				"--image=curlimages/curl:latest",
+				"--overrides",
+				fmt.Sprintf(`{
+					"spec": {
+						"containers": [{
+							"name": "curl",
+							"image": "curlimages/curl:latest",
+							"command": ["/bin/sh", "-c"],
+							"args": ["curl -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics"],
+							"securityContext": {
+								"allowPrivilegeEscalation": false,
+								"capabilities": {
+									"drop": ["ALL"]
+								},
+								"runAsNonRoot": true,
+								"runAsUser": 1000,
+								"seccompProfile": {
+									"type": "RuntimeDefault"
+								}
+							}
+						}],
+						"serviceAccount": "%s"
+					}
+				}`, token, metricsServiceName, namespace, serviceAccountName))
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create curl-metrics pod")
 
@@ -371,7 +399,33 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 			}
 			Eventually(verifyWatcher, "1m", "5s").Should(Succeed())
-			// TODO check that it's running without errors
+			verifyWatcherPods := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l", "app=mdaihub-sample-watcher-collector")
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(strings.Contains(out, "Running")).To(BeTrue())
+			}
+			Eventually(verifyWatcherPods, "1m", "5s").Should(Succeed())
+
+			verifyWatcherLogs := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l",
+					"app=mdaihub-sample-watcher-collector", "-o", "jsonpath={.items[*].metadata.name}")
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+
+				podNames := strings.Fields(out)
+				for _, pod := range podNames {
+					if pod == "" {
+						continue
+					}
+					logCmd := exec.Command("kubectl", "logs", pod, "-n", namespace)
+					logOut, err := utils.Run(logCmd)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					g.Expect(strings.Contains(strings.ToLower(logOut), "error")).To(BeFalse(), "Log for pod %s contains error", pod)
+				}
+			}
+			Eventually(verifyWatcherLogs).Should(Succeed())
 		})
 
 		It("should delete MdaiHub CRs", func() {
@@ -454,11 +508,32 @@ func getMetricsOutputFull() string {
 	cmd := exec.Command("kubectl", "run", "--rm", "-it", "curl-metrics-temp",
 		"--restart=Never",
 		"--namespace", namespace,
-		"--image=curlimages/curl:7.78.0",
-		"--command", "--",
-		"curl", "-s", "-k",
-		"-H", fmt.Sprintf("Authorization: Bearer %s", token),
-		fmt.Sprintf("https://%s.%s.svc.cluster.local:8443/metrics", metricsServiceName, namespace))
+		"--image=curlimages/curl:latest",
+		fmt.Sprintf("--overrides=%s",
+			fmt.Sprintf(`{
+					"spec": {
+						"containers": [{
+							"name": "curl",
+							"image": "curlimages/curl:latest",
+							"command": ["/bin/sh", "-c"],
+							"args": ["curl -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics"],
+							"securityContext": {
+								"allowPrivilegeEscalation": false,
+								"capabilities": {
+									"drop": ["ALL"]
+								},
+								"runAsNonRoot": true,
+								"runAsUser": 1000,
+								"seccompProfile": {
+									"type": "RuntimeDefault"
+								}
+							}
+						}],
+						"serviceAccount": "%s"
+					}
+				}`, token, metricsServiceName, namespace, serviceAccountName)),
+	)
+
 	metricsOutput, err := utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to run curl command for metrics")
 	return metricsOutput

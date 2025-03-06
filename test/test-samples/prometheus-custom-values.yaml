@@ -2670,10 +2670,10 @@ prometheusOperator:
   ## Namespaces to scope the interaction of the Prometheus Operator and the apiserver (allow list).
   ## This is mutually exclusive with denyNamespaces. Setting this to an empty object will disable the configuration
   ##
-  namespaces: {}
-    # releaseNamespace: true
-    # additional:
-    # - kube-system
+  namespaces:
+    releaseNamespace: true
+    additional:
+    - mdai
 
   ## Namespaces not to scope the interaction of the Prometheus Operator (deny list).
   ##
@@ -3636,7 +3636,7 @@ prometheus:
 
     ## Exemplars related settings that are runtime reloadable.
     ## It requires to enable the exemplar storage feature to be effective.
-    exemplars: ""
+    exemplars: {}
       ## Maximum number of exemplars stored in memory for all series.
       ## If not set, Prometheus uses its default value.
       ## A value of zero or less than zero disables the storage.
@@ -3652,7 +3652,7 @@ prometheus:
     image:
       registry: quay.io
       repository: prometheus/prometheus
-      tag: v3.1.0
+      tag: v3.2.1
       sha: ""
 
     ## Tolerations for use with node taints
@@ -3776,7 +3776,7 @@ prometheus:
     ## prometheus resource to be created with selectors based on values in the helm deployment,
     ## which will also match the servicemonitors created
     ##
-    serviceMonitorSelectorNilUsesHelmValues: true
+    serviceMonitorSelectorNilUsesHelmValues: false
 
     ## ServiceMonitors to be selected for target discovery.
     ## If {}, select all ServiceMonitors
@@ -3799,7 +3799,7 @@ prometheus:
     ## prometheus resource to be created with selectors based on values in the helm deployment,
     ## which will also match the podmonitors created
     ##
-    podMonitorSelectorNilUsesHelmValues: true
+    podMonitorSelectorNilUsesHelmValues: false
 
     ## PodMonitors to be selected for target discovery.
     ## If {}, select all PodMonitors
