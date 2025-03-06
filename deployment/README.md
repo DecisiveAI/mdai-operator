@@ -33,6 +33,3 @@ MDAI Operator Helm Chart
 | webhookService.ports[0].protocol | string | `"TCP"` |  |
 | webhookService.ports[0].targetPort | int | `9443` |  |
 | webhookService.type | string | `"ClusterIP"` |  |
-| webhooks.autoGenerateCert.certValidDays | int | `3650` |  |
-| webhooks.autoGenerateCert.enabled | bool | `true` |  |
-| webhooks.certManager.enabled | bool | `false` |  |
