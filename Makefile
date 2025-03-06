@@ -245,12 +245,4 @@ endef
 
 helm: manifests kustomize helmify helm-docs
 	@$(KUSTOMIZE) build config/default | $(HELMIFY) deployment
-	@for file in deployment/templates/serving-cert.yaml deployment/templates/selfsigned-issuer.yaml; do \
-	  tmp_file=$$(mktemp); \
-	  printf "{{- if .Values.webhooks.certManager.enabled }}\n" > "$$tmp_file"; \
-	  cat "$$file" >> "$$tmp_file"; \
-	  printf "\n{{- end }}" >> "$$tmp_file"; \
-	  mv "$$tmp_file" "$$file"; \
-	done
-	@printf "webhooks:\n  certManager:\n    enabled: false\n  autoGenerateCert:\n    enabled: true\n    certValidDays: 3650\n" >> deployment/values.yaml
 	@$(HELM_DOCS) --skip-version-footer deployment -f values.yaml -l warning
