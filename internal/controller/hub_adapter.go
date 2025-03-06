@@ -896,10 +896,25 @@ func (c HubAdapter) buildCollectorConfig(observers []mdaiv1.Observer) (string, e
 		dataVolumeReceivers = append(dataVolumeReceivers, dvKey)
 	}
 
+	// add extension that will limit the cpu usage and memory usage to the cgroup limits
+	enabledExtension := map[string]any{
+		"enabled": "true",
+	}
+
+	extensions := map[string]any{
+		"cgroupruntime": map[string]any{
+			"gomaxprocs": enabledExtension,
+			"gomemlimit": enabledExtension,
+		},
+	}
+
+	config["extensions"] = extensions
+
 	config["service"].(map[string]any)["pipelines"].(map[string]any)["metrics/observeroutput"] = map[string]any{
 		"receivers":  dataVolumeReceivers,
 		"processors": []string{"deltatocumulative"},
 		"exporters":  []string{"prometheus"},
+		"extensions": []string{"cgroupruntime"},
 	}
 
 	raw, err := yaml.Marshal(config)
