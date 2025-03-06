@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.uber.org/multierr"
 	"iter"
 	"slices"
 	"strconv"
@@ -623,6 +624,18 @@ func (c HubAdapter) createOrUpdateObserverResourceService(ctx context.Context, n
 		return err
 	}
 
+	grpcPort := v1.ServicePort{
+		Name:       "otlp-grpc",
+		Protocol:   v1.ProtocolTCP,
+		Port:       4317,
+		TargetPort: intstr.FromString("otlp-grpc"),
+	}
+	httpPort := v1.ServicePort{
+		Name:       "otlp-http",
+		Protocol:   v1.ProtocolTCP,
+		Port:       4318,
+		TargetPort: intstr.FromString("otlp-http"),
+	}
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, service, func() error {
 		if service.Labels == nil {
 			service.Labels = make(map[string]string)
@@ -636,18 +649,8 @@ func (c HubAdapter) createOrUpdateObserverResourceService(ctx context.Context, n
 				"app": appLabel,
 			},
 			Ports: []v1.ServicePort{
-				{
-					Name:       "otlp-grpc",
-					Protocol:   v1.ProtocolTCP,
-					Port:       4317,
-					TargetPort: intstr.FromString("otlp-grpc"),
-				},
-				{
-					Name:       "otlp-http",
-					Protocol:   v1.ProtocolTCP,
-					Port:       4318,
-					TargetPort: intstr.FromString("otlp-http"),
-				},
+				grpcPort,
+				httpPort,
 			},
 			Type: v1.ServiceTypeClusterIP,
 		}
@@ -657,7 +660,76 @@ func (c HubAdapter) createOrUpdateObserverResourceService(ctx context.Context, n
 		return fmt.Errorf("failed to create or update watcher-collector-service: %w", err)
 	}
 
+	if observerResource.ServiceVariables != nil {
+		grpcVariableRef := observerResource.ServiceVariables.GrpcEndpointVariableRef
+		httpVariableRef := observerResource.ServiceVariables.HttpEndpointVariableRef
+		if grpcVariableRef != "" {
+			if err := c.updateVariableForServiceEndpoint(ctx, namespace, observerResource.Name, grpcVariableRef, service.Name, grpcPort.Port); err != nil {
+				return err
+			}
+		}
+		if httpVariableRef != "" {
+			if err := c.updateVariableForServiceEndpoint(ctx, namespace, observerResource.Name, httpVariableRef, service.Name, httpPort.Port); err != nil {
+				return err
+			}
+		}
+	}
+
 	c.logger.Info("Successfully created or updated watcher-collector-service", "service", name, "namespace", namespace, "operation", operationResult)
+	return nil
+}
+
+func (c HubAdapter) updateVariableForServiceEndpoint(ctx context.Context, namespace string, observerResourceName string, variableRef string, serviceName string, port int32) error {
+	variables := c.mdaiCR.Spec.Variables
+	var variableDefinition *mdaiv1.Variable
+	for _, variable := range *variables {
+		if variable.StorageKey == variableRef {
+			variableDefinition = &variable
+			break
+		}
+	}
+
+	if variableDefinition == nil {
+		err := fmt.Errorf("variable %s referenced in observerResource %s does not exist", variableRef, observerResourceName)
+		c.logger.Error(err, "Cannot update variable that is not defined")
+		return err
+	}
+
+	if variableDefinition.StorageType != mdaiv1.VariableSourceTypeBuiltInValkey {
+		// TODO: Put validation in webhook to prevent this from happening :sobby:
+		err := fmt.Errorf("variableRef %s in observerResource %s references a storage type that is unsupported", variableRef, observerResourceName)
+		c.logger.Error(err, "Cannot update variable that is not defined")
+		return err
+	}
+
+	grpcEndpoint := fmt.Sprintf("%s.%s.svc.cluster.local:%d", serviceName, namespace, port)
+	variableKey := c.composeValkeyKey(*variableDefinition)
+	updateVarCmd := c.valKeyClient.B().Set().Key(variableKey).Value(grpcEndpoint).Build()
+
+	mdaiHubEvent := map[string]string{
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"hub_name":  c.mdaiCR.Name,
+		"type":      "observer_resource_service_update",
+	}
+	thresholdID := strconv.FormatInt(time.Now().Add(-valkeyAuditStreamExpiry).UnixMilli(), 10)
+	auditLogUpdateCmd := c.valKeyClient.B().Xadd().Key(MdaiHubEventHistoryStreamName).Minid().Threshold(thresholdID).Id("*").FieldValue().FieldValueIter(composeValkeyStreamIterFromMap(mdaiHubEvent)).Build()
+
+	results := c.valKeyClient.DoMulti(ctx,
+		updateVarCmd,
+		auditLogUpdateCmd,
+	)
+
+	var valkeyErrs error
+	for _, result := range results {
+		valkeyErr := result.Error()
+		if valkeyErr != nil {
+			valkeyErrs = multierr.Append(valkeyErrs, valkeyErr)
+		}
+	}
+	if valkeyErrs != nil {
+		c.logger.Error(valkeyErrs, "Valkey errors occurred while updating variables for observerResource service", "observerResource", observerResourceName, "service", service.Name, "variableRef", variableRef)
+		return valkeyErrs
+	}
 	return nil
 }
 

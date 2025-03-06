@@ -164,6 +164,17 @@ type ObserverResource struct {
 	Replicas *int32 `json:"replicas,omitempty" yaml:"replicas,omitempty"`
 	// +kubebuilder:validation:Optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty" yaml:"resources,omitempty"`
+	// +kubebuilder:validation:Optional
+	ServiceVariables ObserverResourceServiceVariables `json:"serviceVariables,omitempty" yaml:"serviceVariables,omitempty"`
+}
+
+type ObserverResourceServiceVariables struct {
+	// GrpcEndpointVariableRef referenced variable that will be populated with the OTLP GRPC endpoint for this observer resource
+	// +kubebuilder:validation:Optional
+	GrpcEndpointVariableRef string `json:"grpcEndpointVariableRef" yaml:"grpcEndpointVariableRef"`
+	// HttpEndpointVariableRef referenced variable that will be populated with the OTLP HTTP endpoint for this observer resource
+	// +kubebuilder:validation:Optional
+	HttpEndpointVariableRef string `json:"httpEndpointVariableRef" yaml:"httpEndpointVariableRef"`
 }
 
 type Config struct {

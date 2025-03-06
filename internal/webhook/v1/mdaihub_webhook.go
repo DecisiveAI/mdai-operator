@@ -213,6 +213,9 @@ func (v *MdaiHubCustomValidator) validateObserversAndObserverResources(mdaihub *
 			if observerResource.Resources == nil {
 				newWarnings = append(newWarnings, "ObserverResource "+observerResource.Name+" does not define resource requests/limits")
 			}
+			// TODO: Validation of service variables
+			// TODO: Validate that a service variable only uses valkey, because other storage types are unsupported as of now
+			// TODO: Validate that a service variable is not also referenced by an eval, because the two writers could clobber each others' work
 		}
 	}
 	if observers == nil || len(*observers) == 0 {
