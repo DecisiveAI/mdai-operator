@@ -1,0 +1,44 @@
+name: Set Helm Chart Version to Git Tag
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  update_version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Install yq
+        run: sudo apt-get install -y yq
+
+      - name: Update Chart Version to Git Tag
+        run: |
+          GIT_TAG=$(git describe --tags --abbrev=0 | sed 's/^v//')
+          yq eval -i ".version = env(GIT_TAG) | .appVersion = env(GIT_TAG)" deployment/Chart.yaml
+          sed -i -E "s|(newTag: )[^\"]*|\1$GIT_TAG|" config/manager/kustomization.yaml
+
+      - name: Run helm-docs
+        uses: losisin/helm-docs-github-action@v1
+        with:
+          chart-search-root: ./deployment
+          fail-on-diff: false
+          git-push: false
+
+      - name: Generate values schema json
+        uses: losisin/helm-values-schema-json-action@v1
+        with:
+          input: deployment/values.yaml
+          output: deployment/values.schema.json
+          fail-on-diff: false
+          git-push: false
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: update helm chart version to $GIT_TAG"
+          git push
