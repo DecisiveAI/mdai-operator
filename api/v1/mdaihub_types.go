@@ -18,6 +18,7 @@ package v1
 
 import (
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -142,8 +143,8 @@ type ObserverFilter struct {
 type Observer struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
-	// +kubebuilder:validation:Optional
-	Image *string `json:"image,omitempty" yaml:"image,omitempty"` // TODO code is not implemented for image field
+	// +kubebuilder:validation:Required
+	ResourceRef string `json:"resourceRef" yaml:"resourceRef"`
 	// +kubebuilder:validation:Required
 	LabelResourceAttributes []string `json:"labelResourceAttributes" yaml:"labelResourceAttributes"`
 	// +kubebuilder:validation:Optional
@@ -152,6 +153,17 @@ type Observer struct {
 	BytesMetricName *string `json:"bytesMetricName,omitempty" yaml:"bytesMetricName,omitempty"`
 	// +kubebuilder:validation:Optional
 	Filter *ObserverFilter `json:"filter,omitempty" yaml:"filter,omitempty"`
+}
+
+type ObserverResource struct {
+	// +kubebuilder:validation:Required
+	Name string `json:"name" yaml:"name"`
+	// +kubebuilder:validation:Required
+	Image string `json:"image" yaml:"image"`
+	// +kubebuilder:validation:Optional
+	Replicas *int32 `json:"replicas,omitempty" yaml:"replicas,omitempty"`
+	// +kubebuilder:validation:Optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty" yaml:"resources,omitempty"`
 }
 
 type Config struct {
@@ -163,10 +175,11 @@ type Config struct {
 // MdaiHubSpec defines the desired state of MdaiHub.
 type MdaiHubSpec struct {
 	// kubebuilder:validation:Optional
-	Config      *Config       `json:"config,omitempty" yaml:"config,omitempty"`
-	Observers   *[]Observer   `json:"observers,omitempty" yaml:"observers,omitempty"`
-	Variables   *[]Variable   `json:"variables,omitempty"`
-	Evaluations *[]Evaluation `json:"evaluations,omitempty"` // evaluation configuration (alerting rules)
+	Config            *Config             `json:"config,omitempty" yaml:"config,omitempty"`
+	Observers         *[]Observer         `json:"observers,omitempty" yaml:"observers,omitempty"`
+	ObserverResources *[]ObserverResource `json:"observerResources,omitempty" yaml:"observerResources,omitempty"`
+	Variables         *[]Variable         `json:"variables,omitempty"`
+	Evaluations       *[]Evaluation       `json:"evaluations,omitempty"` // evaluation configuration (alerting rules)
 }
 
 // MdaiHubStatus defines the observed state of MdaiHub.
@@ -215,10 +228,11 @@ type (
 	VariableTransform       string
 	EvaluationType          string
 	VariableUpdateOperation string
+	ObserverResourceType    string
 )
 
 const (
-	VariableSourceTypeBultInValkey       VariableStorageType     = "mdai-valkey"
+	VariableSourceTypeBuiltInValkey      VariableStorageType     = "mdai-valkey"
 	VariableTypeInt                      VariableType            = "int"
 	VariableTypeFloat                    VariableType            = "float"
 	VariableTypeBoolean                  VariableType            = "boolean"
@@ -227,4 +241,5 @@ const (
 	EvaluationTypePrometheusAlert        EvaluationType          = "mdai/prometheus_alert"
 	VariableUpdateOperationAddElement    VariableUpdateOperation = "mdai/add_element"    // TODO: use this const in event handler instead of creating a new one
 	VariableUpdateOperationRemoveElement VariableUpdateOperation = "mdai/remove_element" // TODO: use this const in event handler instead of creating a new one
+	ObserverResourceTypeWatcherCollector ObserverResourceType    = "mdai-watcher"
 )
