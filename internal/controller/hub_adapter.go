@@ -790,21 +790,21 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 					MountPath: "/conf/collector.yaml",
 					SubPath:   "collector.yaml",
 				},
-				SecurityContext: &v1.SecurityContext{
-					SeccompProfile: &v1.SeccompProfile{
-						Type: v1.SeccompProfileTypeRuntimeDefault,
-					},
-					AllowPrivilegeEscalation: ptr.To(false),
-					Capabilities: &v1.Capabilities{
-						Drop: []v1.Capability{"ALL"},
-					},
-					RunAsNonRoot: ptr.To(true),
-				},
 			},
 			Command: []string{
 				// FIXME: update name away from watcher
 				"/mdai-watcher-collector",
 				"--config=/conf/collector.yaml",
+			},
+			SecurityContext: &v1.SecurityContext{
+				SeccompProfile: &v1.SeccompProfile{
+					Type: v1.SeccompProfileTypeRuntimeDefault,
+				},
+				AllowPrivilegeEscalation: ptr.To(false),
+				Capabilities: &v1.Capabilities{
+					Drop: []v1.Capability{"ALL"},
+				},
+				RunAsNonRoot: ptr.To(true),
 			},
 		}
 
