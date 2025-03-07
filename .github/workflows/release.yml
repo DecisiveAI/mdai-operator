@@ -32,9 +32,6 @@ jobs:
       - name: Vendor
         run: go mod vendor
 
-      - name: Build
-        run: make build
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -102,3 +99,17 @@ jobs:
       #     subject-name: public.ecr.aws/p3k6k6h3/${{ env.IMAGE_NAME }}
       #     subject-digest: ${{ steps.push.outputs.digest }}
       #     push-to-registry: true
+
+      - name: Update helm charts
+        id: helm-update
+        run: make helm-update
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add deployment/README.md deployment/values.schema.json deployment/values.yaml
+          git commit -m "update deployment files [skip ci]" || echo "no changes to commit"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

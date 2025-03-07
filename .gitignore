@@ -31,3 +31,5 @@ go.work
 
 .DS_Store
 /output-dir/
+
+deployment/Chart.yaml

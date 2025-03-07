@@ -61,7 +61,7 @@ kind create cluster -n  mdai-operator-test
 ```
 **Cert manager**
 ```shell
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.0/cert-manager.yaml
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.1/cert-manager.yaml
 ```
 **Otel operator**   
 TBD  
@@ -150,21 +150,25 @@ kubectl delete -k test/test-samples/
 make uninstall
 ```
 
-**UnDeploy the controller from the cluster:**
+**Undeploy the controller from the cluster:**
 
 ```sh
 make undeploy
 ```
 ## Helm
-- Regenerate from the latest manifests:
+### Regenerate from the latest manifests:
 ```shell
-make helm
+make helm-update
 ```
 - update chart and app version in `deployment/Chart.yaml`
 - update image version in `deployment/values.yaml`
-- package chart
+- update `newTag` in `config/manager/kustomization.yaml`
+- update `README.md` in `deployment`
+- update `values.schema.json` in `deployment`
+
+### Package chart
 ```shell
-helm package -u deployment
+make helm-package
 ```
 - from https://github.com/DecisiveAI/mdai-helm-charts 
 ```shell
