@@ -3,7 +3,7 @@ kind: OpenTelemetryCollector
 metadata:
   labels:
     mdaihub-name: mdaihub-sample
-  name: gateway-3
+  name: gateway
   namespace: otel
 spec:
   envFrom:

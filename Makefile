@@ -19,7 +19,8 @@ CONTAINER_TOOL ?= docker
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
-VERSION ?= $(shell git describe --tags --abbrev=0 | sed 's/^v//')
+# Update this version to match new release tag and run helm targets
+VERSION = 0.1.8
 
 .PHONY: all
 all: build
@@ -260,3 +261,12 @@ helm-update: manifests kustomize helmify helm-docs
 .PHONY: helm-package
 helm-package: helm-update
 	@helm package -u deployment
+
+.PHONY: local-deploy
+local-deploy: manifests install
+	go mod vendor
+	make docker-build IMG=mdai-operator:${VERSION}
+	kind load docker-image mdai-operator:${VERSION} --name mdai-operator-test
+	make deploy IMG=mdai-operator:${VERSION}
+	kubectl rollout restart deployment mdai-operator-controller-manager -n mdai
+
