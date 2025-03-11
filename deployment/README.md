@@ -1,6 +1,6 @@
 # mdai-operator
 
-![Version: 0.1.7](https://img.shields.io/badge/Version-0.1.7-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.1.7](https://img.shields.io/badge/AppVersion-0.1.7-informational?style=flat-square)
+![Version: 0.1.8](https://img.shields.io/badge/Version-0.1.8-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.1.8](https://img.shields.io/badge/AppVersion-0.1.8-informational?style=flat-square)
 
 MDAI Operator Helm Chart
 
@@ -11,16 +11,19 @@ MDAI Operator Helm Chart
 | controllerManager.manager.args[0] | string | `"--metrics-bind-address=:8443"` |  |
 | controllerManager.manager.args[1] | string | `"--leader-elect=false"` |  |
 | controllerManager.manager.args[2] | string | `"--health-probe-bind-address=:8081"` |  |
+| controllerManager.manager.args[3] | string | `"--metrics-cert-path=/tmp/k8s-metrics-server/metrics-certs"` |  |
+| controllerManager.manager.args[4] | string | `"--webhook-cert-path=/tmp/k8s-webhook-server/serving-certs"` |  |
 | controllerManager.manager.containerSecurityContext.allowPrivilegeEscalation | bool | `false` |  |
 | controllerManager.manager.containerSecurityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | controllerManager.manager.env.valkeyAuditStreamExpiryMs | string | `"2592000000"` |  |
 | controllerManager.manager.image.repository | string | `"public.ecr.aws/p3k6k6h3/mdai-operator"` |  |
-| controllerManager.manager.image.tag | string | `"0.1.7"` |  |
+| controllerManager.manager.image.tag | string | `"0.1.8"` |  |
 | controllerManager.manager.resources.limits.cpu | string | `"500m"` |  |
 | controllerManager.manager.resources.limits.memory | string | `"128Mi"` |  |
 | controllerManager.manager.resources.requests.cpu | string | `"10m"` |  |
 | controllerManager.manager.resources.requests.memory | string | `"64Mi"` |  |
 | controllerManager.podSecurityContext.runAsNonRoot | bool | `true` |  |
+| controllerManager.podSecurityContext.seccompProfile.type | string | `"RuntimeDefault"` |  |
 | controllerManager.replicas | int | `1` |  |
 | controllerManager.serviceAccount.annotations | object | `{}` |  |
 | kubernetesClusterDomain | string | `"cluster.local"` |  |
@@ -33,6 +36,3 @@ MDAI Operator Helm Chart
 | webhookService.ports[0].protocol | string | `"TCP"` |  |
 | webhookService.ports[0].targetPort | int | `9443` |  |
 | webhookService.type | string | `"ClusterIP"` |  |
-| webhooks.autoGenerateCert.certValidDays | int | `3650` |  |
-| webhooks.autoGenerateCert.enabled | bool | `true` |  |
-| webhooks.certManager.enabled | bool | `false` |  |

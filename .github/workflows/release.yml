@@ -2,7 +2,6 @@ name: Docker push for main branch
 
 on:
   push:
-    branches: [ "main" ]
     tags:
     - 'v*'
 
@@ -31,9 +30,6 @@ jobs:
 
       - name: Vendor
         run: go mod vendor
-
-      - name: Build
-        run: make build
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -82,7 +78,7 @@ jobs:
       #       }
       #     skip-extraction: ${{ steps.cache.outputs.cache-hit }}
 
-      - name: Build and push
+      - name: Build and push image
         id: push
         uses: docker/build-push-action@v6
         with:
@@ -95,10 +91,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
 
-      # doesn't seem to be supported by ECR
-      # - name: Generate artifact attestation
-      #   uses: actions/attest-build-provenance@v1
-      #   with:
-      #     subject-name: public.ecr.aws/p3k6k6h3/${{ env.IMAGE_NAME }}
-      #     subject-digest: ${{ steps.push.outputs.digest }}
-      #     push-to-registry: true

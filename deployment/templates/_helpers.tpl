@@ -60,20 +60,3 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
-
-{{- define "deployment.webhookCert" -}}
-{{- $caCertEnc := "" }}
-{{- $certCrtEnc := "" }}
-{{- $certKeyEnc := "" }}
-{{- if .Values.webhooks.autoGenerateCert.enabled }}
-{{- $altNames := list ( printf "%s-webhook-service.%s" (include "deployment.fullname" .) .Release.Namespace ) ( printf "%s-webhook-service.%s.svc" (include "deployment.fullname" .) .Release.Namespace ) -}}
-{{- $certValidDays := int .Values.webhooks.autoGenerateCert.certValidDays | default 3650 }}
-{{- $ca := genCA "mdai-operator-ca" $certValidDays }}
-{{- $cert := genSignedCert (include "deployment.fullname" .) nil $altNames $certValidDays $ca }}
-{{- $certCrtEnc = b64enc $cert.Cert }}
-{{- $certKeyEnc = b64enc $cert.Key }}
-{{- $caCertEnc = b64enc $ca.Cert }}
-{{- $result := dict "crt" $certCrtEnc "key" $certKeyEnc "ca" $caCertEnc }}
-{{- $result | toYaml }}
-{{- end }}
-{{- end }}

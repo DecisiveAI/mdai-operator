@@ -11,10 +11,6 @@ spec:
         sampling_initial: 2
         sampling_thereafter: 100
         verbosity: detailed
-      otlp/mdai_datalyzer:
-        endpoint: datalyzer-service:4317
-        tls:
-          insecure: true
     processors:
       filter/ottl:
         logs:
@@ -45,7 +41,6 @@ spec:
         logs:
           exporters:
             - debug
-            - otlp/mdai_datalyzer
           processors:
             - resource
             - filter/ottl
@@ -54,7 +49,6 @@ spec:
         metrics:
           exporters:
             - debug
-            - otlp/mdai_datalyzer
           processors:
             - resource
           receivers:
@@ -62,7 +56,6 @@ spec:
         traces:
           exporters:
             - debug
-            - otlp/mdai_datalyzer
           processors:
             - resource
           receivers:

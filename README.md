@@ -3,7 +3,7 @@
 [![Tests](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml)
 [![Lint](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml)
 # Mdai K8s Operator
-manages MDAI Hub
+manages MDAI Hubs
 ## Description
 Mdai k8s operator: 
 
@@ -47,13 +47,6 @@ export GOPRIVATE=github.com/decisiveai/*
 - Valkey secret created (see below)
 - Valkey is installed
 
-### To run locally
-make sure the following env variable is set
-```shell
-export VALKEY_ENDPOINT=127.0.0.1:6379
-export VALKEY_PASSWORD=abc
-```
-
 ### To Deploy on the local cluster
 **Create cluster**
 ```shell
@@ -61,58 +54,28 @@ kind create cluster -n  mdai-operator-test
 ```
 **Cert manager**
 ```shell
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.0/cert-manager.yaml
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.1/cert-manager.yaml
 ```
-**Otel operator**   
-TBD  
-**valkey**
+**Other prerequisites operator**   
 ```shell
+kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releases/latest/download/opentelemetry-operator.yaml
 helm install valkey oci://registry-1.docker.io/bitnamicharts/valkey --set auth.password=abc
-```
-**prometheus operator**
-```shell
 helm install prometheus prometheus-community/kube-prometheus-stack
-```
-**Create namespaces**
-```shell
+helm upgrade prometheus prometheus-community/kube-prometheus-stack -f test/test-samples/prometheus-custom-values.yaml
 kubectl create namespace otel
 kubectl create namespace mdai
-```
-**Generate valkey secret**
-```shell
 kubectl create secret generic valkey-secret \
   --from-literal=VALKEY_ENDPOINT=valkey-primary.default.svc.cluster.local:6379 \
   --from-literal=VALKEY_PASSWORD=abc \
   --namespace=mdai \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
-**Build and push your image to the location specified by `IMG`:**
+**Build and deploy to the local kind cluster:**
+Make sure you have the right k8s context selected, run:
 
 ```sh
-go mod vendor
-make docker-build IMG=mdai-operator:v0.0.1
-kind load docker-image mdai-operator:v0.0.1 --name mdai-operator-test
-kubectl rollout restart deployment mdai-operator-controller-manager -n mdai
+make local-deploy
 ```
-
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
-
-**Install the CRDs into the cluster:**
-
-```sh
-make install
-```
-
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
-
-```sh
-make deploy IMG=mdai-operator:v0.0.1
-```
-
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
 
 **Create instances of your solution**
 You can apply the samples (examples) from the config/sample:
@@ -124,11 +87,6 @@ kubectl apply -k config/samples/
 Deploy test otel collectors:
 ```sh
 kubectl apply -k test/test-samples/
-```
-
-Add watcher scrape config to Prometheus:
-```shell
-helm upgrade prometheus prometheus-community/kube-prometheus-stack -f test/test-samples/prometheus-custom-values.yaml
 ```
 
 >**NOTE**: Ensure that the samples has default values to test it out.
@@ -150,27 +108,36 @@ kubectl delete -k test/test-samples/
 make uninstall
 ```
 
-**UnDeploy the controller from the cluster:**
+**Undeploy the controller from the cluster:**
 
 ```sh
 make undeploy
 ```
 ## Helm
-- Regenerate from the latest manifests:
+### Install helm plugin
 ```shell
-make helm
+make helm-values-schema-json-plugin
+```
+### Regenerate from the latest manifests:
+Update VERSION number in make file and run:
+```shell
+make helm-update
 ```
 - update chart and app version in `deployment/Chart.yaml`
 - update image version in `deployment/values.yaml`
-- package chart
+- update `newTag` in `config/manager/kustomization.yaml`
+- update `README.md` in `deployment`
+- update `values.schema.json` in `deployment`
+
+### Package chart
 ```shell
-helm package -u deployment
+make helm-package
 ```
 - from https://github.com/DecisiveAI/mdai-helm-charts 
 ```shell
 cd ../mdai-helm-charts
 helm repo index ../mdai-operator --merge index.yaml
-mv ../mdai-operator/index.yaml ../mdai-operator/mdai-operator-0.1.4.tgz .
+mv ../mdai-operator/index.yaml ../mdai-operator/mdai-operator-0.1.8.tgz .
 cd -
 ```
 ## Project Distribution 

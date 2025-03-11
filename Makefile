@@ -19,6 +19,9 @@ CONTAINER_TOOL ?= docker
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+# Update this version to match new release tag and run helm targets
+VERSION = 0.1.8
+
 .PHONY: all
 all: build
 
@@ -227,6 +230,14 @@ helm-docs: $(HELM_DOCS) ## Download helm-docs locally if necessary.
 $(HELM_DOCS): $(LOCALBIN)
 	$(call go-install-tool,$(HELM_DOCS),github.com/norwoodj/helm-docs/cmd/helm-docs,$(HELM_DOCS_VERSION))
 
+PLUGIN_HELM_VALUES_SCHEMA_FOUND = $(shell helm plugin list | grep ^schema -c)
+
+.PHONY: helm-values-schema-json-plugin
+helm-values-schema-json-plugin:
+ifeq ($(PLUGIN_HELM_VALUES_SCHEMA_FOUND), 0)
+	helm plugin install https://github.com/losisin/helm-values-schema-json.git > /dev/null 2>&1
+endif
+
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
 # $2 - package url which can be installed
@@ -243,14 +254,23 @@ mv $(1) $(1)-$(3) ;\
 ln -sf $(1)-$(3) $(1)
 endef
 
-helm: manifests kustomize helmify helm-docs
+.PHONY: helm-update
+helm-update: manifests kustomize helmify helm-docs  helm-values-schema-json-plugin
+	@pushd config/manager && $(KUSTOMIZE) edit set image controller=public.ecr.aws/p3k6k6h3/mdai-operator:${VERSION} && popd
 	@$(KUSTOMIZE) build config/default | $(HELMIFY) deployment
-	@for file in deployment/templates/serving-cert.yaml deployment/templates/selfsigned-issuer.yaml; do \
-	  tmp_file=$$(mktemp); \
-	  printf "{{- if .Values.webhooks.certManager.enabled }}\n" > "$$tmp_file"; \
-	  cat "$$file" >> "$$tmp_file"; \
-	  printf "\n{{- end }}" >> "$$tmp_file"; \
-	  mv "$$tmp_file" "$$file"; \
-	done
-	@printf "webhooks:\n  certManager:\n    enabled: false\n  autoGenerateCert:\n    enabled: true\n    certValidDays: 3650\n" >> deployment/values.yaml
+	@m4 -D__VERSION__="${VERSION}" deployment/Chart.yaml.m4 > deployment/Chart.yaml
 	@$(HELM_DOCS) --skip-version-footer deployment -f values.yaml -l warning
+	@helm schema -input deployment/values.yaml -output deployment/values.schema.json > /dev/null 2>&1
+
+.PHONY: helm-package
+helm-package: helm-update
+	@helm package -u deployment
+
+.PHONY: local-deploy
+local-deploy: manifests install
+	go mod vendor
+	make docker-build IMG=mdai-operator:${VERSION}
+	kind load docker-image mdai-operator:${VERSION} --name mdai-operator-test
+	make deploy IMG=mdai-operator:${VERSION}
+	kubectl rollout restart deployment mdai-operator-controller-manager -n mdai
+
