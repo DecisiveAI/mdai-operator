@@ -230,9 +230,13 @@ helm-docs: $(HELM_DOCS) ## Download helm-docs locally if necessary.
 $(HELM_DOCS): $(LOCALBIN)
 	$(call go-install-tool,$(HELM_DOCS),github.com/norwoodj/helm-docs/cmd/helm-docs,$(HELM_DOCS_VERSION))
 
+PLUGIN_HELM_VALUES_SCHEMA_FOUND = $(shell helm plugin list | grep ^schema -c)
+
 .PHONY: helm-values-schema-json-plugin
 helm-values-schema-json-plugin:
+ifeq ($(PLUGIN_HELM_VALUES_SCHEMA_FOUND), 0)
 	helm plugin install https://github.com/losisin/helm-values-schema-json.git > /dev/null 2>&1
+endif
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
