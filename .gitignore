@@ -32,4 +32,5 @@ go.work
 .DS_Store
 /output-dir/
 
-deployment/Chart.yaml
+/deployment/Chart.yaml
+/deployment/values.schema.json
