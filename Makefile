@@ -255,7 +255,7 @@ ln -sf $(1)-$(3) $(1)
 endef
 
 .PHONY: helm-update
-helm-update: manifests kustomize helmify helm-docs
+helm-update: manifests kustomize helmify helm-docs  helm-values-schema-json-plugin
 	@pushd config/manager && $(KUSTOMIZE) edit set image controller=public.ecr.aws/p3k6k6h3/mdai-operator:${VERSION} && popd
 	@$(KUSTOMIZE) build config/default | $(HELMIFY) deployment
 	@m4 -D__VERSION__="${VERSION}" deployment/Chart.yaml.m4 > deployment/Chart.yaml
