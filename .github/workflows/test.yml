@@ -1,6 +1,10 @@
 name: Tests
 
 on:
+#  workflow_run:
+#    workflows: [ "Lint" ]
+#    types:
+#      - completed
   push:
     branches: [ "main" ]
 #    paths:
@@ -58,13 +62,9 @@ jobs:
           coverage-file-name: coverage.out # can be omitted if you used this default value
           skip-comment: 'true'
 
-      - name: Debug Outputs
-        run: |
-          echo "Coverage report: ${{ steps.report.outputs.coverage_report }}"
-
       - name: Save Coverage Report to File
-        if: steps.coverage.outputs.coverage_report != ''
-        run: echo "${{ steps.coverage.outputs.coverage_report }}" > code-coverage-results.md
+        if: steps.report.outputs.coverage_report != ''
+        run: echo "${{ steps.report.outputs.coverage_report }}" > code-coverage-results.md
 
       - name: Add Coverage PR Comment
         uses: marocchino/sticky-pull-request-comment@v2
@@ -76,18 +76,20 @@ jobs:
       # Step to create a coverage badge in README.md
       - name: Generate Go Coverage Badge  # Pass the `coverage.out` output to this action
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: generate-badge
         uses: tj-actions/coverage-badge-go@v2
         with:
           filename: coverage.out
 
       - name: Verify Changed files
+        if: steps.generate-badge.outcome == 'success'
         uses: tj-actions/verify-changed-files@v16
         id: verify-changed-files
         with:
           files: README.md
 
       - name: Commit changes
-        if: steps.verify-changed-files.outputs.files_changed == 'true'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.verify-changed-files.outputs.files_changed == 'true'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
@@ -95,7 +97,7 @@ jobs:
           git commit -m "chore: Updated coverage badge."
 
       - name: Push changes
-        if: steps.verify-changed-files.outputs.files_changed == 'true'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.verify-changed-files.outputs.files_changed == 'true'
         uses: ad-m/github-push-action@master
         with:
           github_token: ${{ github.token }}
