@@ -89,8 +89,6 @@ func NewHubAdapter(
 }
 
 func (c HubAdapter) ensureFinalizerInitialized(ctx context.Context) (OperationResult, error) {
-	// TODO: Remove this
-	c.logger.Info("This is a temporary addition for testing GH Actions")
 	if !controllerutil.ContainsFinalizer(c.mdaiCR, hubFinalizer) {
 		c.logger.Info("Adding Finalizer for Engine")
 		if ok := controllerutil.AddFinalizer(c.mdaiCR, hubFinalizer); !ok {
