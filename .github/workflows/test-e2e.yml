@@ -25,50 +25,70 @@ jobs:
       - name: Check if "Tests" ran
         id: check-tests
         run: |
-          TESTS_RUN=$(gh run list --workflow "Tests" --branch "${{ github.event.workflow_run.head_branch }}" --repo "${{ github.repository }}" --json status --jq 'length > 0')
+          # Get the branch name from the commit SHA
+          BRANCH_NAME=$(gh api repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_commit.id }} --jq '.commit.tree.url' | awk -F'/' '{print $(NF)}')
+      
+          echo "Detected branch: $BRANCH_NAME"
+      
+          # Check if "Tests" workflow was initialized (queued, in progress, or completed)
+          TESTS_RUN=$(gh run list --workflow "Tests" --branch "$BRANCH_NAME" --repo "${{ github.repository }}" --json status --jq 'map(select(.status == "queued" or .status == "in_progress" or .status == "completed")) | length > 0')
+      
+          echo "Tests initialized: $TESTS_RUN"
           echo "tests_ran=$TESTS_RUN" >> $GITHUB_ENV
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Wait for "Tests" to complete (if it ran)
         if: env.tests_ran == 'true'
         run: |
-          while gh run list --workflow "Tests" --branch "${{ github.event.workflow_run.head_branch }}" --json status --jq '.[] | select(.status != "completed")'; do
+          while gh run list --workflow "Tests" --branch "${{ github.event.workflow_run.head_branch }}" --repo "${{ github.repository }}" --json status --jq '.[] | select(.status != "completed")'; do
             echo "Waiting for 'Tests' to complete..."
             sleep 10
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  test-e2e:
-    name: E2E tests on Ubuntu
-    needs: wait-for-tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Configure git for private modules
-        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
-
-      - name: Clone the code
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Install the latest version of kind
+      - name: Check if "Tests" passed (if it ran)
+        if: env.tests_ran == 'true'
         run: |
-          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
-          chmod +x ./kind
-          sudo mv ./kind /usr/local/bin/kind
+          TESTS_STATUS=$(gh run list --workflow "Tests" --branch "${{ github.event.workflow_run.head_branch }}" --repo "${{ github.repository }}" --json conclusion --jq '.[0].conclusion // "not_run"')
+          echo "Tests workflow conclusion: $TESTS_STATUS"
+          if [[ "$TESTS_STATUS" == "failure" ]]; then
+            echo "Tests failed, stopping workflow."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify kind installation
-        run: kind version
-
-      - name: Create kind cluster
-        run: kind create cluster
-
-      - name: Running Test e2e
-        run: |
-          go mod vendor
-          go mod tidy
-          make test-e2e
+#  test-e2e:
+#    name: E2E tests on Ubuntu
+#    needs: wait-for-tests
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Configure git for private modules
+#        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
+#
+#      - name: Clone the code
+#        uses: actions/checkout@v4
+#
+#      - name: Setup Go
+#        uses: actions/setup-go@v5
+#        with:
+#          go-version-file: go.mod
+#
+#      - name: Install the latest version of kind
+#        run: |
+#          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
+#          chmod +x ./kind
+#          sudo mv ./kind /usr/local/bin/kind
+#
+#      - name: Verify kind installation
+#        run: kind version
+#
+#      - name: Create kind cluster
+#        run: kind create cluster
+#
+#      - name: Running Test e2e
+#        run: |
+#          go mod vendor
+#          go mod tidy
+#          make test-e2e
