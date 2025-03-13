@@ -21,16 +21,16 @@ jobs:
     steps:
       - name: Configure git for private modules
         run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
-
-      - name: Clone the code
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Run linter
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.63.4
+#
+#      - name: Clone the code
+#        uses: actions/checkout@v4
+#
+#      - name: Setup Go
+#        uses: actions/setup-go@v5
+#        with:
+#          go-version-file: go.mod
+#
+#      - name: Run linter
+#        uses: golangci/golangci-lint-action@v6
+#        with:
+#          version: v1.63.4

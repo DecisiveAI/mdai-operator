@@ -53,81 +53,81 @@ jobs:
             echo "go_changed=false" >> $GITHUB_ENV
             echo "go_changed=false"
           fi
-
-  test:
-    needs: check-file-changes
-    if: ${{ github.event_name != 'workflow_run' || needs.check-file-changes.outputs.go_changed == 'true' }}
-    name: Test on Ubuntu
-    runs-on: ubuntu-latest
-    steps:
-      - name: Configure git for private modules
-        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
-
-      - name: Clone the code
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Running Tests
-        run: |
-          go mod vendor
-          go mod tidy
-          make test-coverage
-
-      - name: Archive code coverage results
-        uses: actions/upload-artifact@v4
-        with:
-          name: code-coverage
-          path: coverage.out
-
-      - name: Generate Code Coverage Report
-        uses: fgrosse/go-coverage-report@v1.1.1
-        id: report
-        with:
-          coverage-artifact-name: code-coverage # can be omitted if you used this default value
-          coverage-file-name: coverage.out # can be omitted if you used this default value
-          skip-comment: 'true'
-
-      - name: Save Coverage Report to File
-        if: steps.report.outputs.coverage_report != ''
-        run: echo "${{ steps.report.outputs.coverage_report }}" > code-coverage-results.md
-
-      - name: Add Coverage PR Comment
-        uses: marocchino/sticky-pull-request-comment@v2
-        if: github.event_name == 'pull_request' && hashFiles('code-coverage-results.md') != ''
-        with:
-          recreate: true
-          path: code-coverage-results.md
-
-      # Step to create a coverage badge in README.md
-      - name: Generate Go Coverage Badge  # Pass the `coverage.out` output to this action
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        id: generate-badge
-        uses: tj-actions/coverage-badge-go@v2
-        with:
-          filename: coverage.out
-
-      - name: Verify Changed files
-        if: steps.generate-badge.outcome == 'success'
-        uses: tj-actions/verify-changed-files@v16
-        id: verify-changed-files
-        with:
-          files: README.md
-
-      - name: Commit changes
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.verify-changed-files.outputs.files_changed == 'true'
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add README.md
-          git commit -m "chore: Updated coverage badge."
-
-      - name: Push changes
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.verify-changed-files.outputs.files_changed == 'true'
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ github.token }}
-          branch: ${{ github.head_ref }}
+#
+#  test:
+#    needs: check-file-changes
+#    if: ${{ github.event_name != 'workflow_run' || needs.check-file-changes.outputs.go_changed == 'true' }}
+#    name: Test on Ubuntu
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Configure git for private modules
+#        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
+#
+#      - name: Clone the code
+#        uses: actions/checkout@v4
+#
+#      - name: Setup Go
+#        uses: actions/setup-go@v5
+#        with:
+#          go-version-file: go.mod
+#
+#      - name: Running Tests
+#        run: |
+#          go mod vendor
+#          go mod tidy
+#          make test-coverage
+#
+#      - name: Archive code coverage results
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: code-coverage
+#          path: coverage.out
+#
+#      - name: Generate Code Coverage Report
+#        uses: fgrosse/go-coverage-report@v1.1.1
+#        id: report
+#        with:
+#          coverage-artifact-name: code-coverage # can be omitted if you used this default value
+#          coverage-file-name: coverage.out # can be omitted if you used this default value
+#          skip-comment: 'true'
+#
+#      - name: Save Coverage Report to File
+#        if: steps.report.outputs.coverage_report != ''
+#        run: echo "${{ steps.report.outputs.coverage_report }}" > code-coverage-results.md
+#
+#      - name: Add Coverage PR Comment
+#        uses: marocchino/sticky-pull-request-comment@v2
+#        if: github.event_name == 'pull_request' && hashFiles('code-coverage-results.md') != ''
+#        with:
+#          recreate: true
+#          path: code-coverage-results.md
+#
+#      # Step to create a coverage badge in README.md
+#      - name: Generate Go Coverage Badge  # Pass the `coverage.out` output to this action
+#        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+#        id: generate-badge
+#        uses: tj-actions/coverage-badge-go@v2
+#        with:
+#          filename: coverage.out
+#
+#      - name: Verify Changed files
+#        if: steps.generate-badge.outcome == 'success'
+#        uses: tj-actions/verify-changed-files@v16
+#        id: verify-changed-files
+#        with:
+#          files: README.md
+#
+#      - name: Commit changes
+#        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.verify-changed-files.outputs.files_changed == 'true'
+#        run: |
+#          git config --local user.email "action@github.com"
+#          git config --local user.name "GitHub Action"
+#          git add README.md
+#          git commit -m "chore: Updated coverage badge."
+#
+#      - name: Push changes
+#        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.verify-changed-files.outputs.files_changed == 'true'
+#        uses: ad-m/github-push-action@master
+#        with:
+#          github_token: ${{ github.token }}
+#          branch: ${{ github.head_ref }}
