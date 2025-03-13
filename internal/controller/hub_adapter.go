@@ -89,8 +89,6 @@ func NewHubAdapter(
 }
 
 func (c HubAdapter) ensureFinalizerInitialized(ctx context.Context) (OperationResult, error) {
-	// TODO: Remove this line
-	c.logger.Info("adding something to trigger a test workflow")
 	if !controllerutil.ContainsFinalizer(c.mdaiCR, hubFinalizer) {
 		c.logger.Info("Adding Finalizer for Engine")
 		if ok := controllerutil.AddFinalizer(c.mdaiCR, hubFinalizer); !ok {
@@ -211,7 +209,7 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 	)
 
 	// rules exist, but no evaluations
-	if evals == nil || len(*evals) == 0 {
+	if evals == nil {
 		c.logger.Info("No evaluations found, skipping PrometheusRule creation")
 		if err == nil {
 			c.logger.Info("Removing existing rules")

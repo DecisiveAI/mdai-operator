@@ -17,26 +17,26 @@ concurrency:
 env:
   GOPRIVATE: github.com/decisiveai/opentelemetry-operator
   TOKEN: ${{ secrets.TOKEN_OPERATOR }}
+  GH_TOKEN: ${{ github.token }}
 
 jobs:
   wait-for-tests:
     runs-on: ubuntu-latest
     steps:
-      - name: Check if "Tests" ran
+      - name: Check if "Tests" was initialized
         id: check-tests
         run: |
           # Get the branch name from the commit SHA
           BRANCH_NAME=$(gh api repos/${{ github.repository }}/commits/${{ github.event.workflow_run.head_commit.id }} --jq '.commit.tree.url' | awk -F'/' '{print $(NF)}')
-      
+
           echo "Detected branch: $BRANCH_NAME"
-      
-          # Check if "Tests" workflow was initialized (queued, in progress, or completed)
+
+          # Check if "Tests" workflow was ever initialized (queued, in progress, or completed)
           TESTS_RUN=$(gh run list --workflow "Tests" --branch "$BRANCH_NAME" --repo "${{ github.repository }}" --json status --jq 'map(select(.status == "queued" or .status == "in_progress" or .status == "completed")) | length > 0')
-      
+
           echo "Tests initialized: $TESTS_RUN"
           echo "tests_ran=$TESTS_RUN" >> $GITHUB_ENV
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Wait for "Tests" to complete (if it ran)
         if: env.tests_ran == 'true'
         run: |
@@ -44,8 +44,11 @@ jobs:
             echo "Waiting for 'Tests' to complete..."
             sleep 10
           done
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine if "Tests" was skipped
+        if: env.tests_ran == 'false'
+        run: |
+          echo "Tests workflow was not initialized, proceeding with E2E Tests."
 
       - name: Check if "Tests" passed (if it ran)
         if: env.tests_ran == 'true'
@@ -56,8 +59,6 @@ jobs:
             echo "Tests failed, stopping workflow."
             exit 1
           fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 #  test-e2e:
 #    name: E2E tests on Ubuntu

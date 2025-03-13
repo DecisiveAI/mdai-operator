@@ -25,10 +25,38 @@ concurrency:
 env:
   GOPRIVATE: github.com/decisiveai/opentelemetry-operator
   TOKEN: ${{ secrets.TOKEN_OPERATOR }}
+  GH_TOKEN: ${{ github.token }}
 
 jobs:
+  check-file-changes:
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      go_changed: ${{ steps.check.outputs.go_changed }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_commit.id }}
+
+      - name: Check for .go-related file changes
+        id: check
+        run: |
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          
+          if echo "$CHANGED_FILES" | grep -E '\.go$|go\.mod|go\.sum'; then
+            echo "go_changed=true" >> $GITHUB_ENV
+            echo "go_changed=true"
+          else
+            echo "go_changed=false" >> $GITHUB_ENV
+            echo "go_changed=false"
+          fi
+
   test:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    needs: check-file-changes
+    if: ${{ github.event_name != 'workflow_run' || needs.check-file-changes.outputs.go_changed == 'true' }}
     name: Test on Ubuntu
     runs-on: ubuntu-latest
     steps:
