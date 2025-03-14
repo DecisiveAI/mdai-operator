@@ -137,6 +137,32 @@ jobs:
           github_token: ${{ github.token }}
           branch: ${{ github.head_ref }}
 
+      - name: Capture coverage in health repo
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          go install github.com/axw/gocov/gocov@latest
+          gocov convert coverage.out | gocov report > coverage-operator.txt
+
+      - name: Commit coverage to health repo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Clone the target repository
+          git clone https://github.com/DecisiveAI/platform-health.git
+          cd platform-health
+
+          # Configure git
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+
+          # Copy the new coverage file
+          cp ../coverage-operator.txt .
+
+          # Commit and push changes
+          git add coverage-operator.txt
+          git commit -m "chore: Update coverage report from CI"
+          git push https://x-access-token:${GH_TOKEN}@github.com/DecisiveAI/platform-health.git main
+
   test-e2e:
     name: E2E tests on Ubuntu
     needs: [ lint, test ]
