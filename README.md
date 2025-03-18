@@ -55,6 +55,7 @@ kind create cluster -n  mdai-operator-test
 **Cert manager**
 ```shell
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.1/cert-manager.yaml
+kubectl wait --for=condition=available --timeout=600s deployment --all -n cert-manager
 ```
 **Other prerequisites operator**   
 ```shell
