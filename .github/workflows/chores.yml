@@ -89,14 +89,14 @@ jobs:
           name: code-coverage
           path: coverage.out
 
-      - name: Generate Code Coverage Report
-        if: github.event_name == 'pull_request'
-        uses: fgrosse/go-coverage-report@v1.1.1
-        id: report
-        with:
-          coverage-artifact-name: code-coverage
-          coverage-file-name: coverage.out
-          skip-comment: 'true'
+#      - name: Generate Code Coverage Report
+#        if: github.event_name == 'pull_request'
+#        uses: fgrosse/go-coverage-report@v1.1.1
+#        id: report
+#        with:
+#          coverage-artifact-name: code-coverage
+#          coverage-file-name: coverage.out
+#          skip-comment: 'true'
 
       - name: Generate Go Coverage Badge
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
