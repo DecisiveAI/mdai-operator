@@ -42,6 +42,9 @@ jobs:
     outputs:
       go_files_changed: ${{ steps.check.outputs.go_files_changed }}
     steps:
+      - name: Configure git for private modules
+        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
+
       - name: Clone the code
         uses: actions/checkout@v4
         with:
@@ -53,18 +56,16 @@ jobs:
           if git diff --quiet HEAD^ HEAD -- '**/*.go' 'go.mod' 'go.sum'; then
             echo "No relevant Go file changes detected."
             echo "go_files_changed=false" >> $GITHUB_ENV
-            echo "::set-output name=go_files_changed::false"
           else
             echo "Relevant Go file changes detected."
             echo "go_files_changed=true" >> $GITHUB_ENV
-            echo "::set-output name=go_files_changed::true"
           fi
 
   test:
     name: Test on Ubuntu
     runs-on: ubuntu-latest
     needs: [ lint, check-go-file-changes ]
-    if: needs.check-go-file-changes.outputs.go_files_changed == 'true'
+    if: env.go_files_changed == 'true'
     steps:
       - name: Configure git for private modules
         run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
@@ -89,61 +90,139 @@ jobs:
           name: code-coverage
           path: coverage.out
 
+  report-coverage:
+    name: Report code coverage
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: code-coverage
+          path: .
+
+      - name: List downloaded files (debugging)
+        run: ls -R
+
       - name: Generate Code Coverage Report
-        if: github.event_name == 'pull_request'
         uses: fgrosse/go-coverage-report@v1.1.1
         id: report
         with:
           coverage-artifact-name: code-coverage
           coverage-file-name: coverage.out
 
+  coverage-badge:
+    name: Update coverage badge on README
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: code-coverage
+          path: .
+
+      - name: List downloaded files (debugging)
+        run: ls -R
+
       - name: Generate Go Coverage Badge
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         id: generate-badge
         uses: tj-actions/coverage-badge-go@v2
         with:
           filename: coverage.out
 
-      - name: Verify Changed files
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.generate-badge.outcome == 'success'
-        uses: tj-actions/verify-changed-files@v16
-        id: verify-changed-files
-        with:
-          files: README.md
+      - name: Verify Changed README
+        if: steps.generate-badge.outcome == 'success'
+        id: verify-changed-readme
+        run: |
+          if git diff --quiet HEAD^ HEAD -- README.md; then
+            echo "README.md has NOT changed."
+            echo "readme_changed=false" >> $GITHUB_ENV
+          else
+            echo "README.md has changed."
+            echo "readme_changed=true" >> $GITHUB_ENV
+          fi
 
       - name: Commit changes
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.verify-changed-files.outputs.files_changed == 'true'
+        if: env.readme_changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add README.md
           git commit -m "chore: Updated coverage badge."
 
-      - name: Push changes
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.verify-changed-files.outputs.files_changed == 'true'
-        uses: ad-m/github-push-action@master
+  capture-coverage:
+    name: Capture coverage in platform_health repo
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
         with:
-          github_token: ${{ github.token }}
-          branch: ${{ github.head_ref }}
+          name: code-coverage
+          path: .
+
+      - name: List downloaded files (debugging)
+        run: ls -R
 
       - name: Capture coverage in health repo
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           go install github.com/axw/gocov/gocov@latest
           gocov convert coverage.out | gocov report > coverage-operator.txt
 
+      - name: Install dependencies
+        run: sudo apt-get install -y jq
+
       - name: Generate GitHub App Token
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         id: generate_token
-        uses: tibdex/github-app-token@v1
-        with:
-          app_id: ${{ secrets.GH_APP_ID }}
-          private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+        env:
+          GH_APP_ID: ${{ secrets.GH_APP_ID }}
+          GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+        run: |
+          # Install openssl and jq if missing
+          which openssl || sudo apt-get install -y openssl
+          which jq || sudo apt-get install -y jq
+          
+          # Convert the private key to a temporary file
+          echo "$GH_APP_PRIVATE_KEY" > private-key.pem
+          
+          # Generate JWT (valid for 10 minutes)
+          HEADER=$(echo -n '{"alg":"RS256","typ":"JWT"}' | base64 | tr -d '=' | tr '/+' '_-')
+          NOW=$(date +%s)
+          EXP=$((NOW + 600))  # Token expires in 10 minutes
+          PAYLOAD=$(echo -n "{\"iat\":$NOW,\"exp\":$EXP,\"iss\":$GH_APP_ID}" | base64 | tr -d '=' | tr '/+' '_-')
+          SIGNATURE=$(echo -n "$HEADER.$PAYLOAD" | openssl dgst -sha256 -sign private-key.pem | base64 | tr -d '=' | tr '/+' '_-')
+          JWT="$HEADER.$PAYLOAD.$SIGNATURE"
+          
+          # Get installation ID
+          INSTALLATION_ID=$(curl -s -X GET \
+            -H "Authorization: Bearer $JWT" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/app/installations" | jq -r '.[0].id')
+          
+          # Exchange JWT for an installation access token
+          GH_TOKEN=$(curl -s -X POST \
+            -H "Authorization: Bearer $JWT" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/app/installations/$INSTALLATION_ID/access_tokens" | jq -r '.token')
+          
+          # Mask the token in logs
+          echo "::add-mask::$GH_TOKEN"
+          
+          # Store in environment for later use
+          echo "GH_TOKEN=$GH_TOKEN" >> $GITHUB_ENV
+
+      - name: Set safe git directory
+        run: git config --global --add safe.directory '*'
 
       - name: Commit coverage to health repo
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          GH_TOKEN: ${{ env.GH_TOKEN }}
         run: |
           git clone https://x-access-token:${GH_TOKEN}@github.com/DecisiveAI/platform-health.git
           cd platform-health
@@ -151,12 +230,16 @@ jobs:
           # Configure git
           git config --global user.email "action@github.com"
           git config --global user.name "GitHub Action"
-  
+          
           # Copy the new coverage file
           cp ../coverage-operator.txt .
-  
+          
           # Commit and push changes
           git add coverage-operator.txt
+          if git diff --cached --quiet; then
+            echo "✅ No changes to commit."
+            exit 0
+          fi
           git commit -m "chore: Update coverage report from CI"
           git push origin main
 
