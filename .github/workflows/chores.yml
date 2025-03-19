@@ -7,7 +7,7 @@ on:
     branches: [ "main" ]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name || github.run_id }}
   cancel-in-progress: true
 
 env:
@@ -59,12 +59,10 @@ jobs:
           # Compare the triggering commit with the latest commit on main
           if git diff --quiet ${{ github.sha }} origin/main -- '**/*.go' 'go.mod' 'go.sum'; then
             echo "No relevant Go file changes detected."
-            echo "go_files_changed=false" >> $GITHUB_ENV
             echo "go_files_changed=false"
             echo "go_files_changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "Relevant Go file changes detected."
-            echo "go_files_changed=true" >> $GITHUB_ENV
             echo "go_files_changed=true"
             echo "go_files_changed=true" >> "$GITHUB_OUTPUT"
           fi
@@ -183,46 +181,36 @@ jobs:
           go install github.com/axw/gocov/gocov@latest
           gocov convert coverage.out | gocov report > coverage-operator.txt
 
-      - name: Install dependencies
-        run: sudo apt-get install -y jq
-
       - name: Generate GitHub App Token
         id: generate_token
         env:
           GH_APP_ID: ${{ secrets.GH_APP_ID }}
           GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
         run: |
-          # Install openssl and jq if missing
-          which openssl || sudo apt-get install -y openssl
-          which jq || sudo apt-get install -y jq
-          
           # Convert the private key to a temporary file
           echo "$GH_APP_PRIVATE_KEY" > private-key.pem
-          
+
           # Generate JWT (valid for 10 minutes)
-          HEADER=$(echo -n '{"alg":"RS256","typ":"JWT"}' | base64 | tr -d '=' | tr '/+' '_-')
           NOW=$(date +%s)
           EXP=$((NOW + 600))  # Token expires in 10 minutes
-          PAYLOAD=$(echo -n "{\"iat\":$NOW,\"exp\":$EXP,\"iss\":$GH_APP_ID}" | base64 | tr -d '=' | tr '/+' '_-')
-          SIGNATURE=$(echo -n "$HEADER.$PAYLOAD" | openssl dgst -sha256 -sign private-key.pem | base64 | tr -d '=' | tr '/+' '_-')
-          JWT="$HEADER.$PAYLOAD.$SIGNATURE"
-          
-          # Get installation ID
-          INSTALLATION_ID=$(curl -s -X GET \
+          JWT=$(gh auth token --hostname github.com --app-id "$GH_APP_ID" --private-key private-key.pem)
+
+          # Get installation ID for the app
+          INSTALLATION_ID=$(gh api /app/installations \
             -H "Authorization: Bearer $JWT" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/app/installations" | jq -r '.[0].id')
-          
-          # Exchange JWT for an installation access token
-          GH_TOKEN=$(curl -s -X POST \
+            --jq '.[0].id')
+
+          # Get installation access token
+          GH_TOKEN=$(gh api /app/installations/$INSTALLATION_ID/access_tokens \
             -H "Authorization: Bearer $JWT" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/app/installations/$INSTALLATION_ID/access_tokens" | jq -r '.token')
-          
+            --jq '.token')
+
           # Mask the token in logs
           echo "::add-mask::$GH_TOKEN"
-          
-          # Store in environment for later use
+
+          # Store in environment
           echo "GH_TOKEN=$GH_TOKEN" >> $GITHUB_ENV
 
       - name: Set safe git directory
