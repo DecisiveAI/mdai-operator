@@ -12,10 +12,10 @@ env:
 
 jobs:
   build-and-publish:
+    if: ${{ github.actor != 'nektos/act' }} # prevent this from running while testing GH Actions with `act` utility
     permissions:
       contents: read
       id-token: write
-
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
