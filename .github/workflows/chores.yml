@@ -76,6 +76,7 @@ jobs:
             echo "go_files_changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+
   test:
     name: Test on Ubuntu
     runs-on: ubuntu-latest
@@ -120,12 +121,49 @@ jobs:
       - name: List downloaded files (debugging)
         run: ls -R
 
+      - name: Find last successful coverage artifact on main
+        id: get_baseline
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the latest artifact named "code-coverage" from main
+          ARTIFACT=$(gh api -X GET "repos/${{ github.repository }}/actions/artifacts" \
+          -H "Authorization: Bearer $GH_TOKEN" \
+          --jq '[.artifacts[] | select(.name=="code-coverage")] | sort_by(.updated_at) | last')
+          
+          if [[ -z "$ARTIFACT" ]]; then
+           echo "No previous successful 'code-coverage' artifact found on main."
+           echo "baseline_commit=" >> $GITHUB_ENV
+           exit 0
+          fi
+          
+          # Extract the workflow run ID from the artifact
+          RUN_ID=$(echo "$ARTIFACT" | jq -r '.workflow_run.id')
+          echo "Found latest coverage artifact from Run ID: $RUN_ID"
+          
+          # Get details about that workflow run
+          WORKFLOW_RUN=$(gh api -X GET "repos/${{ github.repository }}/actions/runs/${RUN_ID}" \
+          -H "Authorization: Bearer $GH_TOKEN")
+          
+          # Extract the commit SHA
+          COMMIT_SHA=$(echo "$WORKFLOW_RUN" | jq -r '.head_sha')
+          
+          if [[ -z "$COMMIT_SHA" ]]; then
+           echo "Could not determine commit SHA for run $RUN_ID"
+           echo "baseline_commit=" >> $GITHUB_ENV
+           exit 0
+          fi
+          
+          # Set the commit SHA for baseline comparison
+          echo "baseline_commit=$COMMIT_SHA" >> $GITHUB_ENV
+
       - name: Generate Code Coverage Report
-        uses: fgrosse/go-coverage-report@v1.1.1
+        uses: fgrosse/go-coverage-report@v1.2.0
         id: report
+        if: env.baseline_commit != ''
         with:
-          coverage-artifact-name: code-coverage
           coverage-file-name: coverage.out
+          github-baseline-workflow-ref: ${{ github.repository }}/.github/workflows/chores.yml@${{ env.baseline_commit }}
 
   coverage-badge:
     name: Update coverage badge on README
@@ -169,6 +207,7 @@ jobs:
           git config --local user.name "GitHub Action"
           git add README.md
           git commit -m "chore: Updated coverage badge."
+
 
   capture-coverage:
     name: Capture coverage in platform_health repo
@@ -247,6 +286,7 @@ jobs:
           fi
           git commit -m "chore: Update coverage report from CI"
           git push origin main
+
 
 
   test-e2e:
