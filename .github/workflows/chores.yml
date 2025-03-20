@@ -48,22 +48,31 @@ jobs:
       - name: Clone the code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2 # Ensures we can compare with the previous commit
+          fetch-depth: 0 # Fetch full history to compare commits
+
+      - name: Determine base commit
+        id: base
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_COMMIT="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE_COMMIT=$(git rev-parse HEAD~1)  # Previous commit on main
+          fi
+          echo "BASE_COMMIT=$BASE_COMMIT"
+          echo "BASE_COMMIT=$BASE_COMMIT" >> "$GITHUB_ENV"
 
       - name: Check for Go-related file changes
         id: check
         run: |
-          # Fetch the latest main branch state
+          # Fetch latest main branch
           git fetch origin main
 
-          # Compare the triggering commit with the latest commit on main
-          if git diff --quiet ${{ github.sha }} origin/main -- '**/*.go' 'go.mod' 'go.sum'; then
+          # Compare base commit with latest commit
+          if git diff --quiet $BASE_COMMIT HEAD -- '**/*.go' 'go.mod' 'go.sum'; then
             echo "No relevant Go file changes detected."
-            echo "go_files_changed=false"
             echo "go_files_changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "Relevant Go file changes detected."
-            echo "go_files_changed=true"
             echo "go_files_changed=true" >> "$GITHUB_OUTPUT"
           fi
 
