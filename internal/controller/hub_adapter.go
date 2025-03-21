@@ -48,7 +48,7 @@ const (
 
 	envConfigMapNamePostfix = "-variables"
 
-	observerDefaultImage          = "public.ecr.aws/decisiveai/watcher-collector:0.1.1"
+	observerDefaultImage          = "public.ecr.aws/decisiveai/watcher-collector:0.1.3"
 	MdaiHubEventHistoryStreamName = "mdai_hub_event_history"
 	requeueTime                   = time.Second * 10
 
