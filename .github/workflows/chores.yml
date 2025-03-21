@@ -74,11 +74,6 @@ jobs:
           OUTPUT_FILE=".github/outputs/all_changed_files.json"
           mkdir -p .github/outputs  # Ensure the directory exists
           
-          # Debug: Print changed files to logs
-          echo "=== DEBUG: Changed Files ==="
-          echo "$CHANGED_FILES"
-          echo "============================"
-          
           if [[ -z "$CHANGED_FILES" ]]; then
             echo "No relevant Go file changes detected."
             echo "go_files_changed=false" >> "$GITHUB_OUTPUT"
@@ -91,17 +86,11 @@ jobs:
             echo "$CHANGED_FILES" | jq -R . | jq -s . > "$OUTPUT_FILE"
           fi
 
-          ls -R .github/outputs/
-          
-          if [[ -f "$OUTPUT_FILE" ]]; then
-            echo "✅ File $OUTPUT_FILE was successfully created!"
-            echo "=== DEBUG: File Contents ==="
-            cat "$OUTPUT_FILE"
-            echo "============================"
-          else
-            echo "❌ ERROR: File $OUTPUT_FILE was NOT created!"
-            exit 1  # Fail the job if the file was expected but missing
-          fi
+      - name: Upload changed files record
+        uses: actions/upload-artifact@v4
+        with:
+          name: changed-files
+          path: .github/outputs/all_changed_files.json
 
   test:
     name: Test on Ubuntu
@@ -196,6 +185,12 @@ jobs:
             echo "Error: coverage.out not found in downloaded artifacts."
             exit 1
           fi
+
+      - name: Download changed files list
+        uses: actions/download-artifact@v4
+        with:
+          name: changed-files
+          path: .github/outputs
 
       - name: List downloaded files (debugging)
         run: ls -R
