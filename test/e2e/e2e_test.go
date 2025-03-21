@@ -17,17 +17,20 @@ limitations under the License.
 package e2e
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/DecisiveAI/mdai-operator/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/valkey-io/valkey-go"
 )
 
 // namespace where the project is deployed in
@@ -102,6 +105,10 @@ var _ = Describe("Manager", Ordered, func() {
 
 		By("removing manager namespace")
 		cmd = exec.Command("kubectl", "delete", "ns", namespace)
+		_, _ = utils.Run(cmd)
+
+		By("removing otel namespace")
+		cmd = exec.Command("kubectl", "delete", "ns", otelNamespace)
 		_, _ = utils.Run(cmd)
 
 	})
@@ -338,8 +345,8 @@ var _ = Describe("Manager", Ordered, func() {
 
 		})
 
-		It("should trigger another reconcile on OTEL CR created", func() {
-			By("applying a OTEL CR")
+		It("can trigger another reconcile on managed OTEL CR created", func() {
+			By("applying a managed OTEL CR")
 			verifyMdaiHub := func(g Gomega) {
 				cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/collector.yaml", "-n", otelNamespace)
 				_, err := utils.Run(cmd)
@@ -348,8 +355,17 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyMdaiHub).Should(Succeed())
 		})
 
-		It("should have the MdaiHub CR in Ready state", func() {
-			By("verifying the status of the MdaiHub CR")
+		It("does not trigger another reconcile on unmanaged OTEL CR created", func() {
+			By("applying an umanaged OTEL CR")
+			verifyMdaiHub := func(g Gomega) {
+				cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/collector-unmanaged.yaml", "-n", "default")
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyMdaiHub).Should(Succeed())
+		})
+
+		It("has the MdaiHub CR in Ready state", func() {
 			verifyStatus := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "mdaihub", "mdaihub-sample", "-n", namespace,
 					"-o", "jsonpath='{.status.conditions[?(@.type=='Available')].status}'")
@@ -369,29 +385,26 @@ var _ = Describe("Manager", Ordered, func() {
 
 		It("should create the config map for variables", func() {
 			By("verifying the config map for variables exists")
-			verifyConfigMap := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "configmap", "mdaihub-sample-variables", "-n", otelNamespace)
-				_, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-			}
-			Eventually(verifyConfigMap, "1m", "5s").Should(Succeed())
-			// TODO check configmap content
+			configMapExists("mdaihub-sample-variables", otelNamespace)
 
+			By("verifying the config map content for variables defaults")
+			verifyConfigMap := func(g Gomega) {
+				data := getVariablesFromMap(g)
+
+				g.Expect(data["SERVICE_LIST_2_CSV"]).To(Equal("n/a"))
+				g.Expect(data["SERVICE_LIST_2_REGEX"]).To(Equal("n/a"))
+				g.Expect(data["SERVICE_LIST_CSV"]).To(Equal("n/a"))
+				g.Expect(data["SERVICE_LIST_REGEX"]).To(Equal("n/a"))
+			}
+			Eventually(verifyConfigMap).Should(Succeed())
 		})
 
-		It("should create the config map for watcher", func() {
-			By("verifying the config map for watcher exists")
-			verifyConfigMap := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "configmap", "mdaihub-sample-watcher-collector-config", "-n", namespace)
-				_, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-			}
-			Eventually(verifyConfigMap, "1m", "5s").Should(Succeed())
+		It("can create the config map for watcher", func() {
+			configMapExists("mdaihub-sample-watcher-collector-config", namespace)
 			// TODO check configmap content
 		})
 
-		It("should deploy the watcher", func() {
-			By("verifying the watcher deployment exists")
+		It("can deploy the watcher", func() {
 			verifyWatcher := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "deployment", "mdaihub-sample-watcher-collector", "-n", namespace)
 				response, err := utils.Run(cmd)
@@ -428,7 +441,71 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyWatcherLogs).Should(Succeed())
 		})
 
-		It("should delete MdaiHub CRs", func() {
+		It("can create Prometheus rules", func() {
+			verifyPrometheusRules := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "prometheusrule", "-n", namespace)
+				out, err := utils.Run(cmd)
+				g.Expect(out).To(ContainSubstring("mdai-mdaihub-sample-alert-rules"))
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			// TODO check prometheus rules content
+			Eventually(verifyPrometheusRules).Should(Succeed())
+		})
+
+		It("can update variable in config map", func() {
+			By("executing the valkey-cli command to update the service-list variable")
+
+			initialRevision := getOtelDeploymentRevision("gateway-collector", otelNamespace)
+
+			portForwardCmd := exec.Command("kubectl", "port-forward", "--namespace", "default",
+				"svc/valkey-primary", "6379:6379")
+			err := portForwardCmd.Start()
+			Expect(err).NotTo(HaveOccurred())
+			defer func() {
+				if portForwardCmd.Process != nil {
+					_ = portForwardCmd.Process.Kill()
+				}
+			}()
+
+			var valkeyClient valkey.Client
+			connectToValkey := func(g Gomega) {
+				valkeyClient, err = valkey.NewClient(valkey.ClientOption{
+					InitAddress: []string{"127.0.0.1:6379"},
+					Password:    "abc",
+				})
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(connectToValkey, 30*time.Second, 2*time.Second).Should(Succeed())
+
+			err = valkeyClient.Do(context.TODO(), valkeyClient.B().Sadd().Key("variable/mdaihub-sample/service_list_1").
+				Member("noisy-service").Build()).Error()
+			Expect(err).NotTo(HaveOccurred())
+
+			By("validating that the config map has the updated variable value")
+			verifyConfigMap := func(g Gomega) {
+				data := getVariablesFromMap(g)
+				g.Expect(data["SERVICE_LIST_2_CSV"]).To(Equal("n/a"))
+				g.Expect(data["SERVICE_LIST_2_REGEX"]).To(Equal("n/a"))
+				g.Expect(data["SERVICE_LIST_CSV"]).To(Equal("noisy-service"))
+				g.Expect(data["SERVICE_LIST_REGEX"]).To(Equal("noisy-service"))
+			}
+			Eventually(verifyConfigMap).Should(Succeed())
+
+			By("validating that the managed OTel collector was restarted, but unmanaged collector was not")
+			verifyOtelDeployment := func(g Gomega) {
+				updatedRevision := getOtelDeploymentRevision("gateway-collector", otelNamespace)
+				g.Expect(updatedRevision).To(BeNumerically(">", initialRevision))
+			}
+			Eventually(verifyOtelDeployment).Should(Succeed())
+
+			verifyUnmanagedOtelDeployment := func(g Gomega) {
+				updatedRevision := getOtelDeploymentRevision("gateway-unmanaged-collector", "default")
+				g.Expect(updatedRevision).To(Equal(1))
+			}
+			Eventually(verifyUnmanagedOtelDeployment).Should(Succeed())
+		})
+
+		It("can delete MdaiHub CRs and clean up resources", func() {
 			By("deleting a MdaiHub CR")
 			verifyMdaiHub := func(g Gomega) {
 				cmd := exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/mdai_v1_mdaihub.yaml", "-n", namespace)
@@ -436,10 +513,33 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 			}
 			Eventually(verifyMdaiHub).Should(Succeed())
+
+			By("validating the config map for watcher is still present")
+			configMapExists("mdaihub-sample-variables", otelNamespace)
+
+			By("validating the prometheus rules deleted")
+			verifyPromRulesDeleted := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "prometheusrules", "-n", namespace, "-o", "json")
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				var result struct {
+					Items []interface{} `json:"items"`
+				}
+				err = json.Unmarshal([]byte(out), &result)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(result.Items).To(BeEmpty())
+			}
+			Eventually(verifyPromRulesDeleted).Should(Succeed())
+
+			By("validating valkey keys deleted")
+			// TODO
+
+			By("validating all related watchers are deleted")
+			// TODO
+
 		})
 
-		It("should delete OTEL CRs", func() {
-			By("deleting an OTEL CR")
+		It("can delete OTEL CRs", func() {
 			verifyMdaiHub := func(g Gomega) {
 				cmd := exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/collector.yaml", "-n", otelNamespace)
 				_, err := utils.Run(cmd)
@@ -449,6 +549,40 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 	})
 })
+
+func getVariablesFromMap(g Gomega) map[string]any {
+	cmd := exec.Command("kubectl", "get", "configmap", "mdaihub-sample-variables",
+		"-n", otelNamespace, "-o", "json")
+	out, err := utils.Run(cmd)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	var cm map[string]interface{}
+	err = json.Unmarshal([]byte(out), &cm)
+	g.Expect(err).NotTo(HaveOccurred())
+	data, ok := cm["data"].(map[string]interface{})
+	g.Expect(ok).To(BeTrue(), "Expected 'data' field to be a map")
+	return data
+}
+
+func getOtelDeploymentRevision(deploymentName string, namespace string) int {
+	cmd := exec.Command("kubectl", "get", "deployment", deploymentName,
+		"-n", namespace,
+		"-o", "jsonpath={.metadata.annotations.deployment\\.kubernetes\\.io/revision}")
+	out, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred())
+	newRevision, err := strconv.Atoi(strings.TrimSpace(out))
+	Expect(err).NotTo(HaveOccurred())
+	return newRevision
+}
+
+func configMapExists(name string, namespace string) {
+	verifyConfigMap := func(g Gomega) {
+		cmd := exec.Command("kubectl", "get", "configmap", name, "-n", namespace)
+		_, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+	}
+	Eventually(verifyConfigMap, "1m", "5s").Should(Succeed())
+}
 
 // serviceAccountToken returns a token for the specified service account in the given namespace.
 // It uses the Kubernetes TokenRequest API to generate a token by directly sending a request

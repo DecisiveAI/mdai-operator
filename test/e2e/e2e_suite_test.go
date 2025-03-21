@@ -85,7 +85,7 @@ var _ = BeforeSuite(func() {
 	Expect(utils.InstallValkey()).To(Succeed(), "Failed to install Valkey")
 
 	_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for certificates...\n")
-	time.Sleep(10 * time.Second)
+	time.Sleep(15 * time.Second)
 
 	// Install Prometheus operator CRD
 	Expect(utils.InstallPrometheusOperatorCRD()).To(Succeed(), "Failed to install Prometheus Operator CRD")

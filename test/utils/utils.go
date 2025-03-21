@@ -207,7 +207,11 @@ func UncommentCode(filename, target, prefix string) error {
 
 func InstallValkey() error {
 	cmd := exec.Command("helm", "install", "valkey",
-		"oci://registry-1.docker.io/bitnamicharts/valkey", "--set", "auth.password=abc", "--set", "replica.replicaCount=0")
+		"oci://registry-1.docker.io/bitnamicharts/valkey",
+		"--set", "auth.password=abc",
+		"--set", "replica.replicaCount=0",
+		"--set", "primary.configuration=notify-keyspace-events KEA",
+	)
 	_, err := Run(cmd)
 	return err
 }
