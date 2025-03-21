@@ -41,7 +41,6 @@ jobs:
     needs: lint
     outputs:
       go_files_changed: ${{ steps.check.outputs.go_files_changed }}
-      changed_files_list: ${{ steps.check.outputs.changed_files_list }} # NEW OUTPUT
     steps:
       - name: Configure git for private modules
         run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
@@ -75,19 +74,34 @@ jobs:
           OUTPUT_FILE=".github/outputs/all_changed_files.json"
           mkdir -p .github/outputs  # Ensure the directory exists
           
+          # Debug: Print changed files to logs
+          echo "=== DEBUG: Changed Files ==="
+          echo "$CHANGED_FILES"
+          echo "============================"
+          
           if [[ -z "$CHANGED_FILES" ]]; then
-          echo "No relevant Go file changes detected."
-          echo "go_files_changed=false" >> "$GITHUB_OUTPUT"
-          echo "[]" > "$OUTPUT_FILE"  # Save empty JSON array
+            echo "No relevant Go file changes detected."
+            echo "go_files_changed=false" >> "$GITHUB_OUTPUT"
+            echo "[]" > "$OUTPUT_FILE"  # Save empty JSON array
           else
-          echo "Relevant Go file changes detected."
-          echo "go_files_changed=true" >> "$GITHUB_OUTPUT"
-        
-          # Convert to JSON format and save to file
-          echo "$CHANGED_FILES" | jq -R . | jq -s . > "$OUTPUT_FILE"
+            echo "Relevant Go file changes detected."
+            echo "go_files_changed=true" >> "$GITHUB_OUTPUT"
+          
+            # Convert to JSON format and save to file
+            echo "$CHANGED_FILES" | jq -R . | jq -s . > "$OUTPUT_FILE"
           fi
 
-          ls -R
+          ls -R .github/outputs/
+          
+          if [[ -f "$OUTPUT_FILE" ]]; then
+            echo "✅ File $OUTPUT_FILE was successfully created!"
+            echo "=== DEBUG: File Contents ==="
+            cat "$OUTPUT_FILE"
+            echo "============================"
+          else
+            echo "❌ ERROR: File $OUTPUT_FILE was NOT created!"
+            exit 1  # Fail the job if the file was expected but missing
+          fi
 
   test:
     name: Test on Ubuntu
