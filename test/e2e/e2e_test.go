@@ -355,7 +355,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyMdaiHub).Should(Succeed())
 		})
 
-		It("do not trigger another reconcile on unmanaged OTEL CR created", func() {
+		It("does not trigger another reconcile on unmanaged OTEL CR created", func() {
 			By("applying an umanaged OTEL CR")
 			verifyMdaiHub := func(g Gomega) {
 				cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/collector-unmanaged.yaml", "-n", "default")
