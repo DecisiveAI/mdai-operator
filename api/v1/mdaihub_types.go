@@ -153,6 +153,9 @@ type Observer struct {
 	BytesMetricName *string `json:"bytesMetricName,omitempty" yaml:"bytesMetricName,omitempty"`
 	// +kubebuilder:validation:Optional
 	Filter *ObserverFilter `json:"filter,omitempty" yaml:"filter,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	GrpcReceiverMaxMsgSize *uint64 `json:"grpcReceiverMaxMsgSize,omitempty" yaml:"grpcReceiverMaxMsgSize,omitempty"`
 }
 
 type ObserverResource struct {

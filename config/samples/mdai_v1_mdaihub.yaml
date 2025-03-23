@@ -42,6 +42,7 @@ spec:
         - service.name
       countMetricName: mdai_watcher_one_count_total
       bytesMetricName: mdai_watcher_one_bytes_total
+      grpcReceiverMaxMsgSize: 10
     - name: watcher2
       resourceRef: watcher-collector
       labelResourceAttributes:

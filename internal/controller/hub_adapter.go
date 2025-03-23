@@ -857,6 +857,10 @@ func (c HubAdapter) buildCollectorConfig(observers []mdaiv1.Observer) (string, e
 	for _, obs := range observers {
 		observerName := obs.Name
 
+		if obs.GrpcReceiverMaxMsgSize != nil {
+			config["receivers"].(map[string]any)["otlp"].(map[string]any)["protocols"].(map[string]any)["grpc"].(map[string]any)["max_recv_msg_size_mib"] = *obs.GrpcReceiverMaxMsgSize
+		}
+
 		groupByKey := "groupbyattrs/" + observerName
 		config["processors"].(map[string]any)[groupByKey] = map[string]any{
 			"keys": obs.LabelResourceAttributes,

@@ -249,6 +249,10 @@ spec:
                           - log_record
                           type: object
                       type: object
+                    grpcReceiverMaxMsgSize:
+                      format: int64
+                      minimum: 1
+                      type: integer
                     labelResourceAttributes:
                       items:
                         type: string
