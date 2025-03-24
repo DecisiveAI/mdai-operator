@@ -216,7 +216,7 @@ jobs:
     name: Update coverage badge on README
     runs-on: ubuntu-latest
     needs: [ test ]
-    # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout repository  # Ensures README.md is available
         uses: actions/checkout@v4
@@ -244,7 +244,7 @@ jobs:
         id: verify-changed-readme
         run: |
           git fetch origin main
-          if git diff --quiet HEAD^ HEAD -- README.md; then
+          if git diff --quiet origin/main -- README.md; then
             echo "README.md has NOT changed."
             echo "readme_changed=false" >> $GITHUB_ENV
           else
@@ -257,10 +257,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Ensure we are on the main branch
+          git fetch origin main
+          git checkout main
+          git pull origin main
+
+          # Configure Git
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+
+          # Commit and push changes
           git add README.md
-          git commit -m "chore: Updated coverage badge."
+          git commit -m "chore: Updated coverage badge." || echo "No changes to commit"
           git push origin main
 
 
