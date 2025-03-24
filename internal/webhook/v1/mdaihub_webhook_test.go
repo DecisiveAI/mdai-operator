@@ -134,7 +134,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 			ObserverResources: &[]mdaiv1.ObserverResource{
 				{
 					Name:     "watcher-collector",
-					Image:    "watcher-image:9.9.9",
+					Image:    ptr.To("watcher-image:9.9.9"),
 					Replicas: ptr.To(int32(3)),
 					Resources: &v1.ResourceRequirements{
 						Limits: v1.ResourceList{
@@ -148,7 +148,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 				},
 				{
 					Name:     "watcher-nother-collector",
-					Image:    "watcher-image:4.2.0",
+					Image:    ptr.To("watcher-image:4.2.0"),
 					Replicas: ptr.To(int32(2)),
 					Resources: &v1.ResourceRequirements{
 						Limits: v1.ResourceList{

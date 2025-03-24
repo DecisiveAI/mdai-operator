@@ -156,6 +156,10 @@ spec:
               observerResources:
                 items:
                   properties:
+                    grpcReceiverMaxMsgSize:
+                      format: int64
+                      minimum: 1
+                      type: integer
                     image:
                       type: string
                     name:
@@ -224,7 +228,6 @@ spec:
                           type: object
                       type: object
                   required:
-                  - image
                   - name
                   type: object
                 type: array
