@@ -300,47 +300,21 @@ jobs:
           go install github.com/axw/gocov/gocov@latest
           gocov convert coverage.out | gocov report > coverage-operator.txt
 
-      - name: Generate GitHub App Token
-        id: generate_token
-        env:
-          GH_APP_ID: ${{ secrets.GH_APP_ID }}
-          GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
-        run: |
-          # Convert the private key to a file
-          echo "$GH_APP_PRIVATE_KEY" > private-key.pem
-
-          # Generate JWT manually using OpenSSL
-          HEADER=$(echo -n '{"alg":"RS256","typ":"JWT"}' | base64 | tr -d '=' | tr '/+' '_-')
-          NOW=$(date +%s)
-          EXP=$((NOW + 600))  # Token expires in 10 minutes
-          PAYLOAD=$(echo -n "{\"iat\":$NOW,\"exp\":$EXP,\"iss\":$GH_APP_ID}" | base64 | tr -d '=' | tr '/+' '_-')
-          SIGNATURE=$(echo -n "$HEADER.$PAYLOAD" | openssl dgst -sha256 -sign private-key.pem | base64 | tr -d '=' | tr '/+' '_-')
-          JWT="$HEADER.$PAYLOAD.$SIGNATURE"
-
-          # Get installation ID
-          INSTALLATION_ID=$(gh api /app/installations \
-            -H "Authorization: Bearer $JWT" \
-            -H "Accept: application/vnd.github+json" \
-            --jq '.[0].id')
-
-          # Get installation access token
-          GH_TOKEN=$(gh api /app/installations/$INSTALLATION_ID/access_tokens \
-            -H "Authorization: Bearer $JWT" \
-            -H "Accept: application/vnd.github+json" \
-            --jq '.token')
-
-          # Mask the token in logs
-          echo "::add-mask::$GH_TOKEN"
-
-          # Store in environment
-          echo "GH_TOKEN=$GH_TOKEN" >> $GITHUB_ENV
+      - name: Generate a token
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Set safe git directory
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: git config --global --add safe.directory '*'
 
       - name: Commit coverage to health repo
         env:
-          GH_TOKEN: ${{ env.GH_TOKEN }}
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           git clone https://x-access-token:${GH_TOKEN}@github.com/DecisiveAI/platform-health.git
           cd platform-health
