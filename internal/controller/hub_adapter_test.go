@@ -304,7 +304,7 @@ func TestBuildCollectorConfig(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
-	config, err := adapter.buildCollectorConfig(observers)
+	config, err := adapter.buildCollectorConfig(observers, nil)
 	if err != nil {
 		t.Fatalf("buildCollectorConfig returned error: %v", err)
 	}
@@ -609,7 +609,7 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 	observers := []v1.Observer{observer}
 	observerResource := v1.ObserverResource{
 		Name:  "watcher-collector",
-		Image: "public.ecr.aws/p3k6k6h3/watcher-observer",
+		Image: ptr.To("public.ecr.aws/p3k6k6h3/watcher-observer"),
 	}
 	observerResources := []v1.ObserverResource{observerResource}
 

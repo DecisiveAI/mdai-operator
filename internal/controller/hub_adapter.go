@@ -672,7 +672,7 @@ func (c HubAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Context,
 	namespace := c.mdaiCR.Namespace
 	configMapName := c.GetScopedObserverResourceName(observerResource, "config")
 
-	collectorYAML, err := c.buildCollectorConfig(observers)
+	collectorYAML, err := c.buildCollectorConfig(observers, observerResource.GrpcReceiverMaxMsgSize)
 	if err != nil {
 		return "", fmt.Errorf("failed to build observer configuration: %w", err)
 	}
@@ -774,8 +774,7 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 		deployment.Spec.Template.Annotations["mdai-collector-config/sha256"] = hash
 
 		containerSpec := v1.Container{
-			Name: name,
-			// TODO: Should we still default this?
+			Name:  name,
 			Image: observerDefaultImage,
 			Ports: []v1.ContainerPort{
 				{ContainerPort: 8888, Name: "otelcol-metrics"},
@@ -808,8 +807,8 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 			},
 		}
 
-		if observerResource.Image != "" {
-			containerSpec.Image = observerResource.Image
+		if observerResource.Image != nil && *observerResource.Image != "" {
+			containerSpec.Image = *observerResource.Image
 		}
 
 		if observerResource.Resources != nil {
@@ -846,20 +845,20 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 //go:embed config/base_collector.yaml
 var baseCollectorYAML string
 
-func (c HubAdapter) buildCollectorConfig(observers []mdaiv1.Observer) (string, error) {
+func (c HubAdapter) buildCollectorConfig(observers []mdaiv1.Observer, grpcReceiverMaxMsgSize *uint64) (string, error) {
 	var config map[string]any
 	if err := yaml.Unmarshal([]byte(baseCollectorYAML), &config); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base collector config")
 		return "", err
 	}
 
+	if grpcReceiverMaxMsgSize != nil {
+		config["receivers"].(map[string]any)["otlp"].(map[string]any)["protocols"].(map[string]any)["grpc"].(map[string]any)["max_recv_msg_size_mib"] = *grpcReceiverMaxMsgSize
+	}
+
 	dataVolumeReceivers := make([]string, 0)
 	for _, obs := range observers {
 		observerName := obs.Name
-
-		if obs.GrpcReceiverMaxMsgSize != nil {
-			config["receivers"].(map[string]any)["otlp"].(map[string]any)["protocols"].(map[string]any)["grpc"].(map[string]any)["max_recv_msg_size_mib"] = *obs.GrpcReceiverMaxMsgSize
-		}
 
 		groupByKey := "groupbyattrs/" + observerName
 		config["processors"].(map[string]any)[groupByKey] = map[string]any{

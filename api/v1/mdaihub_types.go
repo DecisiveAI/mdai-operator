@@ -153,20 +153,20 @@ type Observer struct {
 	BytesMetricName *string `json:"bytesMetricName,omitempty" yaml:"bytesMetricName,omitempty"`
 	// +kubebuilder:validation:Optional
 	Filter *ObserverFilter `json:"filter,omitempty" yaml:"filter,omitempty"`
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Minimum=1
-	GrpcReceiverMaxMsgSize *uint64 `json:"grpcReceiverMaxMsgSize,omitempty" yaml:"grpcReceiverMaxMsgSize,omitempty"`
 }
 
 type ObserverResource struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
-	// +kubebuilder:validation:Required
-	Image string `json:"image" yaml:"image"`
+	// +kubebuilder:validation:Optional
+	Image *string `json:"image,omitempty" yaml:"image,omitempty"`
 	// +kubebuilder:validation:Optional
 	Replicas *int32 `json:"replicas,omitempty" yaml:"replicas,omitempty"`
 	// +kubebuilder:validation:Optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty" yaml:"resources,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	GrpcReceiverMaxMsgSize *uint64 `json:"grpcReceiverMaxMsgSize,omitempty" yaml:"grpcReceiverMaxMsgSize,omitempty"`
 }
 
 type Config struct {
