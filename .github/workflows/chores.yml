@@ -306,15 +306,18 @@ jobs:
           GH_APP_ID: ${{ secrets.GH_APP_ID }}
           GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
         run: |
-          # Convert the private key to a temporary file
+          # Convert the private key to a file
           echo "$GH_APP_PRIVATE_KEY" > private-key.pem
 
-          # Generate JWT (valid for 10 minutes)
+          # Generate JWT manually using OpenSSL
+          HEADER=$(echo -n '{"alg":"RS256","typ":"JWT"}' | base64 | tr -d '=' | tr '/+' '_-')
           NOW=$(date +%s)
           EXP=$((NOW + 600))  # Token expires in 10 minutes
-          JWT=$(gh auth token --hostname github.com --app-id "$GH_APP_ID" --private-key private-key.pem)
+          PAYLOAD=$(echo -n "{\"iat\":$NOW,\"exp\":$EXP,\"iss\":$GH_APP_ID}" | base64 | tr -d '=' | tr '/+' '_-')
+          SIGNATURE=$(echo -n "$HEADER.$PAYLOAD" | openssl dgst -sha256 -sign private-key.pem | base64 | tr -d '=' | tr '/+' '_-')
+          JWT="$HEADER.$PAYLOAD.$SIGNATURE"
 
-          # Get installation ID for the app
+          # Get installation ID
           INSTALLATION_ID=$(gh api /app/installations \
             -H "Authorization: Bearer $JWT" \
             -H "Accept: application/vnd.github+json" \
