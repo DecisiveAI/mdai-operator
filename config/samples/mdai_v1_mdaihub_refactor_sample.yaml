@@ -1,0 +1,93 @@
+apiVersion: hub.mydecisive.ai/v1
+kind: MdaiHub
+metadata:
+  labels:
+    app.kubernetes.io/name: mdai-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: mdaihub-sample
+  namespace: mdai
+spec:
+  variables:
+    - storageKey: service_list_1
+      defaultValue: "n/a"
+      type: set
+      storageType: "mdai-valkey"
+      serializeAs:
+        - name: "SERVICE_LIST_REGEX"
+          transformer:
+            join:
+              delimiter: "|"
+        - name: "SERVICE_LIST_CSV"
+          transformer:
+            join:
+              delimiter: ","
+    - storageKey: volume_reroute_engaged
+      defaultValue: "false"
+      type: boolean
+      storageType: "mdai-valkey"
+      serializeAs:
+        - name: "VOLUME_REROUTE_ENGAGED"
+          transformer:
+            string:
+
+  observers:
+    - name: watcher1
+      resourceRef: watcher-collector
+      labelResourceAttributes:
+        - service.name
+      countMetricName: mdai_watcher_one_count_total
+      bytesMetricName: mdai_watcher_one_bytes_total
+      grpcReceiverMaxMsgSize: 10
+    - name: watcher2
+      resourceRef: watcher-collector
+      labelResourceAttributes:
+      - team
+      - log_level
+      countMetricName: mdai_watcher_two_count_total
+    - name: watcher3
+      resourceRef: watcher-collector
+      labelResourceAttributes:
+      - region
+      - log_level
+      bytesMetricName: mdai_watcher_three_count_total
+    - name: watcher4
+      resourceRef: watcher-collector
+      labelResourceAttributes:
+      - service.name
+      - team
+      - region
+      countMetricName: mdai_watcher_four_count_total
+      bytesMetricName: mdai_watcher_four_bytes_total
+      filter:
+        error_mode: ignore
+        logs:
+          log_record:
+            - 'attributes["log_level"] == "INFO"'
+
+  observerResources:
+    - name: watcher-collector
+      image: public.ecr.aws/decisiveai/watcher-collector:0.1.3
+
+  evaluations:
+    - name: logBytesOutTooHighBySvc
+      action:
+        variableUpdate:
+          variableRef: service_list_1
+          operation: mdai/add_element
+          payloadFields:
+            - "service_name"
+      prometheusAlert:
+        expr: "increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024"
+        status: "firing"
+        severity: warning
+        for: 5m
+        keep_firing_for: 10m
+        relevantLabels:
+          - "service_name"
+    - extendRef: logBytesOutTooHighBySvc
+      action:
+        variableUpdate:
+          operation: mdai/remove_element
+      prometheusAlert:
+        status: "resolved"
+

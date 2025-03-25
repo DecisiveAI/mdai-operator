@@ -30,7 +30,6 @@ type Serializer struct {
 	// +kubeuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
 	// Transformer The transformation applied to the value of the variable before it is assigned as an environment variable.
-	// +kubebuilder:validation:Optional
 	Transformer *VariableTransformer `json:"transformer,omitempty" yaml:"transformer,omitempty"`
 }
 
@@ -40,10 +39,23 @@ type JoinFunction struct {
 	Delimiter string `json:"delimiter" yaml:"delimiter"`
 }
 
+type StringFunction struct{}
+type JsonFunction struct{}
+type YamlFunction struct{}
+
 type VariableTransformer struct {
 	// Join For use with "set" or "array" type variables, joins the items of the collection into a string.
 	// +kubebuilder:validation:Optional
 	Join *JoinFunction `json:"join,omitempty" yaml:"join,omitempty"`
+	// Json converts the runtime value to a JSON compatible string. Only applicable for collection data types.
+	// +kubebuilder:validation:Optional
+	Json *JsonFunction `json:"json,omitempty" yaml:"json,omitempty"`
+	// Yaml converts the runtime value to a YAML compatible string. Only applicable for collection data types.
+	// +kubebuilder:validation:Optional
+	Yaml *YamlFunction `json:"yaml,omitempty" yaml:"yaml,omitempty"`
+	// String converts the runtime value to a string. Only applicable for scalar data types.
+	// +kubebuilder:validation:Optional
+	String *StringFunction `json:"string,omitempty" yaml:"string,omitempty"`
 }
 
 type Variable struct {
@@ -54,7 +66,7 @@ type Variable struct {
 	StorageKey string `json:"storageKey" yaml:"storageKey"`
 	// Type Data type for the managed variable value
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=string;set
+	// +kubebuilder:validation:Enum:=string;set;boolean;integer;float
 	Type VariableType `json:"type" yaml:"type"`
 	// StorageType defaults to "mdai-valkey" if not provided
 	// +kubebuilder:default="mdai-valkey"
@@ -81,6 +93,9 @@ type VariableUpdate struct {
 }
 
 type Action struct {
+	// PayloadFields The key(s) of the payload to indicate which value(s) will be given to the executable part of the Action.
+	// +kubebuilder:validation:Optional
+	PayloadFields []string `json:"payloadFields" yaml:"payloadFields"`
 	// VariableUpdate Modify the value of a managed variable.
 	// +kubebuilder:validation:Optional
 	VariableUpdate *VariableUpdate `json:"variableUpdate,omitempty" yaml:"variableUpdate,omitempty"`
@@ -91,21 +106,11 @@ type PrometheusAlertEvaluationStatus struct {
 	// +kubebuilder:validation:Optional
 	Firing *Action `json:"firing,omitempty" yaml:"firing,omitempty"`
 	// Resolved Action performed when the Prometheus Alert status changes to "resolved"
-	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum=firing;resolved
 	Resolved *Action `json:"resolved,omitempty" yaml:"resolved,omitempty"`
 }
 
-type Evaluation struct {
-	// Name How this evaluation will be referred to elsewhere in the config. Also, the name applied to the Prometheus Alert
-	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:Required
-	Name string `json:"name" yaml:"name"`
-	// Type The type of evaluation. Currently only "mdai/prometheus_alert" is supported and set as default value.
-	// +kubebuilder:validation:Enum:=mdai/prometheus_alert
-	// +kubebuilder:validation:Required
-	// +kubebuilder:default="mdai/prometheus_alert"
-	Type EvaluationType `json:"type" yaml:"type"`
+type PrometheusAlertEvaluation struct {
 	// Expr A valid PromQL query expression
 	// +kubebuilder:validation:Required
 	Expr intstr.IntOrString `json:"expr" yaml:"expr"`
@@ -115,15 +120,36 @@ type Evaluation struct {
 	// KeepFiringFor defines how long an alert will continue firing after the condition that triggered it has cleared.
 	// +kubebuilder:validation:Optional
 	KeepFiringFor *prometheusv1.NonEmptyDuration `json:"keep_firing_for,omitempty" yaml:"keep_firing_for,omitempty"`
-	// +kubebuilder:validation:Pattern:="^(warning|critical)$"
-	// +kubebuilder:validation:Required
+	// Severity the severity of the Prometheus alert.
+	// +kubebuilder:validation:Enum:=warning;critical
+	// +kubebuilder:default="warning"
+	// +kubebuilder:validation:Optional
 	Severity string `json:"severity" yaml:"severity"`
-	// RelevantLabels indicates which part(s) of the alert payload to forward to the Action.
+	// RelevantLabels indicates which part(s) of the alert payload to forward to the Action. They are forwarded to the Action as a map[string]any
 	// +kubebuilder:validation:Optional
 	RelevantLabels *[]string `json:"relevantLabels,omitempty" yaml:"relevantLabels,omitempty"`
-	// OnStatus allows the user to specify actions depending on the state of the evaluation
+	// AlertStatus the status of the underlying prometheus alert. If omitted, the associated Action will only fire when the alert's status is "firing"
+	// +kubebuilder:default="firing"
+	// +kubebuilder:validation:Enum=firing;resolved
+	AlertStatus string `json:"status" yaml:"status"`
+}
+
+type Evaluation struct {
+	// Name How this evaluation will be referred to elsewhere in the config. Also, the name applied to the Prometheus Alert.
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
+	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Optional
-	OnStatus *PrometheusAlertEvaluationStatus `json:"onStatus,omitempty" yaml:"onStatus,omitempty"`
+	Name string `json:"name" yaml:"name"`
+	// ExtendRef refers to another already declared Evaluation and writes the properties of that evaluation except where overwritten here.
+	// If the Evaluation that gets extended has a PrometheusAlert defined, the alert will not be duplicated.
+	// +kubebuilder:validation:Optional
+	ExtendRef string `json:"extendRef" yaml:"extendRef"`
+	// Action the action that will be executed when the Evaluation conditions are met
+	// +kubebuilder:validation:Required
+	Action *Action `json:"action" yaml:"action"`
+	// Properties below describe the type of evaluation. Only one may be used per Evaluation
+	// +kubebuilder:validation:Optional
+	PrometheusAlert *PrometheusAlertEvaluation `json:"prometheusAlert,omitempty" yaml:"prometheusAlert,omitempty"`
 }
 
 type ObserverLogsFilter struct {
@@ -182,7 +208,7 @@ type MdaiHubSpec struct {
 	Observers         *[]Observer         `json:"observers,omitempty" yaml:"observers,omitempty"`
 	ObserverResources *[]ObserverResource `json:"observerResources,omitempty" yaml:"observerResources,omitempty"`
 	Variables         *[]Variable         `json:"variables,omitempty"`
-	Evaluations       *[]Evaluation       `json:"evaluations,omitempty"` // evaluation configuration (alerting rules)
+	Evaluations       *[]Evaluation       `json:"evaluations,omitempty" yaml:"evaluations,omitempty"`
 }
 
 // MdaiHubStatus defines the observed state of MdaiHub.
