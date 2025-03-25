@@ -334,6 +334,8 @@ spec:
                       - string
                       - set
                       - boolean
+                      - integer
+                      - float
                       type: string
                   required:
                   - serializeAs

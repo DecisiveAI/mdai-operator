@@ -521,11 +521,6 @@ func (in *VariableTransformer) DeepCopyInto(out *VariableTransformer) {
 		*out = new(JoinFunction)
 		**out = **in
 	}
-	if in.String != nil {
-		in, out := &in.String, &out.String
-		*out = new(StringFunction)
-		**out = **in
-	}
 	if in.Json != nil {
 		in, out := &in.Json, &out.Json
 		*out = new(JsonFunction)
@@ -534,6 +529,11 @@ func (in *VariableTransformer) DeepCopyInto(out *VariableTransformer) {
 	if in.Yaml != nil {
 		in, out := &in.Yaml, &out.Yaml
 		*out = new(YamlFunction)
+		**out = **in
+	}
+	if in.String != nil {
+		in, out := &in.String, &out.String
+		*out = new(StringFunction)
 		**out = **in
 	}
 }

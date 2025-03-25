@@ -30,6 +30,8 @@ type Serializer struct {
 	// +kubeuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
 	// Transformer The transformation applied to the value of the variable before it is assigned as an environment variable.
+	// TODO: Enforce required except for string variables
+	// +kubeuilder:validation:Optional
 	Transformer *VariableTransformer `json:"transformer,omitempty" yaml:"transformer,omitempty"`
 }
 
@@ -43,6 +45,7 @@ type StringFunction struct{}
 type JsonFunction struct{}
 type YamlFunction struct{}
 
+// TODO: Enforce only one may be used
 type VariableTransformer struct {
 	// Join For use with "set" or "array" type variables, joins the items of the collection into a string.
 	// +kubebuilder:validation:Optional
@@ -87,6 +90,7 @@ type VariableUpdate struct {
 	// +kubebuilder:validation:Required
 	VariableRef string `json:"variableRef" yaml:"variableRef"`
 	// Operation how the variable will be updated
+	// TODO: Enforce Enum based on variable Type
 	// +kubebuilder:validation:Enum:=mdai/add_element;mdai/remove_element
 	// +kubebuilder:validation:Required
 	Operation VariableUpdateOperation `json:"operation" yaml:"operation"`
@@ -101,12 +105,13 @@ type Action struct {
 	VariableUpdate *VariableUpdate `json:"variableUpdate,omitempty" yaml:"variableUpdate,omitempty"`
 }
 
+// TODO: This entire struct goes away
 type PrometheusAlertEvaluationStatus struct {
 	// Firing Action performed when the Prometheus Alert status changes to "firing"
 	// +kubebuilder:validation:Optional
 	Firing *Action `json:"firing,omitempty" yaml:"firing,omitempty"`
 	// Resolved Action performed when the Prometheus Alert status changes to "resolved"
-	// +kubebuilder:validation:Enum=firing;resolved
+	// +kubebuilder:validation:Optional
 	Resolved *Action `json:"resolved,omitempty" yaml:"resolved,omitempty"`
 }
 
@@ -150,6 +155,7 @@ type Evaluation struct {
 	// Properties below describe the type of evaluation. Only one may be used per Evaluation
 	// +kubebuilder:validation:Optional
 	PrometheusAlert *PrometheusAlertEvaluation `json:"prometheusAlert,omitempty" yaml:"prometheusAlert,omitempty"`
+	// TODO: When other types are available, enforce only one is able to be used
 }
 
 type ObserverLogsFilter struct {
