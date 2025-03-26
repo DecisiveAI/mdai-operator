@@ -338,7 +338,7 @@ jobs:
   test-e2e:
     name: E2E tests on Ubuntu
     needs: [ lint, test ]
-    if: success() || (needs.test.result == 'skipped')
+    if: needs.lint.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Configure git for private modules
