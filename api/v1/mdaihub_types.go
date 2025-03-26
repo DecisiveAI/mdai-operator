@@ -50,10 +50,10 @@ type VariableTransformer struct {
 	// Join For use with "set" or "array" type variables, joins the items of the collection into a string.
 	// +kubebuilder:validation:Optional
 	Join *JoinFunction `json:"join,omitempty" yaml:"join,omitempty"`
-	// Json converts the runtime value to a JSON compatible string. Only applicable for collection data types.
+	// Json For use with "set" or "array" type variables, converts the runtime value to a JSON compatible string.
 	// +kubebuilder:validation:Optional
 	Json *JsonFunction `json:"json,omitempty" yaml:"json,omitempty"`
-	// Yaml converts the runtime value to a YAML compatible string. Only applicable for collection data types.
+	// Yaml For use with "set" or "array" type variables, converts the runtime value to a YAML compatible string.
 	// +kubebuilder:validation:Optional
 	Yaml *YamlFunction `json:"yaml,omitempty" yaml:"yaml,omitempty"`
 	// String converts the runtime value to a string. Only applicable for scalar data types.
