@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/prometheus/prometheus/promql/parser"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -56,7 +57,7 @@ type MdaiHubCustomDefaulter struct {
 var _ webhook.CustomDefaulter = &MdaiHubCustomDefaulter{}
 
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind MdaiHub.
-func (d *MdaiHubCustomDefaulter) Default(ctx context.Context, obj runtime.Object) error {
+func (d *MdaiHubCustomDefaulter) Default(_ context.Context, obj runtime.Object) error {
 	mdaihub, ok := obj.(*mdaiv1.MdaiHub)
 
 	if !ok {
@@ -97,7 +98,7 @@ func (v *MdaiHubCustomValidator) ValidateCreate(_ context.Context, obj runtime.O
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type MdaiHub.
-func (v *MdaiHubCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (v *MdaiHubCustomValidator) ValidateUpdate(_ context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
 	mdaihub, ok := newObj.(*mdaiv1.MdaiHub)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiHub object for the newObj but got %T", newObj)
@@ -169,6 +170,10 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 				if evaluation.OnStatus == nil || (evaluation.OnStatus.Resolved == nil && evaluation.OnStatus.Firing == nil) {
 					warnings = append(warnings, fmt.Sprintf("evaluation %s: 'onStatus' is not specified for evaluation type Prometheus Alert", evaluation.Name))
 					continue
+				}
+
+				if _, err := parser.ParseExpr(evaluation.Expr.StrVal); err != nil {
+					return warnings, err
 				}
 
 				if err := v.validateOnStatus(evaluation.OnStatus.Firing, storageKeys, evaluation, "firing"); err != nil {

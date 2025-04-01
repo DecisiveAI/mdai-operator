@@ -243,6 +243,16 @@ var _ = Describe("MdaiHub Webhook", func() {
 			Expect(warnings).To(Equal(admission.Warnings{}))
 		})
 
+		It("Should fail creation if expr does not validate", func() {
+			By("simulating an invalid creation scenario")
+			obj := createSampleMdaiHub()
+			(*obj.Spec.Evaluations)[0].Expr = intstr.FromString("increaser(mdai_log_bytes_sent_total[1h]) > 100*1024*1024")
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(ContainSubstring(`parse error: unknown function with name "increaser"`)))
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
 		It("Should validate updates correctly", func() {
 			By("simulating a valid update scenario")
 			oldObj = createSampleMdaiHub()
