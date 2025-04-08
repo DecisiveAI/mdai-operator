@@ -3,11 +3,14 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/go-logr/logr"
+	"go.opentelemetry.io/contrib/bridges/otellogr"
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
-	"go.opentelemetry.io/otel/exporters/stdout/stdoutlog"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/metric"
@@ -36,20 +39,27 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 		err = errors.Join(inErr, shutdown(ctx))
 	}
 
+	resourceWAttributes, err := resource.New(ctx, resource.WithAttributes(
+		attribute.String("mdai-logstream", "hub"),
+	))
+
 	if errors.Is(err, resource.ErrPartialResource) || errors.Is(err, resource.ErrSchemaURLConflict) {
 		panic(err)
 	} else if err != nil {
 		panic(err)
 	}
 
-	opResource := resource.Default()
+	operatorResource, err := resource.Merge(
+		resource.Default(),
+		resourceWAttributes,
+	)
 
 	if err != nil {
 		panic(err)
 	}
 
 	// Set up meter provider.
-	meterProvider, err := newMeterProvider(ctx, opResource)
+	meterProvider, err := newMeterProvider(ctx, operatorResource)
 	if err != nil {
 		handleErr(err)
 		return
@@ -58,7 +68,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	otel.SetMeterProvider(meterProvider)
 
 	// Set up logger provider.
-	loggerProvider, err := newLoggerProvider(ctx, opResource)
+	loggerProvider, err := newLoggerProvider(ctx, operatorResource)
 	if err != nil {
 		handleErr(err)
 		return
@@ -83,8 +93,8 @@ func newMeterProvider(ctx context.Context, resource *resource.Resource) (*metric
 	return meterProvider, nil
 }
 
-func newLoggerProvider(_ context.Context, resource *resource.Resource) (*log.LoggerProvider, error) {
-	logExporter, err := stdoutlog.New()
+func newLoggerProvider(ctx context.Context, resource *resource.Resource) (*log.LoggerProvider, error) {
+	logExporter, err := otlploghttp.New(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -94,4 +104,59 @@ func newLoggerProvider(_ context.Context, resource *resource.Resource) (*log.Log
 		log.WithResource(resource),
 	)
 	return loggerProvider, nil
+}
+
+func getOtelifiedLogger(logger logr.Logger) logr.Logger {
+	mainSink := logger.GetSink()
+	var otelSink logr.LogSink = otellogr.NewLogSink("github.com/DecisiveAI/mdai-operator")
+	otelifiedLogger := logger.WithSink(otelMirrorSink{mainSink, &otelSink})
+	return otelifiedLogger
+}
+
+type otelMirrorSink struct {
+	mainSink logr.LogSink
+	otelSink *logr.LogSink
+}
+
+func (o otelMirrorSink) Init(info logr.RuntimeInfo) {
+	o.mainSink.Init(info)
+	if o.otelSink != nil {
+		(*o.otelSink).Init(info)
+	}
+}
+
+func (o otelMirrorSink) Enabled(level int) bool {
+	return o.mainSink.Enabled(level)
+}
+
+func (o otelMirrorSink) Info(level int, msg string, keysAndValues ...any) {
+	o.mainSink.Info(level, msg, keysAndValues...)
+	if o.otelSink != nil {
+		(*o.otelSink).Info(level, msg, keysAndValues...)
+	}
+}
+
+func (o otelMirrorSink) Error(err error, msg string, keysAndValues ...any) {
+	o.mainSink.Error(err, msg, keysAndValues...)
+	if o.otelSink != nil {
+		(*o.otelSink).Error(err, msg, keysAndValues...)
+	}
+}
+
+func (o otelMirrorSink) WithValues(keysAndValues ...any) logr.LogSink {
+	o.mainSink = o.mainSink.WithValues(keysAndValues...)
+	if o.otelSink != nil {
+		newSink := (*o.otelSink).WithValues(keysAndValues...)
+		o.otelSink = &newSink
+	}
+	return otelMirrorSink{o.mainSink, o.otelSink}
+}
+
+func (o otelMirrorSink) WithName(name string) logr.LogSink {
+	o.mainSink = o.mainSink.WithName(name)
+	if o.otelSink != nil {
+		newSink := (*o.otelSink).WithName(name)
+		o.otelSink = &newSink
+	}
+	return otelMirrorSink{o.mainSink, o.otelSink}
 }

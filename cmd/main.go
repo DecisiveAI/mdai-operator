@@ -124,7 +124,10 @@ func main() {
 
 	zapOpts.BindFlags(flag.CommandLine)
 	flag.Parse()
-	ctrl.SetLogger(ctrlzap.New(ctrlzap.UseFlagOptions(&zapOpts)))
+
+	logger := ctrlzap.New(ctrlzap.UseFlagOptions(&zapOpts))
+	otelLogger := getOtelifiedLogger(logger)
+	ctrl.SetLogger(otelLogger)
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
