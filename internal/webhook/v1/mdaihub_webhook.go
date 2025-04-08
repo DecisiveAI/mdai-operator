@@ -125,7 +125,7 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 	storageKeys := map[string]struct{}{}
 	exportedVariableNames := map[string]struct{}{}
 	variables := mdaihub.Spec.Variables
-	if variables == nil {
+	if variables == nil || len(*variables) == 0 {
 		warnings = append(warnings, "Variables are not specified")
 	} else {
 		for _, variable := range *variables {
