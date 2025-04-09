@@ -20,9 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
-	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
 
 	"go.uber.org/zap"
@@ -92,14 +90,12 @@ func main() {
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 
-	// Handle SIGINT (CTRL+C) gracefully.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
+	ctx := context.Background()
 
 	// Set up OpenTelemetry.
 	otelShutdown, err := setupOTelSDK(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error setting up otel client: %s\n", err.Error())
+		setupLog.Error(err, "Error setting up otel client")
 		return
 	}
 
