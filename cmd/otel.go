@@ -3,9 +3,10 @@ package main
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/contrib/bridges/otellogr"
-	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -62,7 +63,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	meterProvider, err := newMeterProvider(ctx, operatorResource)
 	if err != nil {
 		handleErr(err)
-		return
+		return shutdown, err
 	}
 	shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
 	otel.SetMeterProvider(meterProvider)
@@ -71,12 +72,12 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	loggerProvider, err := newLoggerProvider(ctx, operatorResource)
 	if err != nil {
 		handleErr(err)
-		return
+		return shutdown, err
 	}
 	shutdownFuncs = append(shutdownFuncs, loggerProvider.Shutdown)
 	global.SetLoggerProvider(loggerProvider)
 
-	return
+	return shutdown, err
 }
 
 func newMeterProvider(ctx context.Context, resource *resource.Resource) (*metric.MeterProvider, error) {
