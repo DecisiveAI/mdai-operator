@@ -3,23 +3,15 @@ package main
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/contrib/bridges/otellogr"
 
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/sdk/log"
-	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
-)
-
-const (
-	oneMinute = 60 * time.Second
 )
 
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
@@ -47,7 +39,6 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	resourceWAttributes, err := resource.New(ctx, resource.WithAttributes(
 		attribute.String("mdai-logstream", "hub"),
 	))
-
 	if err != nil {
 		panic(err)
 	}
@@ -56,19 +47,9 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 		resource.Default(),
 		resourceWAttributes,
 	)
-
 	if err != nil {
 		panic(err)
 	}
-
-	// Set up meter provider.
-	meterProvider, err := newMeterProvider(ctx, operatorResource)
-	if err != nil {
-		handleErr(err)
-		return shutdown, err
-	}
-	shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
-	otel.SetMeterProvider(meterProvider)
 
 	// Set up logger provider.
 	loggerProvider, err := newLoggerProvider(ctx, operatorResource)
@@ -80,20 +61,6 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	global.SetLoggerProvider(loggerProvider)
 
 	return shutdown, err
-}
-
-func newMeterProvider(ctx context.Context, resource *resource.Resource) (*metric.MeterProvider, error) {
-	metricExporter, err := otlpmetrichttp.New(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	meterProvider := metric.NewMeterProvider(
-		metric.WithReader(metric.NewPeriodicReader(metricExporter,
-			metric.WithInterval(oneMinute))),
-		metric.WithResource(resource),
-	)
-	return meterProvider, nil
 }
 
 func newLoggerProvider(ctx context.Context, resource *resource.Resource) (*log.LoggerProvider, error) {
