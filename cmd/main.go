@@ -96,7 +96,7 @@ func main() {
 	otelShutdown, err := setupOTelSDK(ctx)
 	if err != nil {
 		setupLog.Error(err, "Error setting up otel client")
-		return
+		os.Exit(1)
 	}
 
 	gracefullyShutdownWithCode := func(code int) {

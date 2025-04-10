@@ -18,6 +18,10 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 )
 
+const (
+	oneMinute = 60 * time.Second
+)
+
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
 func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, err error) {
@@ -44,9 +48,7 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 		attribute.String("mdai-logstream", "hub"),
 	))
 
-	if errors.Is(err, resource.ErrPartialResource) || errors.Is(err, resource.ErrSchemaURLConflict) {
-		panic(err)
-	} else if err != nil {
+	if err != nil {
 		panic(err)
 	}
 
@@ -88,7 +90,7 @@ func newMeterProvider(ctx context.Context, resource *resource.Resource) (*metric
 
 	meterProvider := metric.NewMeterProvider(
 		metric.WithReader(metric.NewPeriodicReader(metricExporter,
-			metric.WithInterval(60*time.Second))),
+			metric.WithInterval(oneMinute))),
 		metric.WithResource(resource),
 	)
 	return meterProvider, nil
