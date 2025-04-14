@@ -2,10 +2,10 @@
 ![Coverage](https://img.shields.io/badge/Coverage-1-red)
 [![Tests](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml)
 [![Lint](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml)
-# Mdai K8s Operator
+# MDAI K8s Operator
 manages MDAI Hubs
 ## Description
-Mdai k8s operator: 
+MDAI k8s operator: 
 
 - Monitors OTEL collectors with labels matching the hub name.
 - Creates alerting rules for the Prometheus operator.
@@ -18,10 +18,10 @@ Mdai k8s operator:
 ```yaml
   envFrom:
     - configMapRef:
-      name: mdaihub-sample-variabes
+      name: mdaihub-sample-variables
 ```
 - For now assuming hub names are unique across all namespaces
-- Valkey key name has a structure: `variable/some_hub_name/some_variable_name`
+- valkey key name has a structure: `variable/some_hub_name/some_variable_name`
 - Updates to variables are applied by triggering the collector’s restart
 - Supports the built-in ValKey storage type for variables 
 
@@ -42,15 +42,15 @@ export GOPRIVATE=github.com/decisiveai/*
 - docker version 17.03+.
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
-- Mdai OTEL operator CRD installed into cluster.
+- MDAI OTEL operator CRD installed into cluster.
 - Prometheus operator CRD installed into cluster.
-- Valkey secret created (see below)
-- Valkey is installed
+- valkey secret created (see below)
+- valkey is installed
 
 ### To Deploy on the local cluster
 **Create cluster**
 ```shell
-kind create cluster -n  mdai-operator-test
+kind create cluster -n mdai-operator-test
 ```
 **Cert manager**
 ```shell
@@ -85,7 +85,7 @@ You can apply the samples (examples) from the config/sample:
 kubectl apply -k config/samples/
 ```
 ### Testing
-Deploy test otel collectors:
+Deploy test OTEL collectors:
 ```sh
 kubectl apply -k test/test-samples/
 ```
@@ -134,13 +134,11 @@ make helm-update
 ```shell
 make helm-package
 ```
-- from https://github.com/DecisiveAI/mdai-helm-charts 
+### Publish chart
 ```shell
-cd ../mdai-helm-charts
-helm repo index ../mdai-operator --merge index.yaml
-mv ../mdai-operator/index.yaml ../mdai-operator/mdai-operator-0.1.8.tgz .
-cd -
+make helm-publish
 ```
+
 ## Project Distribution 
 
 Following the options to release and provide this solution to the users.
