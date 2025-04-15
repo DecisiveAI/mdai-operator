@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+
 	"go.opentelemetry.io/otel"
 
 	"github.com/go-logr/logr"
