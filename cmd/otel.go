@@ -15,10 +15,12 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 )
 
+type shutdownFunc func(context.Context) error
+
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, err error) {
-	var shutdownFuncs []func(context.Context) error
+func setupOTelSDK(ctx context.Context) (shutdown shutdownFunc, err error) {
+	var shutdownFuncs []shutdownFunc
 
 	// shutdown calls cleanup functions registered via shutdownFuncs.
 	// The errors from the calls are joined.
