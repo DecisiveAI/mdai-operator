@@ -122,7 +122,7 @@ func main() {
 	flag.Parse()
 
 	logger := ctrlzap.New(ctrlzap.UseFlagOptions(&zapOpts))
-	otelLogger := getOtelifiedLogger(logger)
+	otelLogger := attachOtelLogger(logger)
 	ctrl.SetLogger(otelLogger)
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"go.opentelemetry.io/otel"
 
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/contrib/bridges/otellogr"
@@ -76,7 +77,17 @@ func newLoggerProvider(ctx context.Context, resource *resource.Resource) (*log.L
 	return loggerProvider, nil
 }
 
-func getOtelifiedLogger(logger logr.Logger) logr.Logger {
+type LogrLogHandler struct {
+	logger logr.Logger
+}
+
+func (errorHandler LogrLogHandler) Handle(err error) {
+	errorHandler.logger.Error(err, "OTEL SDK error")
+}
+
+func attachOtelLogger(logger logr.Logger) logr.Logger {
+	// Bootstrap OTEL's own error handling with this logger, so we're not attempting to log OTEL's errors to itself
+	otel.SetErrorHandler(&LogrLogHandler{logger})
 	mainSink := logger.GetSink()
 	var otelSink logr.LogSink = otellogr.NewLogSink("github.com/DecisiveAI/mdai-operator")
 	otelifiedLogger := logger.WithSink(otelMirrorSink{mainSink, &otelSink})
