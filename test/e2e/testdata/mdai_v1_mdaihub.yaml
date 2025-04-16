@@ -25,13 +25,15 @@ spec:
     - storageKey: service_list_2
       serializeAs:
         - name: "SERVICE_LIST_2_REGEX"
-          transformer:
-            join:
-              delimiter: "|"
+          transformers:
+            - type: join
+              join:
+                delimiter: "|"
         - name: "SERVICE_LIST_2_CSV"
-          transformer:
-            join:
-              delimiter: ","
+          transformers:
+            - type: join
+              join:
+                delimiter: ","
       dataType: set
       storageType: "mdai-valkey"
   observers:
