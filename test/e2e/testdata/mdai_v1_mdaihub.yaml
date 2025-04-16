@@ -23,7 +23,6 @@ spec:
                 delimiter: ","
       dataType: set
     - storageKey: service_list_2
-      defaultValue: "n/a"
       serializeAs:
         - name: "SERVICE_LIST_2_REGEX"
           transformer:
