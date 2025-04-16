@@ -144,12 +144,18 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 					}
 					exportedVariableNames[with.Name] = struct{}{}
 
-					transformer := with.Transformer
-					switch variable.Type {
-					case mdaiv1.VariableTypeSet:
-						if transformer == nil || transformer.Join == nil {
+					transformers := with.Transformers
+					switch variable.DataType {
+					case mdaiv1.VariableDataTypeSet:
+						if len(transformers) == 0 {
 							return warnings, fmt.Errorf("variable %s: at least one transformer must be provided, such as 'join'", variable.StorageKey)
 						}
+						// TODO implement
+					case mdaiv1.VariableDataTypeString:
+						// no transformers supported yet
+					case mdaiv1.VariableDataTypeInt:
+					case mdaiv1.VariableDataTypeBoolean:
+					case mdaiv1.VariableDataTypeMap:
 					default:
 						return warnings, fmt.Errorf("variable %s: unsupported variable type", variable.StorageKey)
 					}

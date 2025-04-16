@@ -34,7 +34,6 @@ import (
 func createSampleMdaiHub() *mdaiv1.MdaiHub {
 	storageType := "mdai-valkey"
 	relevantLabels := []string{"service_name"}
-	defaultValue := "n/a"
 	var duration1 prometheusv1.Duration = "5m"
 
 	return &mdaiv1.MdaiHub{
@@ -49,51 +48,57 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 		Spec: mdaiv1.MdaiHubSpec{
 			Variables: &[]mdaiv1.Variable{
 				{
-					StorageKey:   "service_list_1",
-					DefaultValue: &defaultValue,
+					StorageKey: "service_list_1",
 					SerializeAs: []mdaiv1.Serializer{
 						{
 							Name: "SERVICE_LIST_REGEX",
-							Transformer: &mdaiv1.VariableTransformer{
-								Join: &mdaiv1.JoinFunction{
-									Delimiter: "|",
+							Transformers: []mdaiv1.VariableTransformer{
+								{Type: mdaiv1.TransformerTypeJoin,
+									Join: &mdaiv1.JoinTransformer{
+										Delimiter: "|",
+									},
 								},
 							},
 						},
 						{
 							Name: "SERVICE_LIST_CSV",
-							Transformer: &mdaiv1.VariableTransformer{
-								Join: &mdaiv1.JoinFunction{
-									Delimiter: ",",
+							Transformers: []mdaiv1.VariableTransformer{
+								{Type: mdaiv1.TransformerTypeJoin,
+									Join: &mdaiv1.JoinTransformer{
+										Delimiter: ",",
+									},
 								},
 							},
 						},
 					},
-					Type:        mdaiv1.VariableTypeSet,
+					DataType:    mdaiv1.VariableDataTypeSet,
 					StorageType: mdaiv1.VariableStorageType(storageType),
 				},
 				{
-					StorageKey:   "service_list_2",
-					DefaultValue: &defaultValue,
+					StorageKey: "service_list_2",
 					SerializeAs: []mdaiv1.Serializer{
 						{
 							Name: "SERVICE_LIST_2_REGEX",
-							Transformer: &mdaiv1.VariableTransformer{
-								Join: &mdaiv1.JoinFunction{
-									Delimiter: "|",
+							Transformers: []mdaiv1.VariableTransformer{
+								{Type: mdaiv1.TransformerTypeJoin,
+									Join: &mdaiv1.JoinTransformer{
+										Delimiter: "|",
+									},
 								},
 							},
 						},
 						{
 							Name: "SERVICE_LIST_2_CSV",
-							Transformer: &mdaiv1.VariableTransformer{
-								Join: &mdaiv1.JoinFunction{
-									Delimiter: ",",
+							Transformers: []mdaiv1.VariableTransformer{
+								{Type: mdaiv1.TransformerTypeJoin,
+									Join: &mdaiv1.JoinTransformer{
+										Delimiter: ",",
+									},
 								},
 							},
 						},
 					},
-					Type:        mdaiv1.VariableTypeSet,
+					DataType:    mdaiv1.VariableDataTypeSet,
 					StorageType: mdaiv1.VariableStorageType(storageType),
 				},
 			},

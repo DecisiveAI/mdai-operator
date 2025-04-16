@@ -9,13 +9,25 @@ metadata:
 spec:
   variables:
     - storageKey: service_list
-      defaultValue: "n/a"
-      type: set
+      dataType: set
       serializeAs:
-        - name: "SERVICE_LIST_REGEX"
-          transformer:
-            join:
-              delimiter: "|"
+        - name: "SERVICE_LIST"
+          transformers:
+            - type: join
+              join:
+                delimiter: "|"
+    - storageKey: service_counter
+      dataType: int
+      serializeAs:
+        - name: "SERVICE_LIST_COUNT"
+    - storageKey: any_service_alerted
+      dataType: boolean
+      serializeAs:
+        - name: "SERVICE_ALERTED"
+    - storageKey: service_map
+      dataType: map
+      serializeAs:
+        - name: "SERVICE_YAML"
 
   observers:
     - name: service-bytes-watcher1

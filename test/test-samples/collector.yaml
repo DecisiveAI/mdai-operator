@@ -2,7 +2,7 @@ apiVersion: opentelemetry.io/v1beta1
 kind: OpenTelemetryCollector
 metadata:
   labels:
-    mdaihub-name: mdaihub-sample
+    mdaihub-name: mdaihub-second
   name: gateway
   namespace: otel
 spec:

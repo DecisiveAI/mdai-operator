@@ -12,14 +12,16 @@ spec:
       defaultValue: "n/a"
       serializeAs:
         - name: "SERVICE_LIST_REGEX"
-          transformer:
-            join:
-              delimiter: "|"
+          transformers:
+            - type: join
+              join:
+                delimiter: "|"
         - name: "SERVICE_LIST_CSV"
-          transformer:
-            join:
-              delimiter: ","
-      type: set
+          transformers:
+            - type: join
+              join:
+                delimiter: ","
+      dataType: set
     - storageKey: service_list_2
       defaultValue: "n/a"
       serializeAs:
@@ -31,7 +33,7 @@ spec:
           transformer:
             join:
               delimiter: ","
-      type: set
+      dataType: set
       storageType: "mdai-valkey"
   observers:
     - name: watcher1
