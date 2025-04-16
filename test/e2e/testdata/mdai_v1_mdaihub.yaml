@@ -9,7 +9,6 @@ metadata:
 spec:
   variables:
     - storageKey: service_list_1
-      defaultValue: "n/a"
       serializeAs:
         - name: "SERVICE_LIST_REGEX"
           transformers:
