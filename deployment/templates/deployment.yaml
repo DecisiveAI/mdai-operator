@@ -39,6 +39,9 @@ spec:
             secretKeyRef:
               key: VALKEY_PASSWORD
               name: valkey-secret
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ quote .Values.controllerManager.manager.env.otelExporterOtlpEndpoint
+            }}
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
         image: {{ .Values.controllerManager.manager.image.repository }}:{{ .Values.controllerManager.manager.image.tag

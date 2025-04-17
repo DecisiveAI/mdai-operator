@@ -20,7 +20,7 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 # Update this version to match new release tag and run helm targets
-VERSION = 0.1.9
+VERSION = 0.1.10
 
 .PHONY: all
 all: build
@@ -262,10 +262,6 @@ helm-update: manifests kustomize helmify helm-docs  helm-values-schema-json-plug
 	@$(HELM_DOCS) --skip-version-footer deployment -f values.yaml -l warning
 	@helm schema -input deployment/values.yaml -output deployment/values.schema.json > /dev/null 2>&1
 
-.PHONY: helm-package
-helm-package: helm-update
-	@helm package -u deployment
-
 .PHONY: local-deploy
 local-deploy: manifests install
 	go mod vendor
@@ -274,3 +270,49 @@ local-deploy: manifests install
 	make deploy IMG=mdai-operator:${VERSION}
 	kubectl rollout restart deployment mdai-operator-controller-manager -n mdai
 
+LATEST_TAG := $(shell git describe --tags --abbrev=0 $(git rev-parse --abbrev-ref HEAD) | sed 's/^v//')
+CHART_VERSION ?= $(LATEST_TAG)
+CHART_DIR := ./deployment
+CHART_NAME := mdai-operator
+CHART_PACKAGE := $(CHART_NAME)-$(CHART_VERSION).tgz
+CHART_REPO := git@github.com:DecisiveAI/mdai-helm-charts.git
+BASE_BRANCH := gh-pages
+TARGET_BRANCH := $(CHART_NAME)-v$(CHART_VERSION)
+CLONE_DIR := $(shell mktemp -d /tmp/mdai-helm-charts.XXXXXX)
+REPO_DIR := $(shell pwd)
+
+.PHONY: helm
+helm:
+	@echo "Usage: make helm-<command>"
+	@echo "Available commands:"
+	@echo "  helm-package   Package the Helm chart"
+	@echo "  helm-publish   Publish the Helm chart"
+
+.PHONY: helm-package
+helm-package: helm-update
+	@echo "📦 Packaging Helm chart..."
+	@helm package -u --version $(CHART_VERSION) --app-version $(CHART_VERSION) $(CHART_DIR) > /dev/null
+
+.PHONY: helm-publish
+helm-publish: helm-package
+	@echo "🚀 Cloning $(CHART_REPO)..."
+	@rm -rf $(CLONE_DIR)
+	@git clone -q --branch $(BASE_BRANCH) $(CHART_REPO) $(CLONE_DIR)
+
+	@echo "🌿 Creating branch $(TARGET_BRANCH) from $(BASE_BRANCH)..."
+	@cd $(CLONE_DIR) && git checkout -q -b $(TARGET_BRANCH)
+
+	@echo "📤 Copying and indexing chart..."
+	@cd $(CLONE_DIR) && \
+		helm repo index $(REPO_DIR) --merge index.yaml && \
+		mv $(REPO_DIR)/$(CHART_PACKAGE) $(CLONE_DIR)/ && \
+		mv $(REPO_DIR)/index.yaml $(CLONE_DIR)/
+
+	@echo "🚀 Committing changes..."
+	@cd $(CLONE_DIR) && \
+		git add $(CHART_PACKAGE) index.yaml && \
+		git commit -q -m "chore: publish $(CHART_PACKAGE)" && \
+		git push -q origin $(TARGET_BRANCH) && \
+		rm -rf $(CLONE_DIR)
+
+	@echo "✅ Chart published"
