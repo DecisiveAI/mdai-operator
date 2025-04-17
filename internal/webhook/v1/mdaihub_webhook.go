@@ -150,12 +150,11 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 						if len(transformers) == 0 {
 							return warnings, fmt.Errorf("variable %s: at least one transformer must be provided, such as 'join'", variable.StorageKey)
 						}
-						// TODO implement
-					case mdaiv1.VariableDataTypeString:
+					case mdaiv1.VariableDataTypeString, mdaiv1.VariableDataTypeFloat, mdaiv1.VariableDataTypeInt, mdaiv1.VariableDataTypeBoolean, mdaiv1.VariableDataTypeMap:
 						// no transformers supported yet
-					case mdaiv1.VariableDataTypeInt:
-					case mdaiv1.VariableDataTypeBoolean:
-					case mdaiv1.VariableDataTypeMap:
+						if len(transformers) > 0 {
+							return warnings, fmt.Errorf("variable %s: transformers are not supported for variable type %s", variable.StorageKey, variable.DataType)
+						}
 					default:
 						return warnings, fmt.Errorf("variable %s: unsupported variable type", variable.StorageKey)
 					}

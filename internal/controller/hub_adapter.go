@@ -347,10 +347,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 			case mdaiv1.VariableDataTypeSet:
 
 				// TODO move to the data access library
-				valueAsSlice, err := valkeyClient.Do(
-					ctx,
-					valkeyClient.B().Smembers().Key(valkeyKey).Build(),
-				).AsStrSlice()
+				valueAsSlice, err := valkeyClient.Do(ctx, valkeyClient.B().Smembers().Key(valkeyKey).Build()).AsStrSlice()
 				if err != nil {
 					c.logger.Error(err, "Failed to get set value from Valkey", "key", valkeyKey)
 					return RequeueAfter(requeueTime, err)
@@ -424,11 +421,6 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	c.logger.Info("Deleting old valkey keys", "valkeyKeysToKeep", valkeyKeysToKeep)
 	if err := c.deleteKeysWithPrefixUsingScan(ctx, VariableKeyPrefix+c.mdaiCR.Name+"/", valkeyKeysToKeep); err != nil {
 		return OperationResult{}, err
-	}
-
-	if len(envMap) == 0 {
-		c.logger.Info("No variables need to be updated")
-		return ContinueProcessing()
 	}
 
 	collectors, err := c.listOtelCollectorsWithLabel(ctx, fmt.Sprintf("%s=%s", LabelMdaiHubName, c.mdaiCR.Name))
