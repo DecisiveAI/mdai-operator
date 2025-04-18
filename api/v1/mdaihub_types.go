@@ -79,7 +79,7 @@ type VariableUpdate struct {
 	// +kubebuilder:validation:Required
 	VariableRef string `json:"variableRef" yaml:"variableRef"`
 	// Operation how the variable will be updated
-	// +kubebuilder:validation:Enum:=mdai/add_element;mdai/remove_element;mdai/set;mdai/delete;mdai/incr_by;mdai/decr_by;mdai/set_key;mdai/delete_key;mdai/bulk_set_key_value
+	// +kubebuilder:validation:Enum:=mdai/add_element;mdai/remove_element;mdai/set;mdai/delete;mdai/incr_by;mdai/decr_by;mdai/map_set_entry;mdai/map_remove_entry;mdai/bulk_set_key_value
 	// +kubebuilder:validation:Required
 	Operation VariableUpdateOperation `json:"operation" yaml:"operation"`
 }
@@ -267,9 +267,9 @@ const (
 	VariableUpdateSet              VariableUpdateOperation = "mdai/set"
 	VariableUpdateDelete           VariableUpdateOperation = "mdai/delete"
 	VariableUpdateIntIncrBy        VariableUpdateOperation = "mdai/incr_by"
-	VariableUpdateDecrBy           VariableUpdateOperation = "mdai/decr_by"
-	VariableUpdateSetKey           VariableUpdateOperation = "mdai/set_key"
-	VariableUpdateRemoveKey        VariableUpdateOperation = "mdai/delete_key"
+	VariableUpdateIntDecrBy        VariableUpdateOperation = "mdai/decr_by"
+	VariableUpdateSetMapEntry      VariableUpdateOperation = "mdai/map_set_entry"
+	VariableUpdateRemoveMapEntry   VariableUpdateOperation = "mdai/map_remove_entry"
 	VariableUpdateBulkSetKeyValue  VariableUpdateOperation = "mdai/bulk_set_key_value"
 
 	TransformerTypeJoin TransformerType = "join"

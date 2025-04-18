@@ -97,8 +97,8 @@ spec:
                                   - mdai/delete
                                   - mdai/incr_by
                                   - mdai/decr_by
-                                  - mdai/set_key
-                                  - mdai/delete_key
+                                  - mdai/map_set_entry
+                                  - mdai/map_remove_entry
                                   - mdai/bulk_set_key_value
                                   type: string
                                 variableRef:
@@ -130,8 +130,8 @@ spec:
                                   - mdai/delete
                                   - mdai/incr_by
                                   - mdai/decr_by
-                                  - mdai/set_key
-                                  - mdai/delete_key
+                                  - mdai/map_set_entry
+                                  - mdai/map_remove_entry
                                   - mdai/bulk_set_key_value
                                   type: string
                                 variableRef:
