@@ -32,7 +32,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 
-	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/valkey-io/valkey-go"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"

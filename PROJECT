@@ -8,7 +8,7 @@ layout:
 plugins:
   grafana.kubebuilder.io/v1-alpha: {}
 projectName: mdai-operator
-repo: github.com/DecisiveAI/mdai-operator
+repo: github.com/decisiveai/mdai-operator
 resources:
 - api:
     crdVersion: v1
@@ -17,7 +17,7 @@ resources:
   domain: mydecisive.ai
   group: hub
   kind: MdaiHub
-  path: github.com/DecisiveAI/mdai-operator/api/v1
+  path: github.com/decisiveai/mdai-operator/api/v1
   version: v1
   webhooks:
     defaulting: true

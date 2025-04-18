@@ -13,7 +13,7 @@ import (
 	"github.com/valkey-io/valkey-go"
 	"k8s.io/utils/ptr"
 
-	v1 "github.com/DecisiveAI/mdai-operator/api/v1"
+	v1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/go-logr/logr"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/go-logr/logr"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -339,6 +339,10 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	valkeyClient := c.valKeyClient
 	valkeyKeysToKeep := map[string]struct{}{}
 	for _, variable := range *variables {
+		if variable.Type != mdaiv1.VariableTypeComputed {
+			c.logger.Info("Variable type is not supported yet", "variable", variable.StorageKey, "type", variable.Type)
+			continue
+		}
 		switch variable.StorageType {
 		case mdaiv1.VariableSourceTypeBuiltInValkey:
 			valkeyKey := c.composeValkeyKey(variable)

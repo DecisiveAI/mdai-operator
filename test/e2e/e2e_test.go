@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DecisiveAI/mdai-operator/test/utils"
+	"github.com/decisiveai/mdai-operator/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/valkey-io/valkey-go"
