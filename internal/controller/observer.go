@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -22,6 +21,9 @@ const observerResourceLabel = "mdai_observer_resource"
 
 //go:embed config/base_collector.yaml
 var baseCollectorYAML string
+
+//go:embed config/base_deployment.yaml
+var baseDeploymentYAML string
 
 func (c HubAdapter) getScopedObserverResourceName(observerResource v1.ObserverResource, postfix string) string {
 	if postfix != "" {
@@ -128,12 +130,14 @@ func (c HubAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Context,
 func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context, namespace string, hash string, observerResource v1.ObserverResource) error {
 	name := c.getScopedObserverResourceName(observerResource, "")
 
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
+	baseDeployment := appsv1.Deployment{}
+	if err := yaml.Unmarshal([]byte(baseDeploymentYAML), &baseDeployment); err != nil {
+		c.logger.Error(err, "Failed to unmarshal base collector config")
+		return err
 	}
+	deployment := &baseDeployment
+	deployment.ObjectMeta.Name = name
+	deployment.ObjectMeta.Namespace = namespace
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, deployment, func() error {
 		if err := controllerutil.SetControllerReference(c.mdaiCR, deployment, c.scheme); err != nil {
@@ -169,46 +173,11 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 		if deployment.Spec.Template.Annotations == nil {
 			deployment.Spec.Template.Annotations = make(map[string]string)
 		}
-		deployment.Spec.Template.Annotations["prometheus.io/path"] = "/metrics"
-		deployment.Spec.Template.Annotations["prometheus.io/port"] = "8899"
-		deployment.Spec.Template.Annotations["prometheus.io/scrape"] = "true"
-		// FIXME: replace this annotation with mdai_observer_resource in other hub components (prometheus scraping config)
-		deployment.Spec.Template.Annotations["mdai_component_type"] = "mdai-watcher"
 		deployment.Spec.Template.Annotations["mdai-collector-config/sha256"] = hash
 
-		containerSpec := corev1.Container{
-			Name:  name,
-			Image: observerDefaultImage,
-			Ports: []corev1.ContainerPort{
-				{ContainerPort: 8888, Name: "otelcol-metrics"},
-				// FIXME: update name away from watcher
-				{ContainerPort: 8899, Name: "watcher-metrics"},
-				{ContainerPort: 4317, Name: "otlp-grpc"},
-				{ContainerPort: 4318, Name: "otlp-http"},
-			},
-			VolumeMounts: []corev1.VolumeMount{
-				{
-					Name:      "config-volume",
-					MountPath: "/conf/collector.yaml",
-					SubPath:   "collector.yaml",
-				},
-			},
-			Command: []string{
-				// FIXME: update name away from watcher
-				"/mdai-watcher-collector",
-				"--config=/conf/collector.yaml",
-			},
-			SecurityContext: &corev1.SecurityContext{
-				SeccompProfile: &corev1.SeccompProfile{
-					Type: corev1.SeccompProfileTypeRuntimeDefault,
-				},
-				AllowPrivilegeEscalation: ptr.To(false),
-				Capabilities: &corev1.Capabilities{
-					Drop: []corev1.Capability{"ALL"},
-				},
-				RunAsNonRoot: ptr.To(true),
-			},
-		}
+		containerSpec := deployment.Spec.Template.Spec.Containers[0]
+		containerSpec.Name = name
+		containerSpec.Image = observerDefaultImage
 
 		if observerResource.Image != nil && *observerResource.Image != "" {
 			containerSpec.Image = *observerResource.Image
