@@ -169,10 +169,30 @@ type ObserverResource struct {
 	GrpcReceiverMaxMsgSize *uint64 `json:"grpcReceiverMaxMsgSize,omitempty" yaml:"grpcReceiverMaxMsgSize,omitempty"`
 }
 
+type AWSConfig struct {
+	AccessKeyID     *string `json:"accessKeyID,omitempty" yaml:"accessKeyID,omitempty"`
+	AccessKeySecret *string `json:"accessKeySecret,omitempty" yaml:"accessKeySecret,omitempty"`
+}
+
+type S3LogsConfig struct {
+	LogLevel *string `json:"logLevel,omitempty" yaml:"logLevel,omitempty"`
+	S3Bucket *string `json:"s3Bucket,omitempty" yaml:"s3Bucket,omitempty"`
+}
+
+type LogsConfig struct {
+	S3 *S3LogsConfig `json:"s3,omitempty" yaml:"s3,omitempty"`
+}
+
+type TelemetryConfig struct {
+	AWSConfig *AWSConfig  `json:"aws,omitempty" yaml:"aws,omitempty"`
+	Logs      *LogsConfig `json:"logs,omitempty" yaml:"logs,omitempty"`
+}
+
 type Config struct {
 	// EvaluationInterval Specify the interval at which all evaluations within this hub are assessed in the Prometheus infrastructure.
 	// +kubebuilder:validation:Optional
 	EvaluationInterval *prometheusv1.Duration `json:"evaluation_interval,omitempty" yaml:"evaluation_interval,omitempty"`
+	Telemetry          *TelemetryConfig       `json:"telemetry,omitempty" yaml:"telemetry,omitempty"`
 }
 
 // MdaiHubSpec defines the desired state of MdaiHub.
