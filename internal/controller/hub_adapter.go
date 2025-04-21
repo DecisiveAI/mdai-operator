@@ -8,12 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"iter"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
+	audit "github.com/decisiveai/mdai-data-core/audit"
 	datacore "github.com/decisiveai/mdai-data-core/variables"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
@@ -49,9 +48,8 @@ const (
 
 	envConfigMapNamePostfix = "-variables"
 
-	observerDefaultImage          = "public.ecr.aws/decisiveai/watcher-collector:0.1.3"
-	MdaiHubEventHistoryStreamName = "mdai_hub_event_history"
-	requeueTime                   = time.Second * 10
+	observerDefaultImage = "public.ecr.aws/decisiveai/watcher-collector:0.1.3"
+	requeueTime          = time.Second * 10
 
 	hubNameLabel          = "mdai-hub-name"
 	observerResourceLabel = "mdai_observer_resource"
@@ -432,19 +430,11 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 			namespaceToRestart[namespace] = struct{}{}
 		}
 	}
+	auditAdapter := audit.NewAuditAdapter(c.logger, c.valKeyClient, c.valkeyAuditStreamExpiry)
 
 	for _, collector := range collectors {
 		if _, shouldRestart := namespaceToRestart[collector.Namespace]; shouldRestart {
-			mdaiHubEvent := map[string]string{
-				"timestamp": time.Now().UTC().Format(time.RFC3339),
-				"hub_name":  c.mdaiCR.Name,
-				"type":      "collector_restart",
-			}
-			for key, value := range envMap {
-				mdaiHubEvent[key] = value
-			}
-			c.logger.Info("Triggering restart of OpenTelemetry Collector", "name", collector.Name, "mdaiHubEvent", mdaiHubEvent)
-			// trigger restart
+			c.logger.Info("Triggering restart of OpenTelemetry Collector", "name", collector.Name)
 			collectorCopy := collector.DeepCopy()
 			if collectorCopy.Annotations == nil {
 				collectorCopy.Annotations = make(map[string]string)
@@ -460,10 +450,8 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 				return OperationResult{}, err
 			}
 
-			valkeyClient := c.valKeyClient
-			thresholdID := strconv.FormatInt(time.Now().Add(-valkeyAuditStreamExpiry).UnixMilli(), 10)
-			if result := valkeyClient.Do(ctx, valkeyClient.B().Xadd().Key(MdaiHubEventHistoryStreamName).Minid().Threshold(thresholdID).Id("*").FieldValue().FieldValueIter(composeValkeyStreamIterFromMap(mdaiHubEvent)).Build()); result.Error() != nil {
-				c.logger.Error(err, "Failed to write audit log entry!", "mdaiHubEvent", mdaiHubEvent)
+			if err := auditAdapter.InsertAuditLogEventFromMap(ctx, auditAdapter.CreateRestartEvent(c.mdaiCR.Name, envMap)); err != nil {
+				return OperationResult{}, err
 			}
 		}
 	}
@@ -496,16 +484,6 @@ func (c HubAdapter) deleteKeysWithPrefixUsingScan(ctx context.Context, prefix st
 	}
 
 	return nil
-}
-
-func composeValkeyStreamIterFromMap(mapToIter map[string]string) iter.Seq2[string, string] {
-	return func(yield func(string, string) bool) {
-		for k, v := range mapToIter {
-			if !yield(k, v) {
-				return
-			}
-		}
-	}
 }
 
 func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, namespace string) (controllerutil.OperationResult, error) {

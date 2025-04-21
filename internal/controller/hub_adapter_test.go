@@ -330,6 +330,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 	}
 	variable := v1.Variable{
 		StorageType: storageType,
+		Type:        v1.VariableTypeComputed,
 		DataType:    variableType,
 		StorageKey:  "mykey",
 		SerializeAs: []v1.Serializer{varWith},
