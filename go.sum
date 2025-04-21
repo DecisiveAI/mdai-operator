@@ -55,6 +55,8 @@ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/decisiveai/mdai-data-core v0.0.0-20250421192223-5eb0e662f2b4 h1:tSTlupEfW1FE2XVZOSfry0OBEQ/JDebdjLYtMrutVSw=
+github.com/decisiveai/mdai-data-core v0.0.0-20250421192223-5eb0e662f2b4/go.mod h1:hX3dUdu9suw338eoYKqotnBPpLQStSgAHmoH38enxw8=
 github.com/decisiveai/opentelemetry-operator v0.113.0 h1:IWW4WmXR1QR2FAs2GIz8h3WPzh2hqoVQqsbKsVz/1nc=
 github.com/decisiveai/opentelemetry-operator v0.113.0/go.mod h1:fzTghQy29Mahmh/nqD2ORMHfJ57nqsvuxmxpdDfkQ90=
 github.com/dennwc/varint v1.0.0 h1:kGNFFSSw8ToIy3obO/kKr8U9GZYUAxQEVuix4zfDWzE=
