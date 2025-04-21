@@ -412,13 +412,13 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 		Firing: &v1.Action{
 			VariableUpdate: &v1.VariableUpdate{
 				VariableRef: "MY_ENV",
-				Operation:   v1.VariableUpdateSetAddElement,
+				Operation:   "some operation",
 			},
 		},
 		Resolved: &v1.Action{
 			VariableUpdate: &v1.VariableUpdate{
 				VariableRef: "MY_ENV",
-				Operation:   v1.VariableUpdateSetRemoveElement,
+				Operation:   "some_operation",
 			},
 		},
 	}
