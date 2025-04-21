@@ -13,7 +13,7 @@ import (
 	"github.com/valkey-io/valkey-go"
 	"k8s.io/utils/ptr"
 
-	v1 "github.com/DecisiveAI/mdai-operator/api/v1"
+	v1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/go-logr/logr"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -317,22 +317,23 @@ func TestEnsureVariableSynced(t *testing.T) {
 	ctx := context.TODO()
 	scheme := createTestScheme()
 	storageType := v1.VariableSourceTypeBuiltInValkey
-	variableType := v1.VariableTypeSet
-	defaultVal := "default"
+	variableType := v1.VariableDataTypeSet
 	varWith := v1.Serializer{
 		Name: "MY_ENV",
-		Transformer: &v1.VariableTransformer{
-			Join: &v1.JoinFunction{
-				Delimiter: ",",
+		Transformers: []v1.VariableTransformer{
+			{Type: v1.TransformerTypeJoin,
+				Join: &v1.JoinTransformer{
+					Delimiter: ",",
+				},
 			},
 		},
 	}
 	variable := v1.Variable{
-		StorageType:  storageType,
-		Type:         variableType,
-		StorageKey:   "mykey",
-		DefaultValue: &defaultVal,
-		SerializeAs:  []v1.Serializer{varWith},
+		StorageType: storageType,
+		Type:        v1.VariableTypeComputed,
+		DataType:    variableType,
+		StorageKey:  "mykey",
+		SerializeAs: []v1.Serializer{varWith},
 	}
 	mdaiCR := newTestMdaiCR()
 	mdaiCR.Spec.Variables = &[]v1.Variable{variable}
@@ -411,13 +412,13 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 		Firing: &v1.Action{
 			VariableUpdate: &v1.VariableUpdate{
 				VariableRef: "MY_ENV",
-				Operation:   v1.VariableUpdateOperationAddElement,
+				Operation:   v1.VariableUpdateSetAddElement,
 			},
 		},
 		Resolved: &v1.Action{
 			VariableUpdate: &v1.VariableUpdate{
 				VariableRef: "MY_ENV",
-				Operation:   v1.VariableUpdateOperationRemoveElement,
+				Operation:   v1.VariableUpdateSetRemoveElement,
 			},
 		},
 	}

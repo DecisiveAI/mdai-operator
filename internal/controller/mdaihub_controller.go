@@ -32,7 +32,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 
-	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/valkey-io/valkey-go"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -52,12 +52,9 @@ import (
 )
 
 const (
-	LabelMdaiHubName  = "mdaihub-name" // Replace with your actual label key
-	VariableKeyPrefix = "variable/"
-)
-
-var (
-	valkeyAuditStreamExpiry = 30 * 24 * time.Hour
+	LabelMdaiHubName               = "mdaihub-name" // Replace with your actual label key
+	VariableKeyPrefix              = "variable/"
+	DefaultValkeyAuditStreamExpiry = 30 * 24 * time.Hour
 )
 
 // MdaiHubReconciler reconciles a MdaiHub object
@@ -66,7 +63,8 @@ type MdaiHubReconciler struct {
 	Scheme       *runtime.Scheme
 	Recorder     record.EventRecorder
 	ValKeyClient valkey.Client
-	valkeyEvents chan event.GenericEvent
+	ValkeyEvents chan event.GenericEvent
+	ValkeyExpiry time.Duration
 }
 
 // +kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaihubs,verbs=get;list;watch;create;update;patch;delete
@@ -99,7 +97,7 @@ func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	_, err := r.ReconcileHandler(ctx, *NewHubAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme, r.ValKeyClient, valkeyAuditStreamExpiry))
+	_, err := r.ReconcileHandler(ctx, *NewHubAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme, r.ValKeyClient, r.ValkeyExpiry))
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -140,15 +138,15 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	valkeyStreamExpiryMsStr := os.Getenv("VALKEY_AUDIT_STREAM_EXPIRY_MS")
-	if valkeyStreamExpiryMsStr != "" {
-		envExpiryMs, err := strconv.Atoi(valkeyStreamExpiryMsStr)
+	r.ValkeyExpiry = DefaultValkeyAuditStreamExpiry
+	if expiryMsStr := os.Getenv("VALKEY_AUDIT_STREAM_EXPIRY_MS"); expiryMsStr != "" {
+		expiryMs, err := strconv.Atoi(expiryMsStr)
 		if err != nil {
-			log.Error(err, "Failed to parse valkeyStreamExpiryMs env var")
+			log.Error(err, "Failed to parse VALKEY_AUDIT_STREAM_EXPIRY_MS env var", "value", expiryMsStr)
 			return err
 		}
-		valkeyAuditStreamExpiry = time.Duration(envExpiryMs) * time.Millisecond
-		log.Info("Using custom "+MdaiHubEventHistoryStreamName+" expiration threshold MS", "valkeyAuditStreamExpiryMs", valkeyAuditStreamExpiry.Milliseconds())
+		r.ValkeyExpiry = time.Duration(expiryMs) * time.Millisecond
+		log.Info("Using custom expiration threshold MS", "valkeyAuditStreamExpiryMs", expiryMs)
 	}
 
 	// watch collectors which have the hub label
@@ -167,7 +165,7 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	combinedPredicate := predicate.And(selectorPredicate, createPredicate)
 
-	r.valkeyEvents = make(chan event.GenericEvent)
+	r.ValkeyEvents = make(chan event.GenericEvent)
 
 	if err := ctrl.NewControllerManagedBy(mgr).
 		For(&mdaiv1.MdaiHub{}).
@@ -184,7 +182,7 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		WatchesRawSource(
 			source.Channel(
-				r.valkeyEvents,
+				r.ValkeyEvents,
 				&handler.EnqueueRequestForObject{},
 			),
 		).
@@ -251,7 +249,7 @@ func (r *MdaiHubReconciler) startValkeySubscription() {
 			return
 		}
 
-		r.valkeyEvents <- event.GenericEvent{
+		r.ValkeyEvents <- event.GenericEvent{
 			Object: &mdaiv1.MdaiHub{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      hubName,

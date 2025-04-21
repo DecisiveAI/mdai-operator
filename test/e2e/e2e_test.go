@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DecisiveAI/mdai-operator/test/utils"
+	"github.com/decisiveai/mdai-operator/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/valkey-io/valkey-go"
@@ -391,10 +391,10 @@ var _ = Describe("Manager", Ordered, func() {
 			verifyConfigMap := func(g Gomega) {
 				data := getVariablesFromMap(g)
 
-				g.Expect(data["SERVICE_LIST_2_CSV"]).To(Equal("n/a"))
-				g.Expect(data["SERVICE_LIST_2_REGEX"]).To(Equal("n/a"))
-				g.Expect(data["SERVICE_LIST_CSV"]).To(Equal("n/a"))
-				g.Expect(data["SERVICE_LIST_REGEX"]).To(Equal("n/a"))
+				g.Expect(data["SERVICE_LIST_2_CSV"]).To(Equal(""))
+				g.Expect(data["SERVICE_LIST_2_REGEX"]).To(Equal(""))
+				g.Expect(data["SERVICE_LIST_CSV"]).To(Equal(""))
+				g.Expect(data["SERVICE_LIST_REGEX"]).To(Equal(""))
 			}
 			Eventually(verifyConfigMap).Should(Succeed())
 		})
@@ -484,8 +484,8 @@ var _ = Describe("Manager", Ordered, func() {
 			By("validating that the config map has the updated variable value")
 			verifyConfigMap := func(g Gomega) {
 				data := getVariablesFromMap(g)
-				g.Expect(data["SERVICE_LIST_2_CSV"]).To(Equal("n/a"))
-				g.Expect(data["SERVICE_LIST_2_REGEX"]).To(Equal("n/a"))
+				g.Expect(data["SERVICE_LIST_2_CSV"]).To(Equal(""))
+				g.Expect(data["SERVICE_LIST_2_REGEX"]).To(Equal(""))
 				g.Expect(data["SERVICE_LIST_CSV"]).To(Equal("noisy-service"))
 				g.Expect(data["SERVICE_LIST_REGEX"]).To(Equal("noisy-service"))
 			}

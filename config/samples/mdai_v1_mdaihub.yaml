@@ -9,31 +9,33 @@ metadata:
 spec:
   variables:
     - storageKey: service_list_1
-      defaultValue: "n/a"
-      type: set
+      dataType: set
       storageType: "mdai-valkey"
       serializeAs:
         - name: "SERVICE_LIST_REGEX"
-          transformer:
-            join:
-              delimiter: "|"
+          transformers:
+            - type: join
+              join:
+                delimiter: "|"
         - name: "SERVICE_LIST_CSV"
-          transformer:
-            join:
-              delimiter: ","
+          transformers:
+            - type: join
+              join:
+                delimiter: ","
     - storageKey: service_list_2
-      defaultValue: "n/a"
-      type: set
+      dataType: set
       storageType: "mdai-valkey"
       serializeAs:
         - name: "SERVICE_LIST_2_REGEX"
-          transformer:
-            join:
-              delimiter: "|"
+          transformers:
+            - type: join
+              join:
+                delimiter: "|"
         - name: "SERVICE_LIST_2_CSV"
-          transformer:
-            join:
-              delimiter: ","
+          transformers:
+            - type: join
+              join:
+                delimiter: ","
 
   observers:
     - name: watcher1
@@ -42,7 +44,6 @@ spec:
         - service.name
       countMetricName: mdai_watcher_one_count_total
       bytesMetricName: mdai_watcher_one_bytes_total
-      grpcReceiverMaxMsgSize: 10
     - name: watcher2
       resourceRef: watcher-collector
       labelResourceAttributes:
@@ -71,6 +72,7 @@ spec:
 
   observerResources:
     - name: watcher-collector
+      grpcReceiverMaxMsgSize: 10
       image: public.ecr.aws/decisiveai/watcher-collector:0.1.3
 
   evaluations:
