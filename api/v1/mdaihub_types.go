@@ -262,16 +262,6 @@ const (
 
 	EvaluationTypePrometheusAlert EvaluationType = "mdai/prometheus_alert"
 
-	VariableUpdateSetAddElement    VariableUpdateOperation = "mdai/add_element"
-	VariableUpdateSetRemoveElement VariableUpdateOperation = "mdai/remove_element"
-	VariableUpdateSet              VariableUpdateOperation = "mdai/set"
-	VariableUpdateDelete           VariableUpdateOperation = "mdai/delete"
-	VariableUpdateIntIncrBy        VariableUpdateOperation = "mdai/incr_by"
-	VariableUpdateIntDecrBy        VariableUpdateOperation = "mdai/decr_by"
-	VariableUpdateSetMapEntry      VariableUpdateOperation = "mdai/map_set_entry"
-	VariableUpdateRemoveMapEntry   VariableUpdateOperation = "mdai/map_remove_entry"
-	VariableUpdateBulkSetKeyValue  VariableUpdateOperation = "mdai/bulk_set_key_value"
-
 	TransformerTypeJoin TransformerType = "join"
 
 	ObserverResourceTypeWatcherCollector ObserverResourceType = "mdai-watcher"
