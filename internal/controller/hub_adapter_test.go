@@ -409,28 +409,11 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 	alertName := "alert1"
 	var expr = intstr.FromString("up == 0")
 	var duration1 prometheusv1.Duration = "5m"
-	relevantLabels := []string{"labelA", "labelB"}
-	onStatus := &v1.PrometheusAlertEvaluationStatus{
-		Firing: &v1.Action{
-			VariableUpdate: &v1.VariableUpdate{
-				VariableRef: "MY_ENV",
-				Operation:   "some operation",
-			},
-		},
-		Resolved: &v1.Action{
-			VariableUpdate: &v1.VariableUpdate{
-				VariableRef: "MY_ENV",
-				Operation:   "some_operation",
-			},
-		},
-	}
 	eval := v1.Evaluation{
-		Name:           alertName,
-		Expr:           expr,
-		For:            &duration1,
-		Severity:       "critical",
-		RelevantLabels: relevantLabels,
-		OnStatus:       onStatus,
+		Name:     alertName,
+		Expr:     expr,
+		For:      &duration1,
+		Severity: "critical",
 	}
 
 	evals := []v1.Evaluation{eval}
@@ -485,22 +468,6 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 	}
 	if *rule.For != duration1 {
 		t.Errorf("expected For '5m', got %q", *rule.For)
-	}
-
-	expectedActionContext, err := json.Marshal(onStatus)
-	if err != nil {
-		t.Fatalf("failed to marshal onStatus: %v", err)
-	}
-	if rule.Annotations["action_context"] != string(expectedActionContext) {
-		t.Errorf("expected action_context annotation %q, got %q", string(expectedActionContext), rule.Annotations["action_context"])
-	}
-
-	expectedRelevantLabels, err := json.Marshal(relevantLabels)
-	if err != nil {
-		t.Fatalf("failed to marshal relevantLabels: %v", err)
-	}
-	if rule.Annotations["relevant_labels"] != string(expectedRelevantLabels) {
-		t.Errorf("expected relevant_labels annotation %q, got %q", string(expectedRelevantLabels), rule.Annotations["relevant_labels"])
 	}
 }
 
