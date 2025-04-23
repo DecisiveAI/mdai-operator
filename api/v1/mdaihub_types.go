@@ -170,12 +170,16 @@ type ObserverResource struct {
 }
 
 type AWSConfig struct {
-	AccessKeyID     *string `json:"accessKeyID,omitempty" yaml:"accessKeyID,omitempty"`
-	AccessKeySecret *string `json:"accessKeySecret,omitempty" yaml:"accessKeySecret,omitempty"`
+	AWSAccessKeySecret *string `json:"awsAccessKeySecret,omitempty" yaml:"awsAccessKeySecret,omitempty"`
+	//AccessKeyID     *string `json:"accessKeyID,omitempty" yaml:"accessKeyID,omitempty"`
+	//AccessKeySecret *string `json:"accessKeySecret,omitempty" yaml:"accessKeySecret,omitempty"`
 }
 
 type S3LogsConfig struct {
-	LogLevel *string `json:"logLevel,omitempty" yaml:"logLevel,omitempty"`
+	// TODO: Implement this and figure out a good way to marshal OTEL LOG severity level number for gt/lt in OTTL
+	// For now will be coded to WARN or greater
+	//LogLevel *string `json:"logLevel,omitempty" yaml:"logLevel,omitempty"`
+	S3Region *string `json:"s3Region,omitempty" yaml:"s3Region,omitempty"`
 	S3Bucket *string `json:"s3Bucket,omitempty" yaml:"s3Bucket,omitempty"`
 }
 

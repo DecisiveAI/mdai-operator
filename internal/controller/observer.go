@@ -15,15 +15,68 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-const observerDefaultImage = "public.ecr.aws/decisiveai/watcher-collector:0.1.3"
+const observerDefaultImage = "public.ecr.aws/decisiveai/watcher-collector:0.1.4"
 
 const observerResourceLabel = "mdai_observer_resource"
 
-//go:embed config/base_collector.yaml
-var baseCollectorYAML string
+//go:embed config/observer_base_collector_config.yaml
+var baseObserverCollectorYAML string
 
-//go:embed config/base_deployment.yaml
-var baseDeploymentYAML string
+//go:embed config/observer_collector_base_deployment.yaml
+var baseObserverDeploymentYAML string
+
+func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationResult, error) {
+	observers := c.mdaiCR.Spec.Observers
+	observerResources := c.mdaiCR.Spec.ObserverResources
+
+	if observerResources == nil {
+		c.logger.Info("No observerResources found in the CR, skipping observer synchronization")
+		return ContinueProcessing()
+	}
+	if observers == nil {
+		c.logger.Info("No observers found in the CR, skipping observer synchronization")
+		return ContinueProcessing()
+	}
+
+	configObserverResources := make([]string, 0)
+	for _, observerResource := range *observerResources {
+		configObserverResources = append(configObserverResources, observerResource.Name)
+		observersForResource := make([]v1.Observer, 0)
+		for _, observer := range *observers {
+			if observer.ResourceRef == observerResource.Name {
+				observersForResource = append(observersForResource, observer)
+			}
+		}
+
+		if len(observersForResource) == 0 {
+			c.logger.Info("No observers configured using observerResource, skipping this observerResource", "observerResource", observerResource.Name)
+			continue
+		}
+
+		hash, err := c.createOrUpdateObserverResourceConfigMap(ctx, observerResource, observersForResource)
+		if err != nil {
+			return OperationResult{}, err
+		}
+
+		if err := c.createOrUpdateObserverResourceDeployment(ctx, c.mdaiCR.Namespace, hash, observerResource); err != nil {
+			if errors.ReasonForError(err) == metav1.StatusReasonConflict {
+				c.logger.Info("re-queuing due to resource conflict")
+				return Requeue()
+			}
+			return OperationResult{}, err
+		}
+
+		if err := c.createOrUpdateObserverResourceService(ctx, c.mdaiCR.Namespace, observerResource); err != nil {
+			return OperationResult{}, err
+		}
+	}
+
+	if err := c.cleanupOrphanedObserverResources(ctx, configObserverResources); err != nil {
+		return OperationResult{}, err
+	}
+
+	return ContinueProcessing()
+}
 
 func (c HubAdapter) getScopedObserverResourceName(observerResource v1.ObserverResource, postfix string) string {
 	if postfix != "" {
@@ -131,7 +184,7 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 	name := c.getScopedObserverResourceName(observerResource, "")
 
 	baseDeployment := appsv1.Deployment{}
-	if err := yaml.Unmarshal([]byte(baseDeploymentYAML), &baseDeployment); err != nil {
+	if err := yaml.Unmarshal([]byte(baseObserverDeploymentYAML), &baseDeployment); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base collector config")
 		return err
 	}
@@ -214,64 +267,9 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 	return nil
 }
 
-func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationResult, error) {
-	observers := c.mdaiCR.Spec.Observers
-	observerResources := c.mdaiCR.Spec.ObserverResources
-
-	if observerResources == nil {
-		// TODO: Check if resource exists and needs to be removed!
-		c.logger.Info("No observerResources found in the CR, skipping observer synchronization")
-		return ContinueProcessing()
-	}
-	if observers == nil {
-		c.logger.Info("No observers found in the CR, skipping observer synchronization")
-		return ContinueProcessing()
-	}
-
-	configObserverResources := make([]string, 0)
-	for _, observerResource := range *observerResources {
-		configObserverResources = append(configObserverResources, observerResource.Name)
-		observersForResource := make([]v1.Observer, 0)
-		for _, observer := range *observers {
-			if observer.ResourceRef == observerResource.Name {
-				observersForResource = append(observersForResource, observer)
-			}
-		}
-
-		if len(observersForResource) == 0 {
-			// TODO: Check if resource exists and needs to be removed!
-			c.logger.Info("No observers configured using observerResource, skipping this observerResource", "observerResource", observerResource.Name)
-			continue
-		}
-
-		hash, err := c.createOrUpdateObserverResourceConfigMap(ctx, observerResource, observersForResource)
-		if err != nil {
-			return OperationResult{}, err
-		}
-
-		if err := c.createOrUpdateObserverResourceDeployment(ctx, c.mdaiCR.Namespace, hash, observerResource); err != nil {
-			if errors.ReasonForError(err) == metav1.StatusReasonConflict {
-				c.logger.Info("re-queuing due to resource conflict")
-				return Requeue()
-			}
-			return OperationResult{}, err
-		}
-
-		if err := c.createOrUpdateObserverResourceService(ctx, c.mdaiCR.Namespace, observerResource); err != nil {
-			return OperationResult{}, err
-		}
-	}
-
-	if err := c.cleanupOrphanedObserverResources(ctx, configObserverResources); err != nil {
-		return OperationResult{}, err
-	}
-
-	return ContinueProcessing()
-}
-
 func (c HubAdapter) getObserverCollectorConfig(observers []v1.Observer, grpcReceiverMaxMsgSize *uint64) (string, error) {
 	var config map[string]any
-	if err := yaml.Unmarshal([]byte(baseCollectorYAML), &config); err != nil {
+	if err := yaml.Unmarshal([]byte(baseObserverCollectorYAML), &config); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base collector config")
 		return "", err
 	}
