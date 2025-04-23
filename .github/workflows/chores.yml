@@ -306,6 +306,7 @@ jobs:
         with:
           app-id: ${{ vars.PLATFORM_HEALTH_ACCESS_APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
 
       - name: Set safe git directory
         env:
@@ -316,6 +317,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
+          git config --unset-all http.https://github.com/.extraheader
           git clone https://x-access-token:${GH_TOKEN}@github.com/decisiveai/platform-health.git
           cd platform-health
           
