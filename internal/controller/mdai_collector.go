@@ -12,14 +12,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 var (
 	//go:embed config/mdai_collector_base_config.yaml
 	baseMdaiCollectorYAML string
-	//go:embed config/mdai_collector_base_deployment.yaml
-	baseMdaiDeploymentYAML string
 )
 
 func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (OperationResult, error) {
@@ -65,7 +64,7 @@ func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (Operat
 	if err != nil {
 		return OperationResult{}, err
 	}
-	err = c.createOrUpdateMdaiCollectorRoleBinding(ctx, namespace, serviceAccountName, roleName)
+	err = c.createOrUpdateMdaiCollectorRoleBinding(ctx, namespace, roleName, serviceAccountName)
 	if err != nil {
 		return OperationResult{}, err
 	}
@@ -237,20 +236,46 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 
 		deployment.Spec.Template.Spec.ServiceAccountName = serviceAccountName
 
-		containerSpec := deployment.Spec.Template.Spec.Containers[0]
-		containerSpec.Name = name
-		containerSpec.Image = "public.ecr.aws/decisiveai/mdai-collector:0.1.4"
+		containerSpec := corev1.Container{
+			Name:  name,
+			Image: "public.ecr.aws/decisiveai/mdai-collector:0.1.4",
+			Command: []string{
+				"/mdai-collector",
+				"--config=/conf/collector.yaml",
+			},
+			Ports: []corev1.ContainerPort{
+				{ContainerPort: 4317, Name: "otlp-grpc"},
+				{ContainerPort: 4318, Name: "otlp-http"},
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      "config-volume",
+					MountPath: "/conf/collector.yaml",
+					SubPath:   "collector.yaml",
+				},
+			},
+			EnvFrom: []corev1.EnvFromSource{
+				{
+					ConfigMapRef: &corev1.ConfigMapEnvSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: collectorEnvConfigMapName,
+						},
+					},
+				},
+			},
+			SecurityContext: &corev1.SecurityContext{
+				SeccompProfile: &corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeRuntimeDefault,
+				},
+				AllowPrivilegeEscalation: ptr.To(false),
+				Capabilities: &corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+				},
+				RunAsNonRoot: ptr.To(true),
+			},
+		}
+		deployment.Spec.Template.Spec.Containers = []corev1.Container{containerSpec}
 
-		configMapSource := corev1.ConfigMapEnvSource{
-			LocalObjectReference: corev1.LocalObjectReference{
-				Name: collectorEnvConfigMapName,
-			},
-		}
-		containerSpec.EnvFrom = []corev1.EnvFromSource{
-			{
-				ConfigMapRef: &configMapSource,
-			},
-		}
 		if awsConfig.AWSAccessKeySecret != nil {
 			secretEnvSource := corev1.EnvFromSource{
 				SecretRef: &corev1.SecretEnvSource{
@@ -381,17 +406,12 @@ func (c HubAdapter) createOrUpdateMdaiCollectorRole(ctx context.Context, namespa
 	// BEWARE: If you're thinking about making a yaml and unmarshaling it, to extract all this out... there's a weird problem where apiGroups won't unmarshal from yaml.
 	role := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
+			Name: name,
+			//Namespace: namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
 			},
 		},
-	}
-
-	if err := controllerutil.SetControllerReference(c.mdaiCR, role, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on Role", "role", name)
-		return "", err
 	}
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, role, func() error {
@@ -485,17 +505,12 @@ func (c HubAdapter) createOrUpdateMdaiCollectorRoleBinding(ctx context.Context, 
 
 	roleBinding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
+			Name: name,
+			//Namespace: namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
 			},
 		},
-	}
-
-	if err := controllerutil.SetControllerReference(c.mdaiCR, roleBinding, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on Role", "role", name)
-		return err
 	}
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, roleBinding, func() error {
