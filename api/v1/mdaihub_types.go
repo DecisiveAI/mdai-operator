@@ -171,8 +171,6 @@ type ObserverResource struct {
 
 type AWSConfig struct {
 	AWSAccessKeySecret *string `json:"awsAccessKeySecret,omitempty" yaml:"awsAccessKeySecret,omitempty"`
-	//AccessKeyID     *string `json:"accessKeyID,omitempty" yaml:"accessKeyID,omitempty"`
-	//AccessKeySecret *string `json:"accessKeySecret,omitempty" yaml:"accessKeySecret,omitempty"`
 }
 
 type S3LogsConfig struct {
