@@ -16,6 +16,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+const (
+	mdaiCollectorHubComponent string = "mdai-collector"
+)
+
 var (
 	//go:embed config/mdai_collector_base_config.yaml
 	baseMdaiCollectorYAML string
@@ -110,6 +114,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, na
 				"app":                          "mdai-collector",
 				hubNameLabel:                   c.mdaiCR.Name,
 				"app.kubernetes.io/managed-by": "mdai-operator",
+				HubComponentLabel:              mdaiCollectorHubComponent,
 			},
 		},
 		Data: map[string]string{
@@ -155,6 +160,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Conte
 				"app":                          "mdai-collector",
 				hubNameLabel:                   c.mdaiCR.Name,
 				"app.kubernetes.io/managed-by": "mdai-operator",
+				HubComponentLabel:              mdaiCollectorHubComponent,
 			},
 		},
 		Data: data,
@@ -198,6 +204,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 			Namespace: namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
+				HubComponentLabel:              mdaiCollectorHubComponent,
 			},
 		},
 	}
@@ -324,6 +331,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, name
 			Namespace: namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
+				HubComponentLabel:              mdaiCollectorHubComponent,
 			},
 		},
 	}
@@ -379,6 +387,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorServiceAccount(ctx context.Contex
 			Namespace: namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
+				HubComponentLabel:              mdaiCollectorHubComponent,
 			},
 		},
 	}
@@ -410,6 +419,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorRole(ctx context.Context, namespa
 			//Namespace: namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
+				HubComponentLabel:              mdaiCollectorHubComponent,
 			},
 		},
 	}
@@ -506,9 +516,9 @@ func (c HubAdapter) createOrUpdateMdaiCollectorRoleBinding(ctx context.Context, 
 	roleBinding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
-			//Namespace: namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
+				HubComponentLabel:              mdaiCollectorHubComponent,
 			},
 		},
 	}

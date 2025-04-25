@@ -46,7 +46,8 @@ const (
 	MdaiHubEventHistoryStreamName = "mdai_hub_event_history"
 	requeueTime                   = time.Second * 10
 
-	hubNameLabel = "mdai-hub-name"
+	hubNameLabel      = "mdai-hub-name"
+	HubComponentLabel = "mdai-hub-component"
 )
 
 type HubAdapter struct {

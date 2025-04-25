@@ -16,9 +16,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-const observerDefaultImage = "public.ecr.aws/decisiveai/watcher-collector:0.1.4"
-
-const observerResourceLabel = "mdai_observer_resource"
+const (
+	observerDefaultImage     = "public.ecr.aws/decisiveai/watcher-collector:0.1.4"
+	observerResourceLabel    = "mdai_observer_resource"
+	mdaiObserverHubComponent = "mdai-observer"
+)
 
 //go:embed config/observer_base_collector_config.yaml
 var baseObserverCollectorYAML string
@@ -105,7 +107,7 @@ func (c HubAdapter) createOrUpdateObserverResourceService(ctx context.Context, n
 				"app":                 appLabel,
 				hubNameLabel:          c.mdaiCR.Name,
 				observerResourceLabel: observerResource.Name,
-				"hub-component":       "mdai-watcher",
+				HubComponentLabel:     mdaiObserverHubComponent,
 			}
 		}
 
@@ -154,7 +156,7 @@ func (c HubAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Context,
 			Namespace: namespace,
 			Labels: map[string]string{
 				"app":                 c.getScopedObserverResourceName(observerResource, ""),
-				"hub-component":       "mdai-watcher",
+				HubComponentLabel:     mdaiObserverHubComponent,
 				hubNameLabel:          c.mdaiCR.Name,
 				observerResourceLabel: observerResource.Name,
 			},
@@ -200,7 +202,7 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 		if deployment.Labels == nil {
 			deployment.Labels = map[string]string{
 				"app":                 name,
-				"hub-component":       "mdai-watcher",
+				HubComponentLabel:     mdaiObserverHubComponent,
 				hubNameLabel:          c.mdaiCR.Name,
 				observerResourceLabel: observerResource.Name,
 			}
@@ -374,8 +376,8 @@ func (c HubAdapter) getObserverCollectorConfig(observers []v1.Observer, grpcRece
 func (c HubAdapter) cleanupOrphanedObserverResources(ctx context.Context, resources []string) error {
 	labelSelector := &metav1.LabelSelector{
 		MatchLabels: map[string]string{
-			hubNameLabel:    c.mdaiCR.Name,
-			"hub-component": "mdai-watcher",
+			hubNameLabel:      c.mdaiCR.Name,
+			HubComponentLabel: mdaiObserverHubComponent,
 		},
 		MatchExpressions: []metav1.LabelSelectorRequirement{
 			{
