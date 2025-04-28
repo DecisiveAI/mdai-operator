@@ -43,7 +43,7 @@ const (
 
 	envConfigMapNamePostfix = "-variables"
 
-	requeueTime          = time.Second * 10
+	requeueTime = time.Second * 10
 
 	hubNameLabel      = "mdai-hub-name"
 	HubComponentLabel = "mdai-hub-component"
