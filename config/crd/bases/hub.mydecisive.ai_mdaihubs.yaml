@@ -114,6 +114,13 @@ spec:
                                   enum:
                                   - mdai/add_element
                                   - mdai/remove_element
+                                  - mdai/set
+                                  - mdai/delete
+                                  - mdai/incr_by
+                                  - mdai/decr_by
+                                  - mdai/map_set_entry
+                                  - mdai/map_remove_entry
+                                  - mdai/bulk_set_key_value
                                   type: string
                                 variableRef:
                                   description: VariableRef The StorageKey of the variable
@@ -140,6 +147,13 @@ spec:
                                   enum:
                                   - mdai/add_element
                                   - mdai/remove_element
+                                  - mdai/set
+                                  - mdai/delete
+                                  - mdai/incr_by
+                                  - mdai/decr_by
+                                  - mdai/map_set_entry
+                                  - mdai/map_remove_entry
+                                  - mdai/bulk_set_key_value
                                   type: string
                                 variableRef:
                                   description: VariableRef The StorageKey of the variable
@@ -292,10 +306,14 @@ spec:
               variables:
                 items:
                   properties:
-                    defaultValue:
-                      description: DefaultValue The initial value when the variable
-                        is instantiated. If not provided, a "zero value" of the variable's
-                        Type will be used.
+                    dataType:
+                      description: DataType Data type for the managed variable value
+                      enum:
+                      - string
+                      - int
+                      - set
+                      - map
+                      - boolean
                       type: string
                     serializeAs:
                       items:
@@ -305,25 +323,31 @@ spec:
                               used to access the variable's value.
                             minLength: 1
                             type: string
-                          transformer:
-                            description: Transformer The transformation applied to
-                              the value of the variable before it is assigned as an
-                              environment variable.
-                            properties:
-                              join:
-                                description: Join For use with "set" or "array" type
-                                  variables, joins the items of the collection into
-                                  a string.
-                                properties:
-                                  delimiter:
-                                    description: Delimiter The delimiter inserted
-                                      between each item in the collection during the
-                                      Join
-                                    type: string
-                                required:
-                                - delimiter
-                                type: object
-                            type: object
+                          transformers:
+                            description: |-
+                              Transformers The transformation applied to the value of the variable in the order provided before it is assigned
+                              as an environment variable.
+                            items:
+                              properties:
+                                join:
+                                  description: Join For use with "set" or "array"
+                                    type variables, joins the items of the collection
+                                    into a string.
+                                  properties:
+                                    delimiter:
+                                      description: Delimiter The delimiter inserted
+                                        between each item in the collection during
+                                        the Join
+                                      type: string
+                                  required:
+                                  - delimiter
+                                  type: object
+                                type:
+                                  type: string
+                              required:
+                              - type
+                              type: object
+                            type: array
                         required:
                         - name
                         type: object
@@ -343,12 +367,15 @@ spec:
                       - mdai-valkey
                       type: string
                     type:
-                      description: Type Data type for the managed variable value
+                      default: computed
+                      description: Type for the variable, defaults to "computed" if
+                        not provided
                       enum:
-                      - string
-                      - set
+                      - manual
+                      - computed
                       type: string
                   required:
+                  - dataType
                   - serializeAs
                   - storageKey
                   - storageType

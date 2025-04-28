@@ -7,13 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"iter"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
-	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
+	audit "github.com/decisiveai/mdai-data-core/audit"
+	datacore "github.com/decisiveai/mdai-data-core/variables"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/go-logr/logr"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -43,8 +43,7 @@ const (
 
 	envConfigMapNamePostfix = "-variables"
 
-	MdaiHubEventHistoryStreamName = "mdai_hub_event_history"
-	requeueTime                   = time.Second * 10
+	requeueTime          = time.Second * 10
 
 	hubNameLabel      = "mdai-hub-name"
 	HubComponentLabel = "mdai-hub-component"
@@ -318,6 +317,7 @@ func (c HubAdapter) deletePrometheusRule(ctx context.Context) error {
 	return nil
 }
 
+//nolint:gocyclo // TODO refactor later
 func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, error) {
 	// current assumption is we have only built-in Valkey storage
 	variables := c.mdaiCR.Spec.Variables
@@ -327,32 +327,22 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	}
 
 	envMap := make(map[string]string)
-	valkeyClient := c.valKeyClient
+	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.logger)
 	valkeyKeysToKeep := map[string]struct{}{}
 	for _, variable := range *variables {
-		// we should test filter processor when the variable is empty and if breaks it we may recommend to use some placeholder as default value
+		if variable.Type != mdaiv1.VariableTypeComputed {
+			c.logger.Info("Variable type is not supported yet", "variable", variable.StorageKey, "type", variable.Type)
+			continue
+		}
 		switch variable.StorageType {
 		case mdaiv1.VariableSourceTypeBuiltInValkey:
-			valkeyKey := c.composeValkeyKey(variable)
+			valkeyKey := datacore.ComposeValkeyKey(c.mdaiCR.Name, variable.StorageKey)
 			valkeyKeysToKeep[valkeyKey] = struct{}{}
-			switch {
-			case variable.Type == mdaiv1.VariableTypeSet:
-				valueAsSlice, err := valkeyClient.Do(
-					ctx,
-					valkeyClient.B().Smembers().Key(valkeyKey).Build(),
-				).AsStrSlice()
+			switch variable.DataType {
+			case mdaiv1.VariableDataTypeSet:
+				valueAsSlice, err := dataAdapter.GetSetAsStringSlice(ctx, valkeyKey)
 				if err != nil {
-					c.logger.Error(err, "Failed to get set value from Valkey", "key", valkeyKey)
 					return RequeueAfter(requeueTime, err)
-				}
-				c.logger.Info("Valkey data received", "key", valkeyKey, "valueAsSlice", valueAsSlice)
-				if len(valueAsSlice) == 0 {
-					if variable.DefaultValue == nil {
-						c.logger.Info("No value found in Valkey, skipping", "key", valkeyKey)
-						continue
-					}
-					c.logger.Info("Applying default value to variable", "key", valkeyKey, "defaultValue", *variable.DefaultValue)
-					valueAsSlice = append(valueAsSlice, *variable.DefaultValue)
 				}
 
 				for _, serializer := range variable.SerializeAs {
@@ -362,20 +352,47 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 						continue
 					}
 
-					transformer := serializer.Transformer
-					if transformer == nil {
-						c.logger.Info("No Transformer configured", "exportedVariableName", exportedVariableName)
+					transformers := serializer.Transformers
+					if len(transformers) == 0 {
+						c.logger.Info("No Transformers configured", "exportedVariableName", exportedVariableName)
 						continue
 					}
-					join := transformer.Join
-					if join != nil {
-						delimiter := join.Delimiter
-						variableWithDelimiter := strings.Join(valueAsSlice, delimiter)
-						envMap[exportedVariableName] = variableWithDelimiter
+					for _, transformer := range transformers {
+						switch transformer.Type {
+						case mdaiv1.TransformerTypeJoin:
+							delimiter := transformer.Join.Delimiter
+							variableWithDelimiter := strings.Join(valueAsSlice, delimiter)
+							envMap[exportedVariableName] = variableWithDelimiter
+						default:
+							c.logger.Error(fmt.Errorf("unsupported Transformer type: %s", transformer.Type), "exportedVariableName", exportedVariableName)
+						}
 					}
 				}
+			case mdaiv1.VariableDataTypeString, mdaiv1.VariableDataTypeInt, mdaiv1.VariableDataTypeBoolean:
+				// int is represented as string in Valkey, we assume writer guarantee the variable type is correct
+				// boolean is represented as string in Valkey: false or true, we assume writer guarantee the variable type is correct
+				value, found, err := dataAdapter.GetString(ctx, valkeyKey)
+				if err != nil {
+					return RequeueAfter(requeueTime, err)
+				}
+				if !found {
+					continue
+				}
+				for _, serializer := range variable.SerializeAs {
+					exportedVariableName := serializer.Name
+					envMap[exportedVariableName] = value
+				}
+			case mdaiv1.VariableDataTypeMap:
+				valueAsString, err := dataAdapter.GetMapAsString(ctx, valkeyKey)
+				if err != nil {
+					return RequeueAfter(requeueTime, err)
+				}
+				for _, serializer := range variable.SerializeAs {
+					exportedVariableName := serializer.Name
+					envMap[exportedVariableName] = valueAsString
+				}
 			default:
-				c.logger.Info("Unsupported variable type", "variableType", variable.Type, "variableStorageKey", variable.StorageKey)
+				c.logger.Info("Unsupported variable type", "variableType", variable.DataType, "variableStorageKey", variable.StorageKey)
 				continue
 			}
 		}
@@ -384,11 +401,6 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	c.logger.Info("Deleting old valkey keys", "valkeyKeysToKeep", valkeyKeysToKeep)
 	if err := c.deleteKeysWithPrefixUsingScan(ctx, VariableKeyPrefix+c.mdaiCR.Name+"/", valkeyKeysToKeep); err != nil {
 		return OperationResult{}, err
-	}
-
-	if len(envMap) == 0 {
-		c.logger.Info("No variables need to be updated")
-		return ContinueProcessing()
 	}
 
 	collectors, err := c.listOtelCollectorsWithLabel(ctx, fmt.Sprintf("%s=%s", LabelMdaiHubName, c.mdaiCR.Name))
@@ -412,19 +424,11 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 			namespaceToRestart[namespace] = struct{}{}
 		}
 	}
+	auditAdapter := audit.NewAuditAdapter(c.logger, c.valKeyClient, c.valkeyAuditStreamExpiry)
 
 	for _, collector := range collectors {
 		if _, shouldRestart := namespaceToRestart[collector.Namespace]; shouldRestart {
-			mdaiHubEvent := map[string]string{
-				"timestamp": time.Now().UTC().Format(time.RFC3339),
-				"hub_name":  c.mdaiCR.Name,
-				"type":      "collector_restart",
-			}
-			for key, value := range envMap {
-				mdaiHubEvent[key] = value
-			}
-			c.logger.Info("Triggering restart of OpenTelemetry Collector", "name", collector.Name, "mdaiHubEvent", mdaiHubEvent)
-			// trigger restart
+			c.logger.Info("Triggering restart of OpenTelemetry Collector", "name", collector.Name)
 			collectorCopy := collector.DeepCopy()
 			if collectorCopy.Annotations == nil {
 				collectorCopy.Annotations = make(map[string]string)
@@ -439,10 +443,9 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 				c.logger.Error(err, "Failed to update OpenTelemetry Collector", "name", collectorCopy.Name)
 				return OperationResult{}, err
 			}
-			valkeyClient := c.valKeyClient
-			thresholdID := strconv.FormatInt(time.Now().Add(-valkeyAuditStreamExpiry).UnixMilli(), 10)
-			if result := valkeyClient.Do(ctx, valkeyClient.B().Xadd().Key(MdaiHubEventHistoryStreamName).Minid().Threshold(thresholdID).Id("*").FieldValue().FieldValueIter(composeValkeyStreamIterFromMap(mdaiHubEvent)).Build()); result.Error() != nil {
-				c.logger.Error(err, "Failed to write audit log entry!", "mdaiHubEvent", mdaiHubEvent)
+
+			if err := auditAdapter.InsertAuditLogEventFromMap(ctx, auditAdapter.CreateRestartEvent(c.mdaiCR.Name, envMap)); err != nil {
+				return OperationResult{}, err
 			}
 		}
 	}
@@ -475,20 +478,6 @@ func (c HubAdapter) deleteKeysWithPrefixUsingScan(ctx context.Context, prefix st
 	}
 
 	return nil
-}
-
-func (c HubAdapter) composeValkeyKey(variable mdaiv1.Variable) string {
-	return VariableKeyPrefix + c.mdaiCR.Name + "/" + variable.StorageKey
-}
-
-func composeValkeyStreamIterFromMap(mapToIter map[string]string) iter.Seq2[string, string] {
-	return func(yield func(string, string) bool) {
-		for k, v := range mapToIter {
-			if !yield(k, v) {
-				return
-			}
-		}
-	}
 }
 
 func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, namespace string) (controllerutil.OperationResult, error) {

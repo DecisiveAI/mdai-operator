@@ -29,21 +29,23 @@ type Serializer struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubeuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
-	// Transformer The transformation applied to the value of the variable before it is assigned as an environment variable.
+	// Transformers The transformation applied to the value of the variable in the order provided before it is assigned
+	// as an environment variable.
 	// +kubebuilder:validation:Optional
-	Transformer *VariableTransformer `json:"transformer,omitempty" yaml:"transformer,omitempty"`
-}
-
-type JoinFunction struct {
-	// Delimiter The delimiter inserted between each item in the collection during the Join
-	// +kubebuilder:validation:Required
-	Delimiter string `json:"delimiter" yaml:"delimiter"`
+	Transformers []VariableTransformer `json:"transformers,omitempty" yaml:"transformers,omitempty"`
 }
 
 type VariableTransformer struct {
+	Type TransformerType `json:"type" yaml:"type"`
 	// Join For use with "set" or "array" type variables, joins the items of the collection into a string.
 	// +kubebuilder:validation:Optional
-	Join *JoinFunction `json:"join,omitempty" yaml:"join,omitempty"`
+	Join *JoinTransformer `json:"join,omitempty" yaml:"join,omitempty"`
+}
+
+type JoinTransformer struct {
+	// Delimiter The delimiter inserted between each item in the collection during the Join
+	// +kubebuilder:validation:Required
+	Delimiter string `json:"delimiter" yaml:"delimiter"`
 }
 
 type Variable struct {
@@ -52,17 +54,19 @@ type Variable struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Required
 	StorageKey string `json:"storageKey" yaml:"storageKey"`
-	// Type Data type for the managed variable value
+	// Type for the variable, defaults to "computed" if not provided
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=string;set
+	// +kubebuilder:default="computed"
+	// +kubebuilder:validation:Enum:=manual;computed
 	Type VariableType `json:"type" yaml:"type"`
+	// DataType Data type for the managed variable value
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum:=string;int;set;map;boolean
+	DataType VariableDataType `json:"dataType" yaml:"dataType"`
 	// StorageType defaults to "mdai-valkey" if not provided
 	// +kubebuilder:default="mdai-valkey"
 	// +kubebuilder:validation:Enum:=mdai-valkey
 	StorageType VariableStorageType `json:"storageType" yaml:"storageType"`
-	// DefaultValue The initial value when the variable is instantiated. If not provided, a "zero value" of the variable's Type will be used.
-	// +kubebuilder:validation:Optional
-	DefaultValue *string `json:"defaultValue,omitempty" yaml:"defaultValue,omitempty"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems=1
 	SerializeAs []Serializer `json:"serializeAs" yaml:"serializeAs"`
@@ -75,7 +79,7 @@ type VariableUpdate struct {
 	// +kubebuilder:validation:Required
 	VariableRef string `json:"variableRef" yaml:"variableRef"`
 	// Operation how the variable will be updated
-	// +kubebuilder:validation:Enum:=mdai/add_element;mdai/remove_element
+	// +kubebuilder:validation:Enum:=mdai/add_element;mdai/remove_element;mdai/set;mdai/delete;mdai/incr_by;mdai/decr_by;mdai/map_set_entry;mdai/map_remove_entry;mdai/bulk_set_key_value
 	// +kubebuilder:validation:Required
 	Operation VariableUpdateOperation `json:"operation" yaml:"operation"`
 }
@@ -250,21 +254,37 @@ type (
 	VariableSourceType      string
 	VariableStorageType     string
 	VariableType            string
+	VariableDataType        string
 	VariableTransform       string
 	EvaluationType          string
 	VariableUpdateOperation string
 	ObserverResourceType    string
+	TransformerType         string
 )
 
 const (
-	VariableSourceTypeBuiltInValkey      VariableStorageType     = "mdai-valkey"
-	VariableTypeInt                      VariableType            = "int"
-	VariableTypeFloat                    VariableType            = "float"
-	VariableTypeBoolean                  VariableType            = "boolean"
-	VariableTypeString                   VariableType            = "string"
-	VariableTypeSet                      VariableType            = "set"
-	EvaluationTypePrometheusAlert        EvaluationType          = "mdai/prometheus_alert"
-	VariableUpdateOperationAddElement    VariableUpdateOperation = "mdai/add_element"    // TODO: use this const in event handler instead of creating a new one
-	VariableUpdateOperationRemoveElement VariableUpdateOperation = "mdai/remove_element" // TODO: use this const in event handler instead of creating a new one
-	ObserverResourceTypeWatcherCollector ObserverResourceType    = "mdai-watcher"
+	VariableSourceTypeBuiltInValkey VariableStorageType = "mdai-valkey"
+
+	VariableTypeManual   VariableType = "manual"
+	VariableTypeComputed VariableType = "computed"
+	VariableTypeMeta     VariableType = "meta" // meta variable disabled for now
+
+	VariableDataTypeInt     VariableDataType = "int"     // internally stored in string
+	VariableDataTypeFloat   VariableDataType = "float"   // internally stored in string, disabled for now
+	VariableDataTypeBoolean VariableDataType = "boolean" // 0 or 1 as string in valkey
+	VariableDataTypeString  VariableDataType = "string"
+	VariableDataTypeSet     VariableDataType = "set" // valkey set
+	VariableDataTypeMap     VariableDataType = "map" // valkey hashes
+
+	// MetaVariableTypeHashSet LookupTable takes an input/key variable and a lookup variable, disabled for now
+	MetaVariableTypeHashSet VariableDataType = "hashSet"
+	// MetaVariableTypePriorityList takes a list of variable refs, and will evaluate to the first one that is not empty.
+	// disabled for now
+	MetaVariableTypePriorityList VariableDataType = "priorityList"
+
+	EvaluationTypePrometheusAlert EvaluationType = "mdai/prometheus_alert"
+
+	TransformerTypeJoin TransformerType = "join"
+
+	ObserverResourceTypeWatcherCollector ObserverResourceType = "mdai-watcher"
 )

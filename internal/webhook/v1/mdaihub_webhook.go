@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
 
 // nolint:unused
@@ -144,11 +144,16 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 					}
 					exportedVariableNames[with.Name] = struct{}{}
 
-					transformer := with.Transformer
-					switch variable.Type {
-					case mdaiv1.VariableTypeSet:
-						if transformer == nil || transformer.Join == nil {
+					transformers := with.Transformers
+					switch variable.DataType {
+					case mdaiv1.VariableDataTypeSet:
+						if len(transformers) == 0 {
 							return warnings, fmt.Errorf("variable %s: at least one transformer must be provided, such as 'join'", variable.StorageKey)
+						}
+					case mdaiv1.VariableDataTypeString, mdaiv1.VariableDataTypeFloat, mdaiv1.VariableDataTypeInt, mdaiv1.VariableDataTypeBoolean, mdaiv1.VariableDataTypeMap:
+						// no transformers supported yet
+						if len(transformers) > 0 {
+							return warnings, fmt.Errorf("variable %s: transformers are not supported for variable type %s", variable.StorageKey, variable.DataType)
 						}
 					default:
 						return warnings, fmt.Errorf("variable %s: unsupported variable type", variable.StorageKey)

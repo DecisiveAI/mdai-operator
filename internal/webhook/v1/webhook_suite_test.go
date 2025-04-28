@@ -30,7 +30,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/kubernetes/scheme"
 
-	mdaiv1 "github.com/DecisiveAI/mdai-operator/api/v1"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
