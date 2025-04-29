@@ -17,13 +17,33 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+type MDAILogStream string
+
+type S3ExporterConfig struct {
+	S3Uploader S3UploaderConfig `mapstructure:"s3uploader"`
+}
+
+type S3UploaderConfig struct {
+	Region            string `mapstructure:"region"`
+	S3Bucket          string `mapstructure:"s3_bucket"`
+	S3Prefix          string `mapstructure:"s3_prefix"`
+	S3PartitionFormat string `mapstructure:"s3_partition_format"`
+	FilePrefix        string `mapstructure:"file_prefix"`
+	DisableSSL        bool   `mapstructure:"disable_ssl"`
+}
+
 const (
-	MdaiCollectorHubComponent string = "mdai-collector"
+	MdaiCollectorHubComponent string        = "mdai-collector"
+	AuditLogstream            MDAILogStream = "audit"
+	CollectorLogstream        MDAILogStream = "collector"
+	HubLogstream              MDAILogStream = "hub"
+	OtherLogstream            MDAILogStream = "other"
 )
 
 var (
 	//go:embed config/mdai_collector_base_config.yaml
 	baseMdaiCollectorYAML string
+	logstreams            = []MDAILogStream{AuditLogstream, CollectorLogstream, HubLogstream, OtherLogstream}
 )
 
 func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (OperationResult, error) {
@@ -96,14 +116,48 @@ func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (Operat
 }
 
 func (c HubAdapter) getMdaiCollectorConfig() (string, error) {
-	var config map[string]any
-	if err := yaml.Unmarshal([]byte(baseMdaiCollectorYAML), &config); err != nil {
+	var mdaiCollectorConfig map[string]any
+	if err := yaml.Unmarshal([]byte(baseMdaiCollectorYAML), &mdaiCollectorConfig); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base mdai collector config")
 		return "", err
 	}
-	// TODO: Remove S3 portions if not used, or vice versa
-	// we currently don't alter this at all, but will in the future, so we're still going to unmarshal it to make sure it is valid
+
+	//s3Exporters := c.getS3Exporters()
+	//for s3ExporterName, s3ExporterConfig := range s3Exporters {
+	//
+	//}
+
 	return baseMdaiCollectorYAML, nil
+}
+
+func (c HubAdapter) getS3Exporters() map[string]any {
+	hubName := c.mdaiCR.Name
+	exporters := map[string]any{}
+	for _, logstream := range logstreams {
+		s3Prefix := fmt.Sprintf("%s-%s", hubName, logstream)
+		exporterKey := fmt.Sprintf("awss3/%s", logstream)
+		filePrefix := fmt.Sprintf("%s-", logstream)
+		exporters[exporterKey] = S3ExporterConfig{
+			S3Uploader: S3UploaderConfig{
+				Region:            "${env:AWS_LOG_REGION}",
+				S3Bucket:          "${env:AWS_LOG_BUCKET}",
+				S3Prefix:          s3Prefix,
+				FilePrefix:        filePrefix,
+				S3PartitionFormat: "%Y/%m/%d/%H",
+				DisableSSL:        true,
+			},
+		}
+	}
+	return exporters
+}
+
+func (c HubAdapter) getPipelineWithS3Exporter(pipeline map[string]any, exporterName string) map[string]any {
+	newPipeline := map[string]any{
+		"receivers":  pipeline["receivers"].([]string),
+		"processors": pipeline["receivers"].([]string),
+		"exporters":  append(pipeline["exporters"].([]string), exporterName),
+	}
+	return newPipeline
 }
 
 func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, namespace string) (string, string, error) {

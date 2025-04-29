@@ -98,19 +98,19 @@ service:
       processors: [filter/severity, batch]
       exporters: [routing/logstream]
 
-    logs/s3audit:
+    logs/audit:
       receivers: [routing/logstream]
       processors: [batch]
-      exporters: [debug, awss3/audit]
-    logs/s3hub:
+      exporters: [debug]
+    logs/hub:
       receivers: [routing/logstream]
       processors: [batch]
-      exporters: [debug, awss3/hub]
-    logs/s3collector:
+      exporters: [debug]
+    logs/collector:
       receivers: [routing/logstream]
       processors: [batch]
-      exporters: [debug, awss3/collector]
+      exporters: [debug]
     logs/other:
       receivers: [routing/logstream]
       processors: [filter/severity, batch]
-      exporters: [debug, awss3/other]
+      exporters: [debug]
