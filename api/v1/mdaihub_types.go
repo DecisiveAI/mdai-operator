@@ -180,7 +180,7 @@ type AWSConfig struct {
 type S3LogsConfig struct {
 	// TODO: Implement this and figure out a good way to marshal OTEL LOG severity level number for gt/lt in OTTL
 	// For now will be coded to WARN or greater
-	//LogLevel *string `json:"logLevel,omitempty" yaml:"logLevel,omitempty"`
+	// LogLevel *string `json:"logLevel,omitempty" yaml:"logLevel,omitempty"`
 	S3Region *string `json:"s3Region,omitempty" yaml:"s3Region,omitempty"`
 	S3Bucket *string `json:"s3Bucket,omitempty" yaml:"s3Bucket,omitempty"`
 }

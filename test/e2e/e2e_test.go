@@ -27,6 +27,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/decisiveai/mdai-operator/internal/controller"
+
 	"github.com/decisiveai/mdai-operator/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -450,13 +452,28 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 
 		It("can deploy the mdai-collector", func() {
+			verifyMdaiCollectorRoleBinding := func(g Gomega) {
+				cmd := exec.Command(
+					"kubectl",
+					"get",
+					"clusterrolebinding",
+					"-l",
+					fmt.Sprintf("%s=%s", controller.HubComponentLabel, controller.MdaiCollectorHubComponent),
+				)
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(strings.Contains(out, "mdai-collector-rb")).To(BeTrue())
+			}
+			Eventually(verifyMdaiCollectorRoleBinding, "1m", "5s").Should(Succeed())
+
 			verifyMdaiCollector := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "deployment", "mdai-collector", "-n", namespace)
 				response, err := utils.Run(cmd)
-				g.Expect(response).To(ContainSubstring("mdai-collector"))
+				g.Expect(response).To(ContainSubstring("mdai-collector   1/1"))
 				g.Expect(err).NotTo(HaveOccurred())
 			}
 			Eventually(verifyMdaiCollector, "1m", "5s").Should(Succeed())
+
 			verifyMdaiCollectorPods := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l", "app=mdai-collector")
 				out, err := utils.Run(cmd)

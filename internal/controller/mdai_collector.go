@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+
 	v1 "github.com/decisiveai/mdai-operator/api/v1"
 	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
@@ -17,7 +18,7 @@ import (
 )
 
 const (
-	mdaiCollectorHubComponent string = "mdai-collector"
+	MdaiCollectorHubComponent string = "mdai-collector"
 )
 
 var (
@@ -46,6 +47,12 @@ func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (Operat
 		return ContinueProcessing()
 	}
 
+	awsAccessKeySecret := awsConfig.AWSAccessKeySecret
+	if awsAccessKeySecret == nil {
+		c.logger.Info("No mdai-collector AWS access key secret found to connect to s3, skipping mdai-collector synchronization")
+		return ContinueProcessing()
+	}
+
 	logsConfig := telemetryConfig.Logs
 	if logsConfig == nil {
 		c.logger.Info("No mdai-collector logs config found, skipping mdai-collector synchronization")
@@ -64,7 +71,7 @@ func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (Operat
 	if err != nil {
 		return OperationResult{}, err
 	}
-	roleName, err := c.createOrUpdateMdaiCollectorRole(ctx, namespace)
+	roleName, err := c.createOrUpdateMdaiCollectorRole(ctx)
 	if err != nil {
 		return OperationResult{}, err
 	}
@@ -73,7 +80,7 @@ func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (Operat
 		return OperationResult{}, err
 	}
 
-	if err := c.createOrUpdateMdaiCollectorDeployment(ctx, namespace, collectorConfigMapName, collectorEnvConfigMapName, serviceAccountName, hash); err != nil {
+	if err := c.createOrUpdateMdaiCollectorDeployment(ctx, namespace, collectorConfigMapName, collectorEnvConfigMapName, serviceAccountName, *awsAccessKeySecret, hash); err != nil {
 		if errors.ReasonForError(err) == metav1.StatusReasonConflict {
 			c.logger.Info("re-queuing due to resource conflict")
 			return Requeue()
@@ -114,7 +121,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, na
 				"app":                          "mdai-collector",
 				hubNameLabel:                   c.mdaiCR.Name,
 				"app.kubernetes.io/managed-by": "mdai-operator",
-				HubComponentLabel:              mdaiCollectorHubComponent,
+				HubComponentLabel:              MdaiCollectorHubComponent,
 			},
 		},
 		Data: map[string]string{
@@ -160,7 +167,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Conte
 				"app":                          "mdai-collector",
 				hubNameLabel:                   c.mdaiCR.Name,
 				"app.kubernetes.io/managed-by": "mdai-operator",
-				HubComponentLabel:              mdaiCollectorHubComponent,
+				HubComponentLabel:              MdaiCollectorHubComponent,
 			},
 		},
 		Data: data,
@@ -183,20 +190,8 @@ func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Conte
 	return name, nil
 }
 
-func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, namespace string, collectorConfigMapName string, collectorEnvConfigMapName string, serviceAccountName string, hash string) error {
+func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, namespace string, collectorConfigMapName string, collectorEnvConfigMapName string, serviceAccountName string, awsAccessKeySecret string, hash string) error {
 	name := "mdai-collector"
-
-	hubConfig := c.mdaiCR.Spec.Config
-	if hubConfig == nil {
-	}
-
-	telemetryConfig := hubConfig.Telemetry
-	if telemetryConfig == nil {
-	}
-
-	awsConfig := telemetryConfig.AWSConfig
-	if awsConfig == nil {
-	}
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -204,7 +199,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 			Namespace: namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
-				HubComponentLabel:              mdaiCollectorHubComponent,
+				HubComponentLabel:              MdaiCollectorHubComponent,
 			},
 		},
 	}
@@ -283,11 +278,11 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 		}
 		deployment.Spec.Template.Spec.Containers = []corev1.Container{containerSpec}
 
-		if awsConfig.AWSAccessKeySecret != nil {
+		if awsAccessKeySecret != "" {
 			secretEnvSource := corev1.EnvFromSource{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: *(awsConfig.AWSAccessKeySecret),
+						Name: awsAccessKeySecret,
 					},
 				},
 			}
@@ -331,7 +326,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, name
 			Namespace: namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
-				HubComponentLabel:              mdaiCollectorHubComponent,
+				HubComponentLabel:              MdaiCollectorHubComponent,
 			},
 		},
 	}
@@ -387,7 +382,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorServiceAccount(ctx context.Contex
 			Namespace: namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
-				HubComponentLabel:              mdaiCollectorHubComponent,
+				HubComponentLabel:              MdaiCollectorHubComponent,
 			},
 		},
 	}
@@ -409,17 +404,16 @@ func (c HubAdapter) createOrUpdateMdaiCollectorServiceAccount(ctx context.Contex
 	return name, nil
 }
 
-func (c HubAdapter) createOrUpdateMdaiCollectorRole(ctx context.Context, namespace string) (string, error) {
+func (c HubAdapter) createOrUpdateMdaiCollectorRole(ctx context.Context) (string, error) {
 	name := "mdai-collector-role"
 
 	// BEWARE: If you're thinking about making a yaml and unmarshaling it, to extract all this out... there's a weird problem where apiGroups won't unmarshal from yaml.
 	role := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
-			//Namespace: namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
-				HubComponentLabel:              mdaiCollectorHubComponent,
+				HubComponentLabel:              MdaiCollectorHubComponent,
 			},
 		},
 	}
@@ -518,7 +512,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorRoleBinding(ctx context.Context, 
 			Name: name,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
-				HubComponentLabel:              mdaiCollectorHubComponent,
+				HubComponentLabel:              MdaiCollectorHubComponent,
 			},
 		},
 	}
