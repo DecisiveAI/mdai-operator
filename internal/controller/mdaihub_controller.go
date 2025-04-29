@@ -75,7 +75,7 @@ type MdaiHubReconciler struct {
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="apps",resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=events;namespaces;namespaces/status;nodes;nodes/spec;pods;pods/status;replicationcontrollers;replicationcontrollers/status;resourcequotas;services,verbs=get;list;watch
 // +kubebuilder:rbac:groups="apps",resources=daemonsets;deployments;replicasets;statefulsets,verbs=get;list;watch
