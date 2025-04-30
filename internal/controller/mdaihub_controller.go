@@ -74,7 +74,14 @@ type MdaiHubReconciler struct {
 // +kubebuilder:rbac:groups=monitoring.coreos.com,resources=prometheusrules,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="apps",resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=events;namespaces;namespaces/status;nodes;nodes/spec;pods;pods/status;replicationcontrollers;replicationcontrollers/status;resourcequotas;services,verbs=get;list;watch
+// +kubebuilder:rbac:groups="apps",resources=daemonsets;deployments;replicasets;statefulsets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="extensions",resources=daemonsets;deployments;replicasets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="batch",resources=jobs;cronjobs,verbs=get;list;watch
+// +kubebuilder:rbac:groups="autoscaling",resources=horizontalpodautoscalers,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -111,6 +118,7 @@ func (r *MdaiHubReconciler) ReconcileHandler(ctx context.Context, adapter HubAda
 		adapter.ensureHubDeletionProcessed,
 		adapter.ensureStatusInitialized,
 		adapter.ensureFinalizerInitialized,
+		adapter.ensureMdaiCollectorSynchronized,
 		adapter.ensureEvaluationsSynchronized,
 		adapter.ensureVariableSynced,
 		adapter.ensureObserversSynchronized,

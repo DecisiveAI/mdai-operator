@@ -27,6 +27,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/decisiveai/mdai-operator/internal/controller"
+
 	"github.com/decisiveai/mdai-operator/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -79,6 +81,14 @@ var _ = Describe("Manager", Ordered, func() {
 			"--namespace", namespace,
 			"--from-literal=VALKEY_ENDPOINT=valkey-primary.default.svc.cluster.local:6379",
 			"--from-literal=VALKEY_PASSWORD=abc")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to create secret")
+
+		By("creating an AWS secret for the mdai-collector")
+		cmd = exec.Command("kubectl", "create", "secret", "generic", "awsy-awsface",
+			"--namespace", namespace,
+			"--from-literal=AWS_ACCESS_KEY_ID=asdfasdfasdfasdfasd",
+			"--from-literal=AWS_SECRET_ACCESS_KEY=qwerqwerqwerqwerqwerqwerqw")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create secret")
 
@@ -373,7 +383,7 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(out).To(ContainSubstring("True"))
 			}
-			Eventually(verifyStatus, "2m", "5s").Should(Succeed())
+			Eventually(verifyStatus, "5m", "5s").Should(Succeed())
 			metricsOutput := getMetricsOutputFull()
 			Expect(metricsOutput).To(SatisfyAny(
 				// there is some variability in the numbers of reconciles, so we check for a range
@@ -439,6 +449,58 @@ var _ = Describe("Manager", Ordered, func() {
 				}
 			}
 			Eventually(verifyWatcherLogs).Should(Succeed())
+		})
+
+		It("can deploy the mdai-collector", func() {
+			verifyMdaiCollectorRoleBinding := func(g Gomega) {
+				cmd := exec.Command(
+					"kubectl",
+					"get",
+					"clusterrolebinding",
+					"-l",
+					fmt.Sprintf("%s=%s", controller.HubComponentLabel, controller.MdaiCollectorHubComponent),
+				)
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(strings.Contains(out, "mdai-collector-rb")).To(BeTrue())
+			}
+			Eventually(verifyMdaiCollectorRoleBinding, "1m", "5s").Should(Succeed())
+
+			verifyMdaiCollector := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployment", "mdai-collector", "-n", namespace)
+				response, err := utils.Run(cmd)
+				g.Expect(response).To(ContainSubstring("mdai-collector   1/1"))
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyMdaiCollector, "1m", "5s").Should(Succeed())
+
+			verifyMdaiCollectorPods := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l", "app=mdai-collector")
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(strings.Contains(out, "Running")).To(BeTrue())
+			}
+			Eventually(verifyMdaiCollectorPods, "1m", "5s").Should(Succeed())
+
+			verifyMdaiCollectorLogs := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l",
+					"app=mdai-collector", "-o", "jsonpath={.items[*].metadata.name}")
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+
+				podNames := strings.Fields(out)
+				for _, pod := range podNames {
+					if pod == "" {
+						continue
+					}
+					logCmd := exec.Command("kubectl", "logs", pod, "-n", namespace)
+					logOut, err := utils.Run(logCmd)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					g.Expect(strings.Contains(strings.ToLower(logOut), "error")).To(BeFalse(), "Log for pod %s contains error", pod)
+				}
+			}
+			Eventually(verifyMdaiCollectorLogs).Should(Succeed())
 		})
 
 		It("can create Prometheus rules", func() {

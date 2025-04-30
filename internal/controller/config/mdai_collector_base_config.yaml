@@ -1,0 +1,116 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  k8s_events:
+    namespaces:
+      - '${env:K8S_NAMESPACE}'
+
+processors:
+  batch:
+    send_batch_size: 1000
+    send_batch_max_size: 10000
+    timeout: 13s
+  filter/severity:
+    error_mode: ignore
+    logs:
+      log_record:
+        - 'severity_number < ${env:LOG_SEVERITY}'
+  resource/k8slogstream:
+    attributes:
+      - key: mdai-logstream
+        value: "hub"
+        action: upsert
+
+exporters:
+  debug: {}
+  debug/verbose:
+    verbosity: detailed
+  awss3/audit:
+    s3uploader:
+      region: '${env:AWS_LOG_REGION}'
+      s3_bucket: '${env:AWS_LOG_BUCKET}'
+      s3_prefix: 'log'
+      file_prefix: 'audit-'
+      s3_partition_format: '%Y/%m/%d/%H'
+      # FIXME: Need to figure out why we're getting `tls: failed to verify certificate: x509: certificate signed by unknown authority`
+      disable_ssl: true
+  awss3/collector:
+    s3uploader:
+      region: '${env:AWS_LOG_REGION}'
+      s3_bucket: '${env:AWS_LOG_BUCKET}'
+      s3_prefix: 'log'
+      file_prefix: 'collector-'
+      s3_partition_format: '%Y/%m/%d/%H'
+      # FIXME: Need to figure out why we're getting `tls: failed to verify certificate: x509: certificate signed by unknown authority`
+      disable_ssl: true
+  awss3/hub:
+    s3uploader:
+      region: '${env:AWS_LOG_REGION}'
+      s3_bucket: '${env:AWS_LOG_BUCKET}'
+      s3_prefix: 'log'
+      file_prefix: 'hub-'
+      s3_partition_format: '%Y/%m/%d/%H'
+      # FIXME: Need to figure out why we're getting `tls: failed to verify certificate: x509: certificate signed by unknown authority`
+      disable_ssl: true
+  awss3/other:
+    s3uploader:
+      region: '${env:AWS_LOG_REGION}'
+      s3_bucket: '${env:AWS_LOG_BUCKET}'
+      s3_prefix: 'log'
+      file_prefix: 'other-'
+      s3_partition_format: '%Y/%m/%d/%H'
+      # FIXME: Need to figure out why we're getting `tls: failed to verify certificate: x509: certificate signed by unknown authority`
+      disable_ssl: true
+
+connectors:
+  routing/logstream:
+    default_pipelines: [logs/other]
+    table:
+      - context: resource
+        condition: attributes["mdai-logstream"] == "audit"
+        pipelines: [logs/s3audit]
+      - context: resource
+        condition: attributes["mdai-logstream"] == "collector"
+        pipelines: [logs/s3collector]
+      - context: resource
+        condition: attributes["mdai-logstream"] == "hub"
+        pipelines: [logs/s3hub]
+
+extensions:
+  cgroupruntime:
+    gomaxprocs:
+      enabled: true
+    gomemlimit:
+      enabled: true
+
+service:
+  pipelines:
+    logs/k8s_events:
+      receivers: [k8s_events]
+      processors: [resource/k8slogstream]
+      exporters: [routing/logstream]
+    logs/input:
+      receivers: [otlp]
+      processors: [filter/severity, batch]
+      exporters: [routing/logstream]
+
+    logs/s3audit:
+      receivers: [routing/logstream]
+      processors: [batch]
+      exporters: [debug, awss3/audit]
+    logs/s3hub:
+      receivers: [routing/logstream]
+      processors: [batch]
+      exporters: [debug, awss3/hub]
+    logs/s3collector:
+      receivers: [routing/logstream]
+      processors: [batch]
+      exporters: [debug, awss3/collector]
+    logs/other:
+      receivers: [routing/logstream]
+      processors: [filter/severity, batch]
+      exporters: [debug, awss3/other]

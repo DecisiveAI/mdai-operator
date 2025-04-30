@@ -304,9 +304,9 @@ func TestBuildCollectorConfig(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
-	config, err := adapter.buildCollectorConfig(observers, nil)
+	config, err := adapter.getObserverCollectorConfig(observers, nil)
 	if err != nil {
-		t.Fatalf("buildCollectorConfig returned error: %v", err)
+		t.Fatalf("getObserverCollectorConfig returned error: %v", err)
 	}
 	if !strings.Contains(config, "obs1") {
 		t.Errorf("Expected collector config to contain observer name %q, got: %s", "obs1", config)
@@ -639,7 +639,7 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 		t.Errorf("expected ContinueOperationResult, got: %v", opResult)
 	}
 
-	configMapName := adapter.GetScopedObserverResourceName(observerResource, "config")
+	configMapName := adapter.getScopedObserverResourceName(observerResource, "config")
 	cm := &v1core.ConfigMap{}
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: mdaiCR.Namespace}, cm); err != nil {
 		t.Fatalf("failed to get ConfigMap %q: %v", configMapName, err)
