@@ -18,7 +18,16 @@ import (
 )
 
 const (
-	MdaiCollectorHubComponent string = "mdai-collector"
+	MdaiCollectorHubComponent = "mdai-collector"
+	mdaiCollectorAppLabel     = "mdai-collector"
+
+	mdaiCollectorDeploymentName         = "mdai-collector"
+	mdaiCollectorConfigConfigMapName    = "mdai-collector-config"
+	mdaiCollectorEnvVarConfigMapName    = "mdai-collector-env"
+	mdaiCollectorServiceName            = "mdai-collector-service"
+	mdaiCollectorServiceAccountName     = "mdai-collector-sa"
+	mdaiCollectorClusterRoleName        = "mdai-collector-role"
+	mdaiCollectorClusterRoleBindingName = "mdai-collector-rb"
 )
 
 var (
@@ -112,10 +121,9 @@ func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, na
 		return "", "", fmt.Errorf("failed to build mdai-collector configuration: %w", err)
 	}
 
-	name := "mdai-collector-config"
 	desiredConfigMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
+			Name:      mdaiCollectorConfigConfigMapName,
 			Namespace: namespace,
 			Labels: map[string]string{
 				"app":                          "mdai-collector",
@@ -129,7 +137,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, na
 		},
 	}
 	if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", name)
+		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", mdaiCollectorConfigConfigMapName)
 		return "", "", err
 	}
 
@@ -138,18 +146,16 @@ func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, na
 		return nil
 	})
 	if err != nil {
-		c.logger.Error(err, "Failed to create or update ConfigMap", "configmap", name)
+		c.logger.Error(err, "Failed to create or update ConfigMap", "configmap", mdaiCollectorConfigConfigMapName)
 		return "", "", err
 	}
 
-	c.logger.Info("ConfigMap created or updated successfully", "configmap", name, "operation", operationResult)
+	c.logger.Info("ConfigMap created or updated successfully", "configmap", mdaiCollectorConfigConfigMapName, "operation", operationResult)
 	sha, err := getConfigMapSHA(*desiredConfigMap)
-	return name, sha, err
+	return mdaiCollectorConfigConfigMapName, sha, err
 }
 
 func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Context, namespace string, s3Config *v1.S3LogsConfig) (string, error) {
-	name := "mdai-collector-env"
-
 	data := map[string]string{
 		"LOG_SEVERITY":  "SEVERITY_NUMBER_WARN",
 		"K8S_NAMESPACE": namespace,
@@ -161,7 +167,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Conte
 
 	desiredConfigMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
+			Name:      mdaiCollectorEnvVarConfigMapName,
 			Namespace: namespace,
 			Labels: map[string]string{
 				"app":                          "mdai-collector",
@@ -173,7 +179,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Conte
 		Data: data,
 	}
 	if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", name)
+		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", mdaiCollectorEnvVarConfigMapName)
 		return "", err
 	}
 
@@ -182,20 +188,18 @@ func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Conte
 		return nil
 	})
 	if err != nil {
-		c.logger.Error(err, "Failed to create or update ConfigMap", "configmap", name)
+		c.logger.Error(err, "Failed to create or update ConfigMap", "configmap", mdaiCollectorEnvVarConfigMapName)
 		return "", err
 	}
 
-	c.logger.Info("ConfigMap created or updated successfully", "configmap", name, "operation", operationResult)
-	return name, nil
+	c.logger.Info("ConfigMap created or updated successfully", "configmap", mdaiCollectorEnvVarConfigMapName, "operation", operationResult)
+	return mdaiCollectorEnvVarConfigMapName, nil
 }
 
 func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, namespace string, collectorConfigMapName string, collectorEnvConfigMapName string, serviceAccountName string, awsAccessKeySecret string, hash string) error {
-	name := "mdai-collector"
-
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
+			Name:      mdaiCollectorDeploymentName,
 			Namespace: namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
@@ -213,7 +217,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 		if deployment.Labels == nil {
 			deployment.Labels = make(map[string]string)
 		}
-		deployment.Labels["app"] = name
+		deployment.Labels["app"] = mdaiCollectorDeploymentName
 		deployment.Labels[hubNameLabel] = c.mdaiCR.Name
 
 		deployment.Spec.Replicas = int32Ptr(1)
@@ -223,13 +227,13 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 		if deployment.Spec.Selector.MatchLabels == nil {
 			deployment.Spec.Selector.MatchLabels = make(map[string]string)
 		}
-		deployment.Spec.Selector.MatchLabels["app"] = name
+		deployment.Spec.Selector.MatchLabels["app"] = mdaiCollectorDeploymentName
 
 		if deployment.Spec.Template.Labels == nil {
 			deployment.Spec.Template.Labels = make(map[string]string)
 		}
-		deployment.Spec.Template.Labels["app"] = name
-		deployment.Spec.Template.Labels["app.kubernetes.io/component"] = name
+		deployment.Spec.Template.Labels["app"] = mdaiCollectorDeploymentName
+		deployment.Spec.Template.Labels["app.kubernetes.io/component"] = mdaiCollectorDeploymentName
 
 		if deployment.Spec.Template.Annotations == nil {
 			deployment.Spec.Template.Annotations = make(map[string]string)
@@ -239,7 +243,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 		deployment.Spec.Template.Spec.ServiceAccountName = serviceAccountName
 
 		containerSpec := corev1.Container{
-			Name:  name,
+			Name:  mdaiCollectorDeploymentName,
 			Image: "public.ecr.aws/decisiveai/mdai-collector:0.1.4",
 			Command: []string{
 				"/mdai-collector",
@@ -317,12 +321,9 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 }
 
 func (c HubAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, namespace string) (string, error) {
-	name := "mdai-collector-service"
-	appLabel := "mdai-collector"
-
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
+			Name:      mdaiCollectorServiceName,
 			Namespace: namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
@@ -332,7 +333,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, name
 	}
 
 	if err := controllerutil.SetControllerReference(c.mdaiCR, service, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on Service", "service", name)
+		c.logger.Error(err, "Failed to set owner reference on Service", "service", mdaiCollectorServiceName)
 		return "", err
 	}
 
@@ -340,12 +341,12 @@ func (c HubAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, name
 		if service.Labels == nil {
 			service.Labels = make(map[string]string)
 		}
-		service.Labels["app"] = appLabel
+		service.Labels["app"] = mdaiCollectorAppLabel
 		service.Labels[hubNameLabel] = c.mdaiCR.Name
 
 		service.Spec = corev1.ServiceSpec{
 			Selector: map[string]string{
-				"app": appLabel,
+				"app": mdaiCollectorAppLabel,
 			},
 			Ports: []corev1.ServicePort{
 				{
@@ -369,16 +370,14 @@ func (c HubAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, name
 		return "", fmt.Errorf("failed to create or update watcher-collector-service: %w", err)
 	}
 
-	c.logger.Info("Successfully created or updated watcher-collector-service", "service", name, "namespace", namespace, "operation", operationResult)
-	return name, nil
+	c.logger.Info("Successfully created or updated watcher-collector-service", "service", mdaiCollectorServiceName, "namespace", namespace, "operation", operationResult)
+	return mdaiCollectorServiceName, nil
 }
 
 func (c HubAdapter) createOrUpdateMdaiCollectorServiceAccount(ctx context.Context, namespace string) (string, error) {
-	name := "mdai-collector-sa"
-
 	serviceAccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
+			Name:      mdaiCollectorServiceAccountName,
 			Namespace: namespace,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
@@ -388,7 +387,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorServiceAccount(ctx context.Contex
 	}
 
 	if err := controllerutil.SetControllerReference(c.mdaiCR, serviceAccount, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on ServiceAccount", "serviceAccount", name)
+		c.logger.Error(err, "Failed to set owner reference on ServiceAccount", "serviceAccount", mdaiCollectorServiceAccountName)
 		return "", err
 	}
 
@@ -401,16 +400,14 @@ func (c HubAdapter) createOrUpdateMdaiCollectorServiceAccount(ctx context.Contex
 	}
 	c.logger.Info("ServiceAccount created or updated successfully", "serviceAccount", serviceAccount.Name, "operationResult", operationResult)
 
-	return name, nil
+	return mdaiCollectorServiceAccountName, nil
 }
 
 func (c HubAdapter) createOrUpdateMdaiCollectorRole(ctx context.Context) (string, error) {
-	name := "mdai-collector-role"
-
 	// BEWARE: If you're thinking about making a yaml and unmarshaling it, to extract all this out... there's a weird problem where apiGroups won't unmarshal from yaml.
 	role := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
+			Name: mdaiCollectorClusterRoleName,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
 				HubComponentLabel:              MdaiCollectorHubComponent,
@@ -501,15 +498,13 @@ func (c HubAdapter) createOrUpdateMdaiCollectorRole(ctx context.Context) (string
 	}
 	c.logger.Info("Role created or updated successfully", "role", role.Name, "operationResult", operationResult)
 
-	return name, nil
+	return mdaiCollectorClusterRoleName, nil
 }
 
 func (c HubAdapter) createOrUpdateMdaiCollectorRoleBinding(ctx context.Context, namespace string, roleName string, serviceAccountName string) error {
-	name := "mdai-collector-rb"
-
 	roleBinding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
+			Name: mdaiCollectorClusterRoleBindingName,
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "mdai-operator",
 				HubComponentLabel:              MdaiCollectorHubComponent,

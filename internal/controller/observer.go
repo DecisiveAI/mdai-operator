@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"go.uber.org/multierr"
 
 	v1 "github.com/decisiveai/mdai-operator/api/v1"
 	"gopkg.in/yaml.v3"
@@ -394,49 +395,44 @@ func (c HubAdapter) cleanupOrphanedObserverResources(ctx context.Context, resour
 		return err
 	}
 
+	var orphanedResourceRemovalErrors error
 	serviceList := corev1.ServiceList{}
 	if err := c.client.List(ctx, &serviceList, client.MatchingLabelsSelector{Selector: selector}); err != nil {
-		c.logger.Error(err, "could not query for orphaned hub observer resource services")
-		return err
+		orphanedResourceRemovalErrors = multierr.Append(orphanedResourceRemovalErrors, err)
 	}
 
 	deploymentList := appsv1.DeploymentList{}
 	if err := c.client.List(ctx, &deploymentList, client.MatchingLabelsSelector{Selector: selector}); err != nil {
-		c.logger.Error(err, "could not query for orphaned hub observer resource deployments")
-		return err
+		orphanedResourceRemovalErrors = multierr.Append(orphanedResourceRemovalErrors, err)
 	}
 
 	configMapList := corev1.ConfigMapList{}
 	if err := c.client.List(ctx, &configMapList, client.MatchingLabelsSelector{Selector: selector}); err != nil {
-		c.logger.Error(err, "could not query for orphaned hub observer resource configmaps")
-		return err
+		orphanedResourceRemovalErrors = multierr.Append(orphanedResourceRemovalErrors, err)
 	}
 
 	for _, service := range serviceList.Items {
 		c.logger.Info("Deleting orphaned observer resource service", "service", service.Name)
 		if err := c.client.Delete(ctx, &service); err != nil {
-			c.logger.Error(err, "could not delete orphaned observer resource service %s", "service", service.Name)
-			return err
+			orphanedResourceRemovalErrors = multierr.Append(orphanedResourceRemovalErrors, err)
 		}
 	}
 
 	for _, deployment := range deploymentList.Items {
 		c.logger.Info("Deleting orphaned observer resource deployment", "deployment", deployment.Name)
 		if err := c.client.Delete(ctx, &deployment); err != nil {
-			c.logger.Error(err, "could not delete orphaned observer resource deployment", "deployment", deployment.Name)
-			return err
+			orphanedResourceRemovalErrors = multierr.Append(orphanedResourceRemovalErrors, err)
 		}
 	}
 
 	for _, configMap := range configMapList.Items {
 		c.logger.Info("Deleting orphaned observer resource configMap", "configMap", configMap.Name)
 		if err := c.client.Delete(ctx, &configMap); err != nil {
-			c.logger.Error(err, "could not delete orphaned observer resource configMap %s", "configMap", configMap.Name)
-			return err
+			orphanedResourceRemovalErrors = multierr.Append(orphanedResourceRemovalErrors, err)
 		}
 	}
 
-	return nil
+	return orphanedResourceRemovalErrors
 }
 
 func getObserverFilterProcessorConfig(filter *v1.ObserverFilter) map[string]any {
