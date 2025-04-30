@@ -44,10 +44,10 @@ const (
 	mdaiCollectorClusterRoleName        = "mdai-collector-role"
 	mdaiCollectorClusterRoleBindingName = "mdai-collector-rb"
 
-	AuditLogstream            MDAILogStream = "audit"
-	CollectorLogstream        MDAILogStream = "collector"
-	HubLogstream              MDAILogStream = "hub"
-	OtherLogstream            MDAILogStream = "other"
+	AuditLogstream     MDAILogStream = "audit"
+	CollectorLogstream MDAILogStream = "collector"
+	HubLogstream       MDAILogStream = "hub"
+	OtherLogstream     MDAILogStream = "other"
 )
 
 var (
@@ -77,19 +77,15 @@ func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (Operat
 		return ContinueProcessing()
 	}
 
-	awsAccessKeySecret := awsConfig.AWSAccessKeySecret
-	if awsAccessKeySecret == nil {
-		c.logger.Info("No mdai-collector AWS access key secret found to connect to s3, skipping mdai-collector synchronization")
-		return ContinueProcessing()
-	}
-
 	logsConfig := telemetryConfig.Logs
 	if logsConfig == nil {
 		c.logger.Info("No mdai-collector logs config found, skipping mdai-collector synchronization")
 		return ContinueProcessing()
 	}
 
-	collectorConfigMapName, hash, err := c.createOrUpdateMdaiCollectorConfigMap(ctx, namespace)
+	awsAccessKeySecret := awsConfig.AWSAccessKeySecret
+
+	collectorConfigMapName, hash, err := c.createOrUpdateMdaiCollectorConfigMap(ctx, namespace, logsConfig, awsAccessKeySecret)
 	if err != nil {
 		return OperationResult{}, err
 	}
@@ -125,53 +121,68 @@ func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (Operat
 	return ContinueProcessing()
 }
 
-func (c HubAdapter) getMdaiCollectorConfig() (string, error) {
+func (c HubAdapter) getMdaiCollectorConfig(logsConfig *v1.LogsConfig, awsAccessKeySecret *string) (string, error) {
 	var mdaiCollectorConfig map[string]any
 	if err := yaml.Unmarshal([]byte(baseMdaiCollectorYAML), &mdaiCollectorConfig); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base mdai collector config")
 		return "", err
 	}
 
-	//s3Exporters := c.getS3Exporters()
-	//for s3ExporterName, s3ExporterConfig := range s3Exporters {
-	//
-	//}
+	s3Config := logsConfig.S3
+	if s3Config != nil && awsAccessKeySecret != nil {
+		exporters := mdaiCollectorConfig["exporters"].(map[string]any)
+		serviceBlock := mdaiCollectorConfig["service"].(map[string]any)
+		pipelines := serviceBlock["pipelines"].(map[string]any)
+		for _, logstream := range logstreams {
+			s3ExporterName, s3Exporter := c.getS3ExporterForLogstream(logstream)
+			exporters[s3ExporterName] = s3Exporter
+			pipelineName := fmt.Sprintf("logs/%s", logstream)
+			pipeline := pipelines[pipelineName].(map[string]any)
+			pipelines[pipelineName] = c.getPipelineWithS3Exporter(pipeline, s3ExporterName)
+		}
+		mdaiCollectorConfig["exporters"] = exporters
+		c.logger.Info("Configured mdai-collector exporters", "exporters", exporters)
+		serviceBlock["pipelines"] = pipelines
+		c.logger.Info("Configured mdai-collector pipelines", "pipelines", pipelines)
+		mdaiCollectorConfig["service"] = serviceBlock
+		c.logger.Info("Configured mdai-collector service", "service", serviceBlock)
+	} else {
+		c.logger.Info("Skipped adding s3 components due to missing s3 configuration", "s3LogsConfig", s3Config, "awsAccessKeySecret", awsAccessKeySecret)
+	}
 
 	return baseMdaiCollectorYAML, nil
 }
 
-func (c HubAdapter) getS3Exporters() map[string]any {
+func (c HubAdapter) getS3ExporterForLogstream(logstream MDAILogStream) (string, S3ExporterConfig) {
 	hubName := c.mdaiCR.Name
-	exporters := map[string]any{}
-	for _, logstream := range logstreams {
-		s3Prefix := fmt.Sprintf("%s-%s", hubName, logstream)
-		exporterKey := fmt.Sprintf("awss3/%s", logstream)
-		filePrefix := fmt.Sprintf("%s-", logstream)
-		exporters[exporterKey] = S3ExporterConfig{
-			S3Uploader: S3UploaderConfig{
-				Region:            "${env:AWS_LOG_REGION}",
-				S3Bucket:          "${env:AWS_LOG_BUCKET}",
-				S3Prefix:          s3Prefix,
-				FilePrefix:        filePrefix,
-				S3PartitionFormat: "%Y/%m/%d/%H",
-				DisableSSL:        true,
-			},
-		}
+	s3Prefix := fmt.Sprintf("%s-%s", hubName, logstream)
+	exporterKey := fmt.Sprintf("awss3/%s", logstream)
+	filePrefix := fmt.Sprintf("%s-", logstream)
+	exporter := S3ExporterConfig{
+		S3Uploader: S3UploaderConfig{
+			Region:            "${env:AWS_LOG_REGION}",
+			S3Bucket:          "${env:AWS_LOG_BUCKET}",
+			S3Prefix:          s3Prefix,
+			FilePrefix:        filePrefix,
+			S3PartitionFormat: "%Y/%m/%d/%H",
+			DisableSSL:        true,
+		},
 	}
-	return exporters
+	return exporterKey, exporter
 }
 
 func (c HubAdapter) getPipelineWithS3Exporter(pipeline map[string]any, exporterName string) map[string]any {
+	exporters := pipeline["exporters"].([]any)
 	newPipeline := map[string]any{
-		"receivers":  pipeline["receivers"].([]string),
-		"processors": pipeline["receivers"].([]string),
-		"exporters":  append(pipeline["exporters"].([]string), exporterName),
+		"receivers":  pipeline["receivers"],
+		"processors": pipeline["processors"],
+		"exporters":  append(exporters, exporterName),
 	}
 	return newPipeline
 }
 
-func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, namespace string) (string, string, error) {
-	collectorYAML, err := c.getMdaiCollectorConfig()
+func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, namespace string, logsConfig *v1.LogsConfig, awsAccessKeySecret *string) (string, string, error) {
+	collectorYAML, err := c.getMdaiCollectorConfig(logsConfig, awsAccessKeySecret)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to build mdai-collector configuration: %w", err)
 	}
