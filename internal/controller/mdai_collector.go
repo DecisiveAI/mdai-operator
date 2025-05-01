@@ -24,12 +24,12 @@ type S3ExporterConfig struct {
 }
 
 type S3UploaderConfig struct {
-	Region            string `mapstructure:"region"`
-	S3Bucket          string `mapstructure:"s3_bucket"`
-	S3Prefix          string `mapstructure:"s3_prefix"`
-	S3PartitionFormat string `mapstructure:"s3_partition_format"`
-	FilePrefix        string `mapstructure:"file_prefix"`
-	DisableSSL        bool   `mapstructure:"disable_ssl"`
+	Region            string `yaml:"region"`
+	S3Bucket          string `yaml:"s3_bucket"`
+	S3Prefix          string `yaml:"s3_prefix"`
+	S3PartitionFormat string `yaml:"s3_partition_format"`
+	FilePrefix        string `yaml:"file_prefix"`
+	DisableSSL        bool   `yaml:"disable_ssl"`
 }
 
 const (
@@ -140,17 +140,17 @@ func (c HubAdapter) getMdaiCollectorConfig(logsConfig *v1.LogsConfig, awsAccessK
 			pipeline := pipelines[pipelineName].(map[string]any)
 			pipelines[pipelineName] = c.getPipelineWithS3Exporter(pipeline, s3ExporterName)
 		}
-		mdaiCollectorConfig["exporters"] = exporters
-		c.logger.Info("Configured mdai-collector exporters", "exporters", exporters)
-		serviceBlock["pipelines"] = pipelines
-		c.logger.Info("Configured mdai-collector pipelines", "pipelines", pipelines)
-		mdaiCollectorConfig["service"] = serviceBlock
-		c.logger.Info("Configured mdai-collector service", "service", serviceBlock)
 	} else {
 		c.logger.Info("Skipped adding s3 components due to missing s3 configuration", "s3LogsConfig", s3Config, "awsAccessKeySecret", awsAccessKeySecret)
 	}
 
-	return baseMdaiCollectorYAML, nil
+	collectorConfigBytes, err := yaml.Marshal(mdaiCollectorConfig)
+	if err != nil {
+		c.logger.Error(err, "Failed to marshal mdai-collector config", "mdaiCollectorConfig", mdaiCollectorConfig)
+	}
+	collectorConfig := string(collectorConfigBytes)
+
+	return collectorConfig, nil
 }
 
 func (c HubAdapter) getS3ExporterForLogstream(logstream MDAILogStream) (string, S3ExporterConfig) {
