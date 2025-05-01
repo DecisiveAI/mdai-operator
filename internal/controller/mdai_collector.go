@@ -59,31 +59,20 @@ var (
 func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (OperationResult, error) {
 	namespace := c.mdaiCR.Namespace
 	hubConfig := c.mdaiCR.Spec.Config
-	// TODO: Clean up these
-	if hubConfig == nil {
-		c.logger.Info("No hub config found, skipping mdai-collector synchronization")
-		return ContinueProcessing()
+	var telemetryConfig *v1.TelemetryConfig
+	var awsConfig *v1.AWSConfig
+	var logsConfig *v1.LogsConfig
+	var awsAccessKeySecret *string
+	if hubConfig != nil {
+		telemetryConfig = hubConfig.Telemetry
+		if telemetryConfig != nil {
+			awsConfig = telemetryConfig.AWSConfig
+			if awsConfig != nil {
+				awsAccessKeySecret = awsConfig.AWSAccessKeySecret
+			}
+			logsConfig = telemetryConfig.Logs
+		}
 	}
-
-	telemetryConfig := hubConfig.Telemetry
-	if telemetryConfig == nil {
-		c.logger.Info("No mdai-collector telemetry config found, skipping mdai-collector synchronization")
-		return ContinueProcessing()
-	}
-
-	awsConfig := telemetryConfig.AWSConfig
-	if awsConfig == nil {
-		c.logger.Info("No mdai-collector AWS telemetry config found, skipping mdai-collector synchronization")
-		return ContinueProcessing()
-	}
-
-	logsConfig := telemetryConfig.Logs
-	if logsConfig == nil {
-		c.logger.Info("No mdai-collector logs config found, skipping mdai-collector synchronization")
-		return ContinueProcessing()
-	}
-
-	awsAccessKeySecret := awsConfig.AWSAccessKeySecret
 
 	collectorConfigMapName, hash, err := c.createOrUpdateMdaiCollectorConfigMap(ctx, namespace, logsConfig, awsAccessKeySecret)
 	if err != nil {
@@ -106,7 +95,7 @@ func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (Operat
 		return OperationResult{}, err
 	}
 
-	if err := c.createOrUpdateMdaiCollectorDeployment(ctx, namespace, collectorConfigMapName, collectorEnvConfigMapName, serviceAccountName, *awsAccessKeySecret, hash); err != nil {
+	if err := c.createOrUpdateMdaiCollectorDeployment(ctx, namespace, collectorConfigMapName, collectorEnvConfigMapName, serviceAccountName, awsAccessKeySecret, hash); err != nil {
 		if errors.ReasonForError(err) == metav1.StatusReasonConflict {
 			c.logger.Info("re-queuing due to resource conflict")
 			return Requeue()
@@ -128,20 +117,22 @@ func (c HubAdapter) getMdaiCollectorConfig(logsConfig *v1.LogsConfig, awsAccessK
 		return "", err
 	}
 
-	s3Config := logsConfig.S3
-	if s3Config != nil && awsAccessKeySecret != nil {
-		exporters := mdaiCollectorConfig["exporters"].(map[string]any)
-		serviceBlock := mdaiCollectorConfig["service"].(map[string]any)
-		pipelines := serviceBlock["pipelines"].(map[string]any)
-		for _, logstream := range logstreams {
-			s3ExporterName, s3Exporter := c.getS3ExporterForLogstream(logstream, *s3Config)
-			exporters[s3ExporterName] = s3Exporter
-			pipelineName := fmt.Sprintf("logs/%s", logstream)
-			pipeline := pipelines[pipelineName].(map[string]any)
-			pipelines[pipelineName] = c.getPipelineWithS3Exporter(pipeline, s3ExporterName)
+	if logsConfig != nil && awsAccessKeySecret != nil {
+		s3Config := logsConfig.S3
+		if s3Config != nil {
+			exporters := mdaiCollectorConfig["exporters"].(map[string]any)
+			serviceBlock := mdaiCollectorConfig["service"].(map[string]any)
+			pipelines := serviceBlock["pipelines"].(map[string]any)
+			for _, logstream := range logstreams {
+				s3ExporterName, s3Exporter := c.getS3ExporterForLogstream(logstream, *s3Config)
+				exporters[s3ExporterName] = s3Exporter
+				pipelineName := fmt.Sprintf("logs/%s", logstream)
+				pipeline := pipelines[pipelineName].(map[string]any)
+				pipelines[pipelineName] = c.getPipelineWithS3Exporter(pipeline, s3ExporterName)
+			}
 		}
 	} else {
-		c.logger.Info("Skipped adding s3 components due to missing s3 configuration", "s3LogsConfig", s3Config, "awsAccessKeySecret", awsAccessKeySecret)
+		c.logger.Info("Skipped adding s3 components due to missing s3 configuration", "logsConfig", logsConfig, "awsAccessKeySecret", awsAccessKeySecret)
 	}
 
 	collectorConfigBytes, err := yaml.Marshal(mdaiCollectorConfig)
@@ -258,7 +249,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Conte
 	return mdaiCollectorEnvVarConfigMapName, nil
 }
 
-func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, namespace string, collectorConfigMapName string, collectorEnvConfigMapName string, serviceAccountName string, awsAccessKeySecret string, hash string) error {
+func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, namespace string, collectorConfigMapName string, collectorEnvConfigMapName string, serviceAccountName string, awsAccessKeySecret *string, hash string) error {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      mdaiCollectorDeploymentName,
@@ -344,11 +335,11 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 		}
 		deployment.Spec.Template.Spec.Containers = []corev1.Container{containerSpec}
 
-		if awsAccessKeySecret != "" {
+		if awsAccessKeySecret != nil {
 			secretEnvSource := corev1.EnvFromSource{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: awsAccessKeySecret,
+						Name: *awsAccessKeySecret,
 					},
 				},
 			}
