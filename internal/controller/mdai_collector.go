@@ -89,7 +89,7 @@ func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (Operat
 	if err != nil {
 		return OperationResult{}, err
 	}
-	collectorEnvConfigMapName, err := c.createOrUpdateMdaiCollectorEnvVarConfigMap(ctx, namespace, logsConfig.S3)
+	collectorEnvConfigMapName, err := c.createOrUpdateMdaiCollectorEnvVarConfigMap(ctx, namespace)
 	if err != nil {
 		return OperationResult{}, err
 	}
@@ -134,7 +134,7 @@ func (c HubAdapter) getMdaiCollectorConfig(logsConfig *v1.LogsConfig, awsAccessK
 		serviceBlock := mdaiCollectorConfig["service"].(map[string]any)
 		pipelines := serviceBlock["pipelines"].(map[string]any)
 		for _, logstream := range logstreams {
-			s3ExporterName, s3Exporter := c.getS3ExporterForLogstream(logstream)
+			s3ExporterName, s3Exporter := c.getS3ExporterForLogstream(logstream, *s3Config)
 			exporters[s3ExporterName] = s3Exporter
 			pipelineName := fmt.Sprintf("logs/%s", logstream)
 			pipeline := pipelines[pipelineName].(map[string]any)
@@ -153,15 +153,15 @@ func (c HubAdapter) getMdaiCollectorConfig(logsConfig *v1.LogsConfig, awsAccessK
 	return collectorConfig, nil
 }
 
-func (c HubAdapter) getS3ExporterForLogstream(logstream MDAILogStream) (string, S3ExporterConfig) {
+func (c HubAdapter) getS3ExporterForLogstream(logstream MDAILogStream, s3LogsConfig v1.S3LogsConfig) (string, S3ExporterConfig) {
 	hubName := c.mdaiCR.Name
 	s3Prefix := fmt.Sprintf("%s-%s", hubName, logstream)
 	exporterKey := fmt.Sprintf("awss3/%s", logstream)
 	filePrefix := fmt.Sprintf("%s-", logstream)
 	exporter := S3ExporterConfig{
 		S3Uploader: S3UploaderConfig{
-			Region:            "${env:AWS_LOG_REGION}",
-			S3Bucket:          "${env:AWS_LOG_BUCKET}",
+			Region:            *s3LogsConfig.S3Region,
+			S3Bucket:          *s3LogsConfig.S3Bucket,
 			S3Prefix:          s3Prefix,
 			FilePrefix:        filePrefix,
 			S3PartitionFormat: "%Y/%m/%d/%H",
@@ -221,14 +221,10 @@ func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, na
 	return mdaiCollectorConfigConfigMapName, sha, err
 }
 
-func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Context, namespace string, s3Config *v1.S3LogsConfig) (string, error) {
+func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Context, namespace string) (string, error) {
 	data := map[string]string{
 		"LOG_SEVERITY":  "SEVERITY_NUMBER_WARN",
 		"K8S_NAMESPACE": namespace,
-	}
-	if s3Config != nil {
-		data["AWS_LOG_REGION"] = *(s3Config.S3Region)
-		data["AWS_LOG_BUCKET"] = *(s3Config.S3Bucket)
 	}
 
 	desiredConfigMap := &corev1.ConfigMap{
