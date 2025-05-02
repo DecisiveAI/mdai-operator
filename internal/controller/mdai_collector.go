@@ -134,7 +134,7 @@ func (c HubAdapter) getMdaiCollectorConfig(logsConfig *v1.LogsConfig, awsAccessK
 			}
 		}
 	} else {
-		c.logger.Info("Skipped adding s3 components due to missing s3 configuration", "logsConfig", logsConfig, "awsAccessKeySecret", awsAccessKeySecret)
+		c.logger.Info("Skipped adding s3 components to mdai-collector due to missing s3 configuration", "logsConfig", logsConfig, "awsAccessKeySecret", awsAccessKeySecret)
 	}
 
 	collectorConfigBytes, err := yaml.Marshal(mdaiCollectorConfig)
@@ -195,7 +195,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, na
 		},
 	}
 	if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", mdaiCollectorConfigConfigMapName)
+		c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorConfigConfigMapName+" ConfigMap", "configmap", mdaiCollectorConfigConfigMapName)
 		return "", "", err
 	}
 
@@ -204,11 +204,11 @@ func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, na
 		return nil
 	})
 	if err != nil {
-		c.logger.Error(err, "Failed to create or update ConfigMap", "configmap", mdaiCollectorConfigConfigMapName)
+		c.logger.Error(err, "Failed to create or update "+mdaiCollectorConfigConfigMapName+" ConfigMap", "configmap", mdaiCollectorConfigConfigMapName)
 		return "", "", err
 	}
 
-	c.logger.Info("ConfigMap created or updated successfully", "configmap", mdaiCollectorConfigConfigMapName, "operation", operationResult)
+	c.logger.Info(mdaiCollectorConfigConfigMapName+" ConfigMap created or updated successfully", "configmap", mdaiCollectorConfigConfigMapName, "operation", operationResult)
 	sha, err := getConfigMapSHA(*desiredConfigMap)
 	return mdaiCollectorConfigConfigMapName, sha, err
 }
@@ -233,7 +233,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Conte
 		Data: data,
 	}
 	if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", mdaiCollectorEnvVarConfigMapName)
+		c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorEnvVarConfigMapName+" ConfigMap", "configmap", mdaiCollectorEnvVarConfigMapName)
 		return "", err
 	}
 
@@ -242,11 +242,11 @@ func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Conte
 		return nil
 	})
 	if err != nil {
-		c.logger.Error(err, "Failed to create or update ConfigMap", "configmap", mdaiCollectorEnvVarConfigMapName)
+		c.logger.Error(err, "Failed to create or update "+mdaiCollectorEnvVarConfigMapName+" ConfigMap", "configmap", mdaiCollectorEnvVarConfigMapName)
 		return "", err
 	}
 
-	c.logger.Info("ConfigMap created or updated successfully", "configmap", mdaiCollectorEnvVarConfigMapName, "operation", operationResult)
+	c.logger.Info(mdaiCollectorEnvVarConfigMapName+" ConfigMap created or updated successfully", "configmap", mdaiCollectorEnvVarConfigMapName, "operation", operationResult)
 	return mdaiCollectorEnvVarConfigMapName, nil
 }
 
@@ -264,7 +264,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, deployment, func() error {
 		if err := controllerutil.SetControllerReference(c.mdaiCR, deployment, c.scheme); err != nil {
-			c.logger.Error(err, "Failed to set owner reference on Deployment", "deployment", deployment.Name)
+			c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorDeploymentName+" Deployment", "deployment", deployment.Name)
 			return err
 		}
 
@@ -369,7 +369,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 	if err != nil {
 		return err
 	}
-	c.logger.Info("Deployment created or updated successfully", "deployment", deployment.Name, "operationResult", operationResult)
+	c.logger.Info(mdaiCollectorDeploymentName+" Deployment created or updated successfully", "deployment", deployment.Name, "operationResult", operationResult)
 
 	return nil
 }
@@ -387,7 +387,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, name
 	}
 
 	if err := controllerutil.SetControllerReference(c.mdaiCR, service, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on Service", "service", mdaiCollectorServiceName)
+		c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorServiceName+" Service", "service", mdaiCollectorServiceName)
 		return "", err
 	}
 
@@ -421,10 +421,10 @@ func (c HubAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, name
 		return nil
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to create or update watcher-collector-service: %w", err)
+		return "", fmt.Errorf("failed to create or update mdai-collector-service: %w", err)
 	}
 
-	c.logger.Info("Successfully created or updated watcher-collector-service", "service", mdaiCollectorServiceName, "namespace", namespace, "operation", operationResult)
+	c.logger.Info("Successfully created or updated"+mdaiCollectorServiceName+" Service", "service", mdaiCollectorServiceName, "namespace", namespace, "operation", operationResult)
 	return mdaiCollectorServiceName, nil
 }
 
@@ -441,7 +441,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorServiceAccount(ctx context.Contex
 	}
 
 	if err := controllerutil.SetControllerReference(c.mdaiCR, serviceAccount, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on ServiceAccount", "serviceAccount", mdaiCollectorServiceAccountName)
+		c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorServiceAccountName+" ServiceAccount", "serviceAccount", mdaiCollectorServiceAccountName)
 		return "", err
 	}
 
@@ -452,7 +452,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorServiceAccount(ctx context.Contex
 	if err != nil {
 		return "", err
 	}
-	c.logger.Info("ServiceAccount created or updated successfully", "serviceAccount", serviceAccount.Name, "operationResult", operationResult)
+	c.logger.Info(mdaiCollectorServiceAccountName+" ServiceAccount created or updated successfully", "serviceAccount", serviceAccount.Name, "operationResult", operationResult)
 
 	return mdaiCollectorServiceAccountName, nil
 }
@@ -550,7 +550,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorRole(ctx context.Context) (string
 	if err != nil {
 		return "", err
 	}
-	c.logger.Info("Role created or updated successfully", "role", role.Name, "operationResult", operationResult)
+	c.logger.Info(mdaiCollectorClusterRoleName+" ClusterRole created or updated successfully", "role", role.Name, "operationResult", operationResult)
 
 	return mdaiCollectorClusterRoleName, nil
 }
@@ -585,7 +585,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorRoleBinding(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	c.logger.Info("RoleBinding created or updated successfully", "roleBinding", roleBinding.Name, "operationResult", operationResult)
+	c.logger.Info(mdaiCollectorClusterRoleBindingName+"RoleBinding created or updated successfully", "roleBinding", roleBinding.Name, "operationResult", operationResult)
 
 	return nil
 }
