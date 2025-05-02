@@ -48,6 +48,8 @@ const (
 	CollectorLogstream MDAILogStream = "collector"
 	HubLogstream       MDAILogStream = "hub"
 	OtherLogstream     MDAILogStream = "other"
+
+	S3PartitionFormat = "%Y/%m/%d/%H"
 )
 
 var (
@@ -124,11 +126,11 @@ func (c HubAdapter) getMdaiCollectorConfig(logsConfig *v1.LogsConfig, awsAccessK
 			serviceBlock := mdaiCollectorConfig["service"].(map[string]any)
 			pipelines := serviceBlock["pipelines"].(map[string]any)
 			for _, logstream := range logstreams {
-				s3ExporterName, s3Exporter := c.getS3ExporterForLogstream(logstream, *s3Config)
+				s3ExporterName, s3Exporter := getS3ExporterForLogstream(c.mdaiCR.Name, logstream, *s3Config)
 				exporters[s3ExporterName] = s3Exporter
 				pipelineName := fmt.Sprintf("logs/%s", logstream)
 				pipeline := pipelines[pipelineName].(map[string]any)
-				pipelines[pipelineName] = c.getPipelineWithS3Exporter(pipeline, s3ExporterName)
+				pipelines[pipelineName] = getPipelineWithS3Exporter(pipeline, s3ExporterName)
 			}
 		}
 	} else {
@@ -144,8 +146,7 @@ func (c HubAdapter) getMdaiCollectorConfig(logsConfig *v1.LogsConfig, awsAccessK
 	return collectorConfig, nil
 }
 
-func (c HubAdapter) getS3ExporterForLogstream(logstream MDAILogStream, s3LogsConfig v1.S3LogsConfig) (string, S3ExporterConfig) {
-	hubName := c.mdaiCR.Name
+func getS3ExporterForLogstream(hubName string, logstream MDAILogStream, s3LogsConfig v1.S3LogsConfig) (string, S3ExporterConfig) {
 	s3Prefix := fmt.Sprintf("%s-%s", hubName, logstream)
 	exporterKey := fmt.Sprintf("awss3/%s", logstream)
 	filePrefix := fmt.Sprintf("%s-", logstream)
@@ -155,14 +156,14 @@ func (c HubAdapter) getS3ExporterForLogstream(logstream MDAILogStream, s3LogsCon
 			S3Bucket:          *s3LogsConfig.S3Bucket,
 			S3Prefix:          s3Prefix,
 			FilePrefix:        filePrefix,
-			S3PartitionFormat: "%Y/%m/%d/%H",
+			S3PartitionFormat: S3PartitionFormat,
 			DisableSSL:        true,
 		},
 	}
 	return exporterKey, exporter
 }
 
-func (c HubAdapter) getPipelineWithS3Exporter(pipeline map[string]any, exporterName string) map[string]any {
+func getPipelineWithS3Exporter(pipeline map[string]any, exporterName string) map[string]any {
 	exporters := pipeline["exporters"].([]any)
 	newPipeline := map[string]any{
 		"receivers":  pipeline["receivers"],
