@@ -78,7 +78,9 @@ spec:
                 name: valkey-secret
                 key: VALKEY_PASSWORD
           - name: OTEL_EXPORTER_OTLP_ENDPOINT
-            value: http://localhost:4318
+            value: http://mdai-collector-service.mdai.svc.cluster.local:4318
+          - name: USE_CONSOLE_LOG_ENCODER
+            value: "false"
         name: manager
         ports: []
         securityContext:
