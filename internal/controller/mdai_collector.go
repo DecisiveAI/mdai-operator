@@ -61,10 +61,12 @@ var (
 func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (OperationResult, error) {
 	namespace := c.mdaiCR.Namespace
 	hubConfig := c.mdaiCR.Spec.Config
-	var telemetryConfig *v1.TelemetryConfig
-	var awsConfig *v1.AWSConfig
-	var logsConfig *v1.LogsConfig
-	var awsAccessKeySecret *string
+	var (
+		telemetryConfig    *v1.TelemetryConfig
+		awsConfig          *v1.AWSConfig
+		logsConfig         *v1.LogsConfig
+		awsAccessKeySecret *string
+	)
 	if hubConfig != nil {
 		telemetryConfig = hubConfig.Telemetry
 		if telemetryConfig != nil {
