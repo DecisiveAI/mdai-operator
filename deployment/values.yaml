@@ -12,11 +12,12 @@ controllerManager:
         drop:
         - ALL
     env:
-      otelExporterOtlpEndpoint: http://localhost:4318
+      otelExporterOtlpEndpoint: http://mdai-collector-service.mdai.svc.cluster.local:4318
+      useConsoleLogEncoder: "false"
       valkeyAuditStreamExpiryMs: "2592000000"
     image:
       repository: public.ecr.aws/p3k6k6h3/mdai-operator
-      tag: 0.1.12
+      tag: 0.1.13
     resources:
       limits:
         cpu: 500m

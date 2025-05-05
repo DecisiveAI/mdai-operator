@@ -50,6 +50,11 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
+const (
+	enableWebhooksEnvVar       = "ENABLE_WEBHOOKS"
+	useConsoleLogEncoderEnvVar = "USE_CONSOLE_LOG_ENCODER"
+)
+
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
@@ -112,9 +117,16 @@ func main() {
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.TimeKey = "timestamp"
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	var encoder zapcore.Encoder
+
+	if os.Getenv(useConsoleLogEncoderEnvVar) == "true" {
+		encoder = zapcore.NewConsoleEncoder(encoderConfig)
+	} else {
+		encoder = zapcore.NewJSONEncoder(encoderConfig)
+	}
 
 	zapOpts := ctrlzap.Options{
-		Encoder:     zapcore.NewJSONEncoder(encoderConfig),
+		Encoder:     encoder,
 		Development: true,
 	}
 
@@ -245,7 +257,7 @@ func main() {
 		gracefullyShutdownWithCode(1)
 	}
 	// nolint:goconst
-	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+	if os.Getenv(enableWebhooksEnvVar) != "false" {
 		if err = webhookmdaiv1.SetupMdaiHubWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiHub")
 			gracefullyShutdownWithCode(1)

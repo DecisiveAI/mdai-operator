@@ -17,6 +17,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+type MDAILogStream string
+
+type S3ExporterConfig struct {
+	S3Uploader S3UploaderConfig `mapstructure:"s3uploader"`
+}
+
+type S3UploaderConfig struct {
+	Region            string `yaml:"region"`
+	S3Bucket          string `yaml:"s3_bucket"`
+	S3Prefix          string `yaml:"s3_prefix"`
+	S3PartitionFormat string `yaml:"s3_partition_format"`
+	FilePrefix        string `yaml:"file_prefix"`
+	DisableSSL        bool   `yaml:"disable_ssl"`
+}
+
 const (
 	MdaiCollectorHubComponent = "mdai-collector"
 	mdaiCollectorAppLabel     = "mdai-collector"
@@ -28,51 +43,46 @@ const (
 	mdaiCollectorServiceAccountName     = "mdai-collector-sa"
 	mdaiCollectorClusterRoleName        = "mdai-collector-role"
 	mdaiCollectorClusterRoleBindingName = "mdai-collector-rb"
+
+	AuditLogstream     MDAILogStream = "audit"
+	CollectorLogstream MDAILogStream = "collector"
+	HubLogstream       MDAILogStream = "hub"
+	OtherLogstream     MDAILogStream = "other"
+
+	S3PartitionFormat = "%Y/%m/%d/%H"
 )
 
 var (
 	//go:embed config/mdai_collector_base_config.yaml
 	baseMdaiCollectorYAML string
+	logstreams            = []MDAILogStream{AuditLogstream, CollectorLogstream, HubLogstream, OtherLogstream}
 )
 
 func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (OperationResult, error) {
 	namespace := c.mdaiCR.Namespace
 	hubConfig := c.mdaiCR.Spec.Config
-	// TODO: Clean up these
-	if hubConfig == nil {
-		c.logger.Info("No hub config found, skipping mdai-collector synchronization")
-		return ContinueProcessing()
+	var (
+		telemetryConfig    *v1.TelemetryConfig
+		awsConfig          *v1.AWSConfig
+		logsConfig         *v1.LogsConfig
+		awsAccessKeySecret *string
+	)
+	if hubConfig != nil {
+		telemetryConfig = hubConfig.Telemetry
+		if telemetryConfig != nil {
+			awsConfig = telemetryConfig.AWSConfig
+			if awsConfig != nil {
+				awsAccessKeySecret = awsConfig.AWSAccessKeySecret
+			}
+			logsConfig = telemetryConfig.Logs
+		}
 	}
 
-	telemetryConfig := hubConfig.Telemetry
-	if telemetryConfig == nil {
-		c.logger.Info("No mdai-collector telemetry config found, skipping mdai-collector synchronization")
-		return ContinueProcessing()
-	}
-
-	awsConfig := telemetryConfig.AWSConfig
-	if awsConfig == nil {
-		c.logger.Info("No mdai-collector AWS telemetry config found, skipping mdai-collector synchronization")
-		return ContinueProcessing()
-	}
-
-	awsAccessKeySecret := awsConfig.AWSAccessKeySecret
-	if awsAccessKeySecret == nil {
-		c.logger.Info("No mdai-collector AWS access key secret found to connect to s3, skipping mdai-collector synchronization")
-		return ContinueProcessing()
-	}
-
-	logsConfig := telemetryConfig.Logs
-	if logsConfig == nil {
-		c.logger.Info("No mdai-collector logs config found, skipping mdai-collector synchronization")
-		return ContinueProcessing()
-	}
-
-	collectorConfigMapName, hash, err := c.createOrUpdateMdaiCollectorConfigMap(ctx, namespace)
+	collectorConfigMapName, hash, err := c.createOrUpdateMdaiCollectorConfigMap(ctx, namespace, logsConfig, awsAccessKeySecret)
 	if err != nil {
 		return OperationResult{}, err
 	}
-	collectorEnvConfigMapName, err := c.createOrUpdateMdaiCollectorEnvVarConfigMap(ctx, namespace, logsConfig.S3)
+	collectorEnvConfigMapName, err := c.createOrUpdateMdaiCollectorEnvVarConfigMap(ctx, namespace)
 	if err != nil {
 		return OperationResult{}, err
 	}
@@ -89,7 +99,7 @@ func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (Operat
 		return OperationResult{}, err
 	}
 
-	if err := c.createOrUpdateMdaiCollectorDeployment(ctx, namespace, collectorConfigMapName, collectorEnvConfigMapName, serviceAccountName, *awsAccessKeySecret, hash); err != nil {
+	if err := c.createOrUpdateMdaiCollectorDeployment(ctx, namespace, collectorConfigMapName, collectorEnvConfigMapName, serviceAccountName, awsAccessKeySecret, hash); err != nil {
 		if errors.ReasonForError(err) == metav1.StatusReasonConflict {
 			c.logger.Info("re-queuing due to resource conflict")
 			return Requeue()
@@ -104,19 +114,69 @@ func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (Operat
 	return ContinueProcessing()
 }
 
-func (c HubAdapter) getMdaiCollectorConfig() (string, error) {
-	var config map[string]any
-	if err := yaml.Unmarshal([]byte(baseMdaiCollectorYAML), &config); err != nil {
+func (c HubAdapter) getMdaiCollectorConfig(logsConfig *v1.LogsConfig, awsAccessKeySecret *string) (string, error) {
+	var mdaiCollectorConfig map[string]any
+	if err := yaml.Unmarshal([]byte(baseMdaiCollectorYAML), &mdaiCollectorConfig); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base mdai collector config")
 		return "", err
 	}
-	// TODO: Remove S3 portions if not used, or vice versa
-	// we currently don't alter this at all, but will in the future, so we're still going to unmarshal it to make sure it is valid
-	return baseMdaiCollectorYAML, nil
+
+	if logsConfig != nil && awsAccessKeySecret != nil {
+		s3Config := logsConfig.S3
+		if s3Config != nil {
+			exporters := mdaiCollectorConfig["exporters"].(map[string]any)
+			serviceBlock := mdaiCollectorConfig["service"].(map[string]any)
+			pipelines := serviceBlock["pipelines"].(map[string]any)
+			for _, logstream := range logstreams {
+				s3ExporterName, s3Exporter := getS3ExporterForLogstream(c.mdaiCR.Name, logstream, *s3Config)
+				exporters[s3ExporterName] = s3Exporter
+				pipelineName := fmt.Sprintf("logs/%s", logstream)
+				pipeline := pipelines[pipelineName].(map[string]any)
+				pipelines[pipelineName] = getPipelineWithS3Exporter(pipeline, s3ExporterName)
+			}
+		}
+	} else {
+		c.logger.Info("Skipped adding s3 components to mdai-collector due to missing s3 configuration", "logsConfig", logsConfig, "awsAccessKeySecret", awsAccessKeySecret)
+	}
+
+	collectorConfigBytes, err := yaml.Marshal(mdaiCollectorConfig)
+	if err != nil {
+		c.logger.Error(err, "Failed to marshal mdai-collector config", "mdaiCollectorConfig", mdaiCollectorConfig)
+	}
+	collectorConfig := string(collectorConfigBytes)
+
+	return collectorConfig, nil
 }
 
-func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, namespace string) (string, string, error) {
-	collectorYAML, err := c.getMdaiCollectorConfig()
+func getS3ExporterForLogstream(hubName string, logstream MDAILogStream, s3LogsConfig v1.S3LogsConfig) (string, S3ExporterConfig) {
+	s3Prefix := fmt.Sprintf("%s-%s", hubName, logstream)
+	exporterKey := fmt.Sprintf("awss3/%s", logstream)
+	filePrefix := fmt.Sprintf("%s-", logstream)
+	exporter := S3ExporterConfig{
+		S3Uploader: S3UploaderConfig{
+			Region:            *s3LogsConfig.S3Region,
+			S3Bucket:          *s3LogsConfig.S3Bucket,
+			S3Prefix:          s3Prefix,
+			FilePrefix:        filePrefix,
+			S3PartitionFormat: S3PartitionFormat,
+			DisableSSL:        true,
+		},
+	}
+	return exporterKey, exporter
+}
+
+func getPipelineWithS3Exporter(pipeline map[string]any, exporterName string) map[string]any {
+	exporters := pipeline["exporters"].([]any)
+	newPipeline := map[string]any{
+		"receivers":  pipeline["receivers"],
+		"processors": pipeline["processors"],
+		"exporters":  append(exporters, exporterName),
+	}
+	return newPipeline
+}
+
+func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, namespace string, logsConfig *v1.LogsConfig, awsAccessKeySecret *string) (string, string, error) {
+	collectorYAML, err := c.getMdaiCollectorConfig(logsConfig, awsAccessKeySecret)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to build mdai-collector configuration: %w", err)
 	}
@@ -137,7 +197,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, na
 		},
 	}
 	if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", mdaiCollectorConfigConfigMapName)
+		c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorConfigConfigMapName+" ConfigMap", "configmap", mdaiCollectorConfigConfigMapName)
 		return "", "", err
 	}
 
@@ -146,23 +206,19 @@ func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, na
 		return nil
 	})
 	if err != nil {
-		c.logger.Error(err, "Failed to create or update ConfigMap", "configmap", mdaiCollectorConfigConfigMapName)
+		c.logger.Error(err, "Failed to create or update "+mdaiCollectorConfigConfigMapName+" ConfigMap", "configmap", mdaiCollectorConfigConfigMapName)
 		return "", "", err
 	}
 
-	c.logger.Info("ConfigMap created or updated successfully", "configmap", mdaiCollectorConfigConfigMapName, "operation", operationResult)
+	c.logger.Info(mdaiCollectorConfigConfigMapName+" ConfigMap created or updated successfully", "configmap", mdaiCollectorConfigConfigMapName, "operation", operationResult)
 	sha, err := getConfigMapSHA(*desiredConfigMap)
 	return mdaiCollectorConfigConfigMapName, sha, err
 }
 
-func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Context, namespace string, s3Config *v1.S3LogsConfig) (string, error) {
+func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Context, namespace string) (string, error) {
 	data := map[string]string{
 		"LOG_SEVERITY":  "SEVERITY_NUMBER_WARN",
 		"K8S_NAMESPACE": namespace,
-	}
-	if s3Config != nil {
-		data["AWS_LOG_REGION"] = *(s3Config.S3Region)
-		data["AWS_LOG_BUCKET"] = *(s3Config.S3Bucket)
 	}
 
 	desiredConfigMap := &corev1.ConfigMap{
@@ -179,7 +235,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Conte
 		Data: data,
 	}
 	if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", mdaiCollectorEnvVarConfigMapName)
+		c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorEnvVarConfigMapName+" ConfigMap", "configmap", mdaiCollectorEnvVarConfigMapName)
 		return "", err
 	}
 
@@ -188,15 +244,15 @@ func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Conte
 		return nil
 	})
 	if err != nil {
-		c.logger.Error(err, "Failed to create or update ConfigMap", "configmap", mdaiCollectorEnvVarConfigMapName)
+		c.logger.Error(err, "Failed to create or update "+mdaiCollectorEnvVarConfigMapName+" ConfigMap", "configmap", mdaiCollectorEnvVarConfigMapName)
 		return "", err
 	}
 
-	c.logger.Info("ConfigMap created or updated successfully", "configmap", mdaiCollectorEnvVarConfigMapName, "operation", operationResult)
+	c.logger.Info(mdaiCollectorEnvVarConfigMapName+" ConfigMap created or updated successfully", "configmap", mdaiCollectorEnvVarConfigMapName, "operation", operationResult)
 	return mdaiCollectorEnvVarConfigMapName, nil
 }
 
-func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, namespace string, collectorConfigMapName string, collectorEnvConfigMapName string, serviceAccountName string, awsAccessKeySecret string, hash string) error {
+func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, namespace string, collectorConfigMapName string, collectorEnvConfigMapName string, serviceAccountName string, awsAccessKeySecret *string, hash string) error {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      mdaiCollectorDeploymentName,
@@ -210,7 +266,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, deployment, func() error {
 		if err := controllerutil.SetControllerReference(c.mdaiCR, deployment, c.scheme); err != nil {
-			c.logger.Error(err, "Failed to set owner reference on Deployment", "deployment", deployment.Name)
+			c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorDeploymentName+" Deployment", "deployment", deployment.Name)
 			return err
 		}
 
@@ -282,11 +338,11 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 		}
 		deployment.Spec.Template.Spec.Containers = []corev1.Container{containerSpec}
 
-		if awsAccessKeySecret != "" {
+		if awsAccessKeySecret != nil {
 			secretEnvSource := corev1.EnvFromSource{
 				SecretRef: &corev1.SecretEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: awsAccessKeySecret,
+						Name: *awsAccessKeySecret,
 					},
 				},
 			}
@@ -315,7 +371,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 	if err != nil {
 		return err
 	}
-	c.logger.Info("Deployment created or updated successfully", "deployment", deployment.Name, "operationResult", operationResult)
+	c.logger.Info(mdaiCollectorDeploymentName+" Deployment created or updated successfully", "deployment", deployment.Name, "operationResult", operationResult)
 
 	return nil
 }
@@ -333,7 +389,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, name
 	}
 
 	if err := controllerutil.SetControllerReference(c.mdaiCR, service, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on Service", "service", mdaiCollectorServiceName)
+		c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorServiceName+" Service", "service", mdaiCollectorServiceName)
 		return "", err
 	}
 
@@ -367,10 +423,10 @@ func (c HubAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, name
 		return nil
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to create or update watcher-collector-service: %w", err)
+		return "", fmt.Errorf("failed to create or update mdai-collector-service: %w", err)
 	}
 
-	c.logger.Info("Successfully created or updated watcher-collector-service", "service", mdaiCollectorServiceName, "namespace", namespace, "operation", operationResult)
+	c.logger.Info("Successfully created or updated"+mdaiCollectorServiceName+" Service", "service", mdaiCollectorServiceName, "namespace", namespace, "operation", operationResult)
 	return mdaiCollectorServiceName, nil
 }
 
@@ -387,7 +443,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorServiceAccount(ctx context.Contex
 	}
 
 	if err := controllerutil.SetControllerReference(c.mdaiCR, serviceAccount, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on ServiceAccount", "serviceAccount", mdaiCollectorServiceAccountName)
+		c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorServiceAccountName+" ServiceAccount", "serviceAccount", mdaiCollectorServiceAccountName)
 		return "", err
 	}
 
@@ -398,7 +454,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorServiceAccount(ctx context.Contex
 	if err != nil {
 		return "", err
 	}
-	c.logger.Info("ServiceAccount created or updated successfully", "serviceAccount", serviceAccount.Name, "operationResult", operationResult)
+	c.logger.Info(mdaiCollectorServiceAccountName+" ServiceAccount created or updated successfully", "serviceAccount", serviceAccount.Name, "operationResult", operationResult)
 
 	return mdaiCollectorServiceAccountName, nil
 }
@@ -496,7 +552,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorRole(ctx context.Context) (string
 	if err != nil {
 		return "", err
 	}
-	c.logger.Info("Role created or updated successfully", "role", role.Name, "operationResult", operationResult)
+	c.logger.Info(mdaiCollectorClusterRoleName+" ClusterRole created or updated successfully", "role", role.Name, "operationResult", operationResult)
 
 	return mdaiCollectorClusterRoleName, nil
 }
@@ -531,7 +587,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorRoleBinding(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	c.logger.Info("RoleBinding created or updated successfully", "roleBinding", roleBinding.Name, "operationResult", operationResult)
+	c.logger.Info(mdaiCollectorClusterRoleBindingName+"RoleBinding created or updated successfully", "roleBinding", roleBinding.Name, "operationResult", operationResult)
 
 	return nil
 }
