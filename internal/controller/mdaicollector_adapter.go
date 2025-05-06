@@ -4,13 +4,23 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"slices"
 
+	"errors"
+	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	v1 "github.com/decisiveai/mdai-operator/api/v1"
 	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
@@ -33,16 +43,9 @@ type S3UploaderConfig struct {
 }
 
 const (
-	MdaiCollectorHubComponent = "mdai-collector"
-	mdaiCollectorAppLabel     = "mdai-collector"
-
-	mdaiCollectorDeploymentName         = "mdai-collector"
-	mdaiCollectorConfigConfigMapName    = "mdai-collector-config"
-	mdaiCollectorEnvVarConfigMapName    = "mdai-collector-env"
-	mdaiCollectorServiceName            = "mdai-collector-service"
-	mdaiCollectorServiceAccountName     = "mdai-collector-sa"
-	mdaiCollectorClusterRoleName        = "mdai-collector-role"
-	mdaiCollectorClusterRoleBindingName = "mdai-collector-rb"
+	MdaiCollectorHubComponent     = "mdai-collector"
+	mdaiCollectorAppLabel         = "mdai-collector"
+	mdaiCollectorResourceNameBase = "mdai-collector"
 
 	AuditLogstream     MDAILogStream = "audit"
 	CollectorLogstream MDAILogStream = "collector"
@@ -58,9 +61,127 @@ var (
 	logstreams            = []MDAILogStream{AuditLogstream, CollectorLogstream, HubLogstream, OtherLogstream}
 )
 
-func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (OperationResult, error) {
-	namespace := c.mdaiCR.Namespace
-	hubConfig := c.mdaiCR.Spec.Config
+type MdaiCollectorAdapter struct {
+	collectorCR *mdaiv1.MdaiCollector
+	logger      logr.Logger
+	client      client.Client
+	recorder    record.EventRecorder
+	scheme      *runtime.Scheme
+}
+
+func NewMdaiCollectorAdapter(
+	cr *mdaiv1.MdaiCollector,
+	log logr.Logger,
+	client client.Client,
+	recorder record.EventRecorder,
+	scheme *runtime.Scheme,
+) *MdaiCollectorAdapter {
+	return &MdaiCollectorAdapter{
+		collectorCR: cr,
+		logger:      log,
+		client:      client,
+		recorder:    recorder,
+		scheme:      scheme,
+	}
+}
+
+func (c MdaiCollectorAdapter) ensureMdaiCollectorFinalizerInitialized(ctx context.Context) (OperationResult, error) {
+	if !controllerutil.ContainsFinalizer(c.collectorCR, hubFinalizer) {
+		c.logger.Info("Adding Finalizer for Engine")
+		if ok := controllerutil.AddFinalizer(c.collectorCR, hubFinalizer); !ok {
+			c.logger.Error(nil, "Failed to add finalizer into the custom resource")
+			return RequeueWithError(errors.New("failed to add finalizer " + hubFinalizer))
+		}
+
+		if err := c.client.Update(ctx, c.collectorCR); err != nil {
+			c.logger.Error(err, "Failed to update custom resource to add finalizer")
+			return RequeueWithError(err)
+		}
+		return StopProcessing() // when finalizer is added it will trigger reconciliation
+	}
+	return ContinueProcessing()
+}
+
+func (c MdaiCollectorAdapter) ensureMdaiCollectorStatusInitialized(ctx context.Context) (OperationResult, error) {
+	if len(c.collectorCR.Status.Conditions) == 0 {
+		meta.SetStatusCondition(&c.collectorCR.Status.Conditions, metav1.Condition{Type: typeAvailableHub, Status: metav1.ConditionUnknown, Reason: "Reconciling", Message: "Starting reconciliation"})
+		if err := c.client.Status().Update(ctx, c.collectorCR); err != nil {
+			c.logger.Error(err, "Failed to update Cluster status")
+			return RequeueWithError(err)
+		}
+		c.logger.Info("Re-queued to reconcile with updated status")
+		return StopProcessing()
+	}
+	return ContinueProcessing()
+}
+
+// finalizeHub handles the deletion of a hub
+func (c MdaiCollectorAdapter) finalizeMdaiCollector(ctx context.Context) (ObjectState, error) {
+	if !controllerutil.ContainsFinalizer(c.collectorCR, hubFinalizer) {
+		c.logger.Info("No finalizer found")
+		return ObjectModified, nil
+	}
+
+	c.logger.Info("Performing Finalizer Operations for Cluster before delete CR")
+
+	if err := c.client.Get(ctx, types.NamespacedName{Name: c.collectorCR.Name, Namespace: c.collectorCR.Namespace}, c.collectorCR); err != nil {
+		if apierrors.IsNotFound(err) {
+			c.logger.Info("Cluster has been deleted, no need to finalize")
+			return ObjectModified, nil
+		}
+		c.logger.Error(err, "Failed to re-fetch Engine")
+		return ObjectUnchanged, err
+	}
+
+	if meta.SetStatusCondition(&c.collectorCR.Status.Conditions, metav1.Condition{
+		Type:    typeDegradedHub,
+		Status:  metav1.ConditionTrue,
+		Reason:  "Finalizing",
+		Message: fmt.Sprintf("Finalizer operations for custom resource %s name were successfully accomplished", c.collectorCR.Name),
+	}) {
+		if err := c.client.Status().Update(ctx, c.collectorCR); err != nil {
+			if apierrors.IsNotFound(err) {
+				c.logger.Info("Cluster has been deleted, no need to finalize")
+				return ObjectModified, nil
+			}
+			c.logger.Error(err, "Failed to update Cluster status")
+
+			return ObjectUnchanged, err
+		}
+	}
+
+	c.logger.Info("Removing Finalizer for Cluster after successfully perform the operations")
+	if err := c.ensureMdaiCollectorFinalizerDeleted(ctx); err != nil {
+		return ObjectUnchanged, err
+	}
+
+	return ObjectModified, nil
+}
+
+// ensureHubFinalizerDeleted removes finalizer of a Hub
+func (c MdaiCollectorAdapter) ensureMdaiCollectorFinalizerDeleted(ctx context.Context) error {
+	c.logger.Info("Deleting Cluster Finalizer")
+	return c.deleteMdaiCollectorFinalizer(ctx, c.collectorCR, hubFinalizer)
+}
+
+// deleteFinalizer deletes finalizer of a generic CR
+func (c MdaiCollectorAdapter) deleteMdaiCollectorFinalizer(ctx context.Context, object client.Object, finalizer string) error {
+	metadata, err := meta.Accessor(object)
+	if err != nil {
+		c.logger.Error(err, "Failed to delete finalizer", "finalizer", finalizer)
+		return err
+	}
+	finalizers := metadata.GetFinalizers()
+	if slices.Contains(finalizers, finalizer) {
+		metadata.SetFinalizers(slices.DeleteFunc(finalizers, func(f string) bool { return f == finalizer }))
+		return c.client.Update(ctx, object)
+	}
+	return nil
+}
+
+func (c MdaiCollectorAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (OperationResult, error) {
+	namespace := c.collectorCR.Namespace
+	hubConfig := c.collectorCR.Spec.Config
 	var (
 		telemetryConfig    *v1.TelemetryConfig
 		awsConfig          *v1.AWSConfig
@@ -100,7 +221,7 @@ func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (Operat
 	}
 
 	if err := c.createOrUpdateMdaiCollectorDeployment(ctx, namespace, collectorConfigMapName, collectorEnvConfigMapName, serviceAccountName, awsAccessKeySecret, hash); err != nil {
-		if errors.ReasonForError(err) == metav1.StatusReasonConflict {
+		if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
 			c.logger.Info("re-queuing due to resource conflict")
 			return Requeue()
 		}
@@ -114,7 +235,14 @@ func (c HubAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (Operat
 	return ContinueProcessing()
 }
 
-func (c HubAdapter) getMdaiCollectorConfig(logsConfig *v1.LogsConfig, awsAccessKeySecret *string) (string, error) {
+func (c MdaiCollectorAdapter) getScopedMdaiCollectorResourceName(postfix string) string {
+	if postfix != "" {
+		return fmt.Sprintf("%s-%s-%s", c.collectorCR.Name, mdaiCollectorResourceNameBase, postfix)
+	}
+	return fmt.Sprintf("%s-%s", c.collectorCR.Name, mdaiCollectorResourceNameBase)
+}
+
+func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *v1.LogsConfig, awsAccessKeySecret *string) (string, error) {
 	var mdaiCollectorConfig map[string]any
 	if err := yaml.Unmarshal([]byte(baseMdaiCollectorYAML), &mdaiCollectorConfig); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base mdai collector config")
@@ -128,7 +256,7 @@ func (c HubAdapter) getMdaiCollectorConfig(logsConfig *v1.LogsConfig, awsAccessK
 			serviceBlock := mdaiCollectorConfig["service"].(map[string]any)
 			pipelines := serviceBlock["pipelines"].(map[string]any)
 			for _, logstream := range logstreams {
-				s3ExporterName, s3Exporter := getS3ExporterForLogstream(c.mdaiCR.Name, logstream, *s3Config)
+				s3ExporterName, s3Exporter := getS3ExporterForLogstream(c.collectorCR.Name, logstream, *s3Config)
 				exporters[s3ExporterName] = s3Exporter
 				pipelineName := fmt.Sprintf("logs/%s", logstream)
 				pipeline := pipelines[pipelineName].(map[string]any)
@@ -175,7 +303,8 @@ func getPipelineWithS3Exporter(pipeline map[string]any, exporterName string) map
 	return newPipeline
 }
 
-func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, namespace string, logsConfig *v1.LogsConfig, awsAccessKeySecret *string) (string, string, error) {
+func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, namespace string, logsConfig *v1.LogsConfig, awsAccessKeySecret *string) (string, string, error) {
+	mdaiCollectorConfigConfigMapName := c.getScopedMdaiCollectorResourceName("config")
 	collectorYAML, err := c.getMdaiCollectorConfig(logsConfig, awsAccessKeySecret)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to build mdai-collector configuration: %w", err)
@@ -187,7 +316,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, na
 			Namespace: namespace,
 			Labels: map[string]string{
 				"app":                          "mdai-collector",
-				hubNameLabel:                   c.mdaiCR.Name,
+				hubNameLabel:                   c.collectorCR.Name,
 				"app.kubernetes.io/managed-by": "mdai-operator",
 				HubComponentLabel:              MdaiCollectorHubComponent,
 			},
@@ -196,7 +325,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, na
 			"collector.yaml": collectorYAML,
 		},
 	}
-	if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(c.collectorCR, desiredConfigMap, c.scheme); err != nil {
 		c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorConfigConfigMapName+" ConfigMap", "configmap", mdaiCollectorConfigConfigMapName)
 		return "", "", err
 	}
@@ -215,7 +344,8 @@ func (c HubAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, na
 	return mdaiCollectorConfigConfigMapName, sha, err
 }
 
-func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Context, namespace string) (string, error) {
+func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Context, namespace string) (string, error) {
+	mdaiCollectorEnvVarConfigMapName := c.getScopedMdaiCollectorResourceName("env")
 	data := map[string]string{
 		"LOG_SEVERITY":  "SEVERITY_NUMBER_WARN",
 		"K8S_NAMESPACE": namespace,
@@ -227,14 +357,14 @@ func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Conte
 			Namespace: namespace,
 			Labels: map[string]string{
 				"app":                          "mdai-collector",
-				hubNameLabel:                   c.mdaiCR.Name,
+				hubNameLabel:                   c.collectorCR.Name,
 				"app.kubernetes.io/managed-by": "mdai-operator",
 				HubComponentLabel:              MdaiCollectorHubComponent,
 			},
 		},
 		Data: data,
 	}
-	if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(c.collectorCR, desiredConfigMap, c.scheme); err != nil {
 		c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorEnvVarConfigMapName+" ConfigMap", "configmap", mdaiCollectorEnvVarConfigMapName)
 		return "", err
 	}
@@ -252,7 +382,8 @@ func (c HubAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx context.Conte
 	return mdaiCollectorEnvVarConfigMapName, nil
 }
 
-func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, namespace string, collectorConfigMapName string, collectorEnvConfigMapName string, serviceAccountName string, awsAccessKeySecret *string, hash string) error {
+func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, namespace string, collectorConfigMapName string, collectorEnvConfigMapName string, serviceAccountName string, awsAccessKeySecret *string, hash string) error {
+	mdaiCollectorDeploymentName := c.getScopedMdaiCollectorResourceName("")
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      mdaiCollectorDeploymentName,
@@ -265,7 +396,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 	}
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, deployment, func() error {
-		if err := controllerutil.SetControllerReference(c.mdaiCR, deployment, c.scheme); err != nil {
+		if err := controllerutil.SetControllerReference(c.collectorCR, deployment, c.scheme); err != nil {
 			c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorDeploymentName+" Deployment", "deployment", deployment.Name)
 			return err
 		}
@@ -274,7 +405,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 			deployment.Labels = make(map[string]string)
 		}
 		deployment.Labels["app"] = mdaiCollectorDeploymentName
-		deployment.Labels[hubNameLabel] = c.mdaiCR.Name
+		deployment.Labels[hubNameLabel] = c.collectorCR.Name
 
 		deployment.Spec.Replicas = int32Ptr(1)
 		if deployment.Spec.Selector == nil {
@@ -376,7 +507,8 @@ func (c HubAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, n
 	return nil
 }
 
-func (c HubAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, namespace string) (string, error) {
+func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, namespace string) (string, error) {
+	mdaiCollectorServiceName := c.getScopedMdaiCollectorResourceName("service")
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      mdaiCollectorServiceName,
@@ -388,7 +520,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, name
 		},
 	}
 
-	if err := controllerutil.SetControllerReference(c.mdaiCR, service, c.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(c.collectorCR, service, c.scheme); err != nil {
 		c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorServiceName+" Service", "service", mdaiCollectorServiceName)
 		return "", err
 	}
@@ -398,7 +530,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, name
 			service.Labels = make(map[string]string)
 		}
 		service.Labels["app"] = mdaiCollectorAppLabel
-		service.Labels[hubNameLabel] = c.mdaiCR.Name
+		service.Labels[hubNameLabel] = c.collectorCR.Name
 
 		service.Spec = corev1.ServiceSpec{
 			Selector: map[string]string{
@@ -430,7 +562,8 @@ func (c HubAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, name
 	return mdaiCollectorServiceName, nil
 }
 
-func (c HubAdapter) createOrUpdateMdaiCollectorServiceAccount(ctx context.Context, namespace string) (string, error) {
+func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorServiceAccount(ctx context.Context, namespace string) (string, error) {
+	mdaiCollectorServiceAccountName := c.getScopedMdaiCollectorResourceName("sa")
 	serviceAccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      mdaiCollectorServiceAccountName,
@@ -442,7 +575,7 @@ func (c HubAdapter) createOrUpdateMdaiCollectorServiceAccount(ctx context.Contex
 		},
 	}
 
-	if err := controllerutil.SetControllerReference(c.mdaiCR, serviceAccount, c.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(c.collectorCR, serviceAccount, c.scheme); err != nil {
 		c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorServiceAccountName+" ServiceAccount", "serviceAccount", mdaiCollectorServiceAccountName)
 		return "", err
 	}
@@ -459,7 +592,8 @@ func (c HubAdapter) createOrUpdateMdaiCollectorServiceAccount(ctx context.Contex
 	return mdaiCollectorServiceAccountName, nil
 }
 
-func (c HubAdapter) createOrUpdateMdaiCollectorRole(ctx context.Context) (string, error) {
+func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorRole(ctx context.Context) (string, error) {
+	mdaiCollectorClusterRoleName := c.getScopedMdaiCollectorResourceName("role")
 	// BEWARE: If you're thinking about making a yaml and unmarshaling it, to extract all this out... there's a weird problem where apiGroups won't unmarshal from yaml.
 	role := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
@@ -557,7 +691,8 @@ func (c HubAdapter) createOrUpdateMdaiCollectorRole(ctx context.Context) (string
 	return mdaiCollectorClusterRoleName, nil
 }
 
-func (c HubAdapter) createOrUpdateMdaiCollectorRoleBinding(ctx context.Context, namespace string, roleName string, serviceAccountName string) error {
+func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorRoleBinding(ctx context.Context, namespace string, roleName string, serviceAccountName string) error {
+	mdaiCollectorClusterRoleBindingName := c.getScopedMdaiCollectorResourceName("rb")
 	roleBinding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: mdaiCollectorClusterRoleBindingName,

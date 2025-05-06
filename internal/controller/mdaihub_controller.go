@@ -74,14 +74,7 @@ type MdaiHubReconciler struct {
 // +kubebuilder:rbac:groups=monitoring.coreos.com,resources=prometheusrules,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles;clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="apps",resources=deployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=events;namespaces;namespaces/status;nodes;nodes/spec;pods;pods/status;replicationcontrollers;replicationcontrollers/status;resourcequotas;services,verbs=get;list;watch
-// +kubebuilder:rbac:groups="apps",resources=daemonsets;deployments;replicasets;statefulsets,verbs=get;list;watch
-// +kubebuilder:rbac:groups="extensions",resources=daemonsets;deployments;replicasets,verbs=get;list;watch
-// +kubebuilder:rbac:groups="batch",resources=jobs;cronjobs,verbs=get;list;watch
-// +kubebuilder:rbac:groups="autoscaling",resources=horizontalpodautoscalers,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -90,7 +83,7 @@ type MdaiHubReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/reconcile
 func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logger.FromContext(ctx)
-	log.Info("-- Starting reconciliation --")
+	log.Info("-- Starting MdaiHub reconciliation --")
 
 	fetchedCR := &mdaiv1.MdaiHub{}
 	if err := r.Get(ctx, req.NamespacedName, fetchedCR); err != nil {
@@ -98,9 +91,9 @@ func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		// requeue (we'll need to wait for a new notification), and we can get them
 		// on deleted requests.
 		if !apierrors.IsNotFound(err) {
-			log.Error(err, "unable to fetch MyDecisiveEngine CR:"+req.NamespacedName.Namespace+" : "+req.NamespacedName.Name)
+			log.Error(err, "unable to fetch MdaiHub CR:"+req.NamespacedName.Namespace+" : "+req.NamespacedName.Name)
 		}
-		log.Info("-- Exiting reconciliation, CR is deleted already --")
+		log.Info("-- Exiting MdaiHub reconciliation, CR is deleted already --")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
@@ -109,7 +102,7 @@ func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	log.Info("-- Finished reconciliation --")
+	log.Info("-- Finished MdaiHub reconciliation --")
 	return ctrl.Result{}, nil
 }
 
@@ -118,7 +111,6 @@ func (r *MdaiHubReconciler) ReconcileHandler(ctx context.Context, adapter HubAda
 		adapter.ensureHubDeletionProcessed,
 		adapter.ensureStatusInitialized,
 		adapter.ensureFinalizerInitialized,
-		adapter.ensureMdaiCollectorSynchronized,
 		adapter.ensureEvaluationsSynchronized,
 		adapter.ensureVariableSynced,
 		adapter.ensureObserversSynchronized,

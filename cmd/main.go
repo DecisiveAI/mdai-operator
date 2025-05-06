@@ -44,6 +44,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/mdai-operator/internal/controller"
 	webhookmdaiv1 "github.com/decisiveai/mdai-operator/internal/webhook/v1"
@@ -65,6 +66,7 @@ func init() {
 	utilruntime.Must(mdaiv1.AddToScheme(scheme))
 	utilruntime.Must(v1beta1.AddToScheme(scheme))
 	utilruntime.Must(prometheusv1.AddToScheme(scheme))
+	utilruntime.Must(hubv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -262,6 +264,13 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiHub")
 			gracefullyShutdownWithCode(1)
 		}
+	}
+	if err = (&controller.MdaiCollectorReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MdaiCollector")
+		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 

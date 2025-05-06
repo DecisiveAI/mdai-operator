@@ -31,16 +31,6 @@ import (
 )
 
 const (
-	// typeAvailableHub represents the status of the Deployment reconciliation
-	typeAvailableHub = "Available"
-	// typeDegradedHub represents the status used when the custom resource is deleted and the finalizer operations are must occur.
-	typeDegradedHub = "Degraded"
-
-	hubFinalizer = "mydecisive.ai/finalizer"
-
-	ObjectModified  ObjectState = true
-	ObjectUnchanged ObjectState = false
-
 	envConfigMapNamePostfix = "-variables"
 
 	requeueTime = time.Second * 10
@@ -58,8 +48,6 @@ type HubAdapter struct {
 	valKeyClient            valkey.Client
 	valkeyAuditStreamExpiry time.Duration
 }
-
-type ObjectState bool
 
 func NewHubAdapter(
 	cr *mdaiv1.MdaiHub,
