@@ -106,7 +106,7 @@ func (c MdaiCollectorAdapter) ensureMdaiCollectorStatusInitialized(ctx context.C
 	if len(c.collectorCR.Status.Conditions) == 0 {
 		meta.SetStatusCondition(&c.collectorCR.Status.Conditions, metav1.Condition{Type: typeAvailableHub, Status: metav1.ConditionUnknown, Reason: "Reconciling", Message: "Starting reconciliation"})
 		if err := c.client.Status().Update(ctx, c.collectorCR); err != nil {
-			c.logger.Error(err, "Failed to update Cluster status")
+			c.logger.Error(err, "Failed to update MDAI Collector status")
 			return RequeueWithError(err)
 		}
 		c.logger.Info("Re-queued to reconcile with updated status")
@@ -122,7 +122,7 @@ func (c MdaiCollectorAdapter) finalizeMdaiCollector(ctx context.Context) (Object
 		return ObjectModified, nil
 	}
 
-	c.logger.Info("Performing Finalizer Operations for Cluster before delete CR")
+	c.logger.Info("Performing Finalizer Operations for MDAI Collector before delete CR")
 
 	if err := c.client.Get(ctx, types.NamespacedName{Name: c.collectorCR.Name, Namespace: c.collectorCR.Namespace}, c.collectorCR); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -144,13 +144,13 @@ func (c MdaiCollectorAdapter) finalizeMdaiCollector(ctx context.Context) (Object
 				c.logger.Info("Cluster has been deleted, no need to finalize")
 				return ObjectModified, nil
 			}
-			c.logger.Error(err, "Failed to update Cluster status")
+			c.logger.Error(err, "Failed to update MDAI Collector status")
 
 			return ObjectUnchanged, err
 		}
 	}
 
-	c.logger.Info("Removing Finalizer for Cluster after successfully perform the operations")
+	c.logger.Info("Removing Finalizer for MDAI Collector after successfully perform the operations")
 	if err := c.ensureMdaiCollectorFinalizerDeleted(ctx); err != nil {
 		return ObjectUnchanged, err
 	}
@@ -160,7 +160,7 @@ func (c MdaiCollectorAdapter) finalizeMdaiCollector(ctx context.Context) (Object
 
 // ensureHubFinalizerDeleted removes finalizer of a Hub
 func (c MdaiCollectorAdapter) ensureMdaiCollectorFinalizerDeleted(ctx context.Context) error {
-	c.logger.Info("Deleting Cluster Finalizer")
+	c.logger.Info("Deleting MDAI Collector Finalizer")
 	return c.deleteMdaiCollectorFinalizer(ctx, c.collectorCR, hubFinalizer)
 }
 
@@ -181,23 +181,16 @@ func (c MdaiCollectorAdapter) deleteMdaiCollectorFinalizer(ctx context.Context, 
 
 func (c MdaiCollectorAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (OperationResult, error) {
 	namespace := c.collectorCR.Namespace
-	hubConfig := c.collectorCR.Spec.Config
 	var (
-		telemetryConfig    *v1.TelemetryConfig
 		awsConfig          *v1.AWSConfig
 		logsConfig         *v1.LogsConfig
 		awsAccessKeySecret *string
 	)
-	if hubConfig != nil {
-		telemetryConfig = hubConfig.Telemetry
-		if telemetryConfig != nil {
-			awsConfig = telemetryConfig.AWSConfig
-			if awsConfig != nil {
-				awsAccessKeySecret = awsConfig.AWSAccessKeySecret
-			}
-			logsConfig = telemetryConfig.Logs
-		}
+	awsConfig = c.collectorCR.Spec.AWSConfig
+	if awsConfig != nil {
+		awsAccessKeySecret = awsConfig.AWSAccessKeySecret
 	}
+	logsConfig = c.collectorCR.Spec.Logs
 
 	collectorConfigMapName, hash, err := c.createOrUpdateMdaiCollectorConfigMap(ctx, namespace, logsConfig, awsAccessKeySecret)
 	if err != nil {
