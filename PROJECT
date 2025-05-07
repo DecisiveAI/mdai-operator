@@ -32,4 +32,7 @@ resources:
   kind: MdaiCollector
   path: github.com/decisiveai/mdai-operator/api/v1
   version: v1
+  webhooks:
+    validation: true
+    webhookVersion: v1
 version: "3"

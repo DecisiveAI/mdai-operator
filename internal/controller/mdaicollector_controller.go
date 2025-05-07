@@ -84,7 +84,11 @@ func (r *MdaiCollectorReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 func (r *MdaiCollectorReconciler) MdaiCollectorReconcileHandler(ctx context.Context, adapter MdaiCollectorAdapter) (ctrl.Result, error) {
 	operations := []ReconcileOperation{
+		adapter.ensureMdaiCollectorDeletionProcessed,
+		adapter.ensureMdaiCollectorStatusInitialized,
+		adapter.ensureMdaiCollectorFinalizerInitialized,
 		adapter.ensureMdaiCollectorSynchronized,
+		adapter.ensureMdaiCollectorStatusSetToDone,
 	}
 	for _, operation := range operations {
 		result, err := operation(ctx)

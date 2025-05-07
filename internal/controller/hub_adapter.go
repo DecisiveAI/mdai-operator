@@ -7,11 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/decisiveai/mdai-data-core/audit"
 	"slices"
 	"strings"
 	"time"
 
-	audit "github.com/decisiveai/mdai-data-core/audit"
 	datacore "github.com/decisiveai/mdai-data-core/variables"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"

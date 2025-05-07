@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"slices"
+	"time"
 
 	"errors"
 	"github.com/go-logr/logr"
@@ -294,6 +295,43 @@ func getPipelineWithS3Exporter(pipeline map[string]any, exporterName string) map
 		"exporters":  append(exporters, exporterName),
 	}
 	return newPipeline
+}
+
+// ensureHubDeletionProcessed deletes MDAI Collector in cases a deletion was triggered
+func (c MdaiCollectorAdapter) ensureMdaiCollectorDeletionProcessed(ctx context.Context) (OperationResult, error) {
+	if !c.collectorCR.DeletionTimestamp.IsZero() {
+		c.logger.Info("Deleting Cluster:" + c.collectorCR.Name)
+		crState, err := c.finalizeMdaiCollector(ctx)
+		if crState == ObjectUnchanged || err != nil {
+			c.logger.Info("Has to requeue mdai")
+			return RequeueAfter(5*time.Second, err)
+		}
+		return StopProcessing()
+	}
+	return ContinueProcessing()
+}
+
+func (c MdaiCollectorAdapter) ensureMdaiCollectorStatusSetToDone(ctx context.Context) (OperationResult, error) {
+	// Re-fetch the Custom Resource after update or create
+	if err := c.client.Get(ctx, types.NamespacedName{Name: c.collectorCR.Name, Namespace: c.collectorCR.Namespace}, c.collectorCR); err != nil {
+		c.logger.Error(err, "Failed to re-fetch MDAI Collector")
+		return Requeue()
+	}
+	meta.SetStatusCondition(&c.collectorCR.Status.Conditions, metav1.Condition{
+		Type:   typeAvailableHub,
+		Status: metav1.ConditionTrue, Reason: "Reconciling",
+		Message: "reconciled successfully",
+	})
+	if err := c.client.Status().Update(ctx, c.collectorCR); err != nil {
+		if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
+			c.logger.Info("re-queuing due to resource conflict")
+			return Requeue()
+		}
+		c.logger.Error(err, "Failed to update MDAI Collector status")
+		return Requeue()
+	}
+	c.logger.Info("Status set to done for MDAI Collector", "mdaiHub", c.collectorCR.Name)
+	return ContinueProcessing()
 }
 
 func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, namespace string, logsConfig *v1.LogsConfig, awsAccessKeySecret *string) (string, string, error) {

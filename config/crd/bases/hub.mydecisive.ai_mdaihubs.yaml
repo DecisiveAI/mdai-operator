@@ -48,27 +48,6 @@ spec:
                       infrastructure.
                     pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
                     type: string
-                  telemetry:
-                    properties:
-                      aws:
-                        properties:
-                          awsAccessKeySecret:
-                            type: string
-                        type: object
-                      logs:
-                        properties:
-                          s3:
-                            properties:
-                              s3Bucket:
-                                type: string
-                              s3Region:
-                                description: |-
-                                  For now will be coded to WARN or greater
-                                  LogLevel *string `json:"logLevel,omitempty" yaml:"logLevel,omitempty"`
-                                type: string
-                            type: object
-                        type: object
-                    type: object
                 type: object
               evaluations:
                 items:

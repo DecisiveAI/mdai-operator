@@ -87,6 +87,7 @@ rules:
 - apiGroups:
   - hub.mydecisive.ai
   resources:
+  - mdaicollectors
   - mdaihubs
   verbs:
   - create
@@ -99,12 +100,14 @@ rules:
 - apiGroups:
   - hub.mydecisive.ai
   resources:
+  - mdaicollectors/finalizers
   - mdaihubs/finalizers
   verbs:
   - update
 - apiGroups:
   - hub.mydecisive.ai
   resources:
+  - mdaicollectors/status
   - mdaihubs/status
   verbs:
   - get
