@@ -45,7 +45,6 @@ type S3UploaderConfig struct {
 
 const (
 	MdaiCollectorHubComponent     = "mdai-collector"
-	mdaiCollectorAppLabel         = "mdai-collector"
 	mdaiCollectorResourceNameBase = "mdai-collector"
 
 	AuditLogstream     MDAILogStream = "audit"
@@ -214,7 +213,8 @@ func (c MdaiCollectorAdapter) ensureMdaiCollectorSynchronized(ctx context.Contex
 		return OperationResult{}, err
 	}
 
-	if err := c.createOrUpdateMdaiCollectorDeployment(ctx, namespace, collectorConfigMapName, collectorEnvConfigMapName, serviceAccountName, awsAccessKeySecret, hash); err != nil {
+	deploymentName, err := c.createOrUpdateMdaiCollectorDeployment(ctx, namespace, collectorConfigMapName, collectorEnvConfigMapName, serviceAccountName, awsAccessKeySecret, hash)
+	if err != nil {
 		if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
 			c.logger.Info("re-queuing due to resource conflict")
 			return Requeue()
@@ -222,7 +222,7 @@ func (c MdaiCollectorAdapter) ensureMdaiCollectorSynchronized(ctx context.Contex
 		return OperationResult{}, err
 	}
 
-	if _, err := c.createOrUpdateMdaiCollectorService(ctx, namespace); err != nil {
+	if _, err := c.createOrUpdateMdaiCollectorService(ctx, namespace, deploymentName); err != nil {
 		return OperationResult{}, err
 	}
 
@@ -413,7 +413,7 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx con
 	return mdaiCollectorEnvVarConfigMapName, nil
 }
 
-func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, namespace string, collectorConfigMapName string, collectorEnvConfigMapName string, serviceAccountName string, awsAccessKeySecret *string, hash string) error {
+func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, namespace string, collectorConfigMapName string, collectorEnvConfigMapName string, serviceAccountName string, awsAccessKeySecret *string, hash string) (string, error) {
 	mdaiCollectorDeploymentName := c.getScopedMdaiCollectorResourceName("")
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -531,14 +531,14 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 		return nil
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 	c.logger.Info(mdaiCollectorDeploymentName+" Deployment created or updated successfully", "deployment", deployment.Name, "operationResult", operationResult)
 
-	return nil
+	return mdaiCollectorDeploymentName, nil
 }
 
-func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, namespace string) (string, error) {
+func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorService(ctx context.Context, namespace string, appName string) (string, error) {
 	mdaiCollectorServiceName := c.getScopedMdaiCollectorResourceName("service")
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -560,12 +560,12 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorService(ctx context.Con
 		if service.Labels == nil {
 			service.Labels = make(map[string]string)
 		}
-		service.Labels["app"] = mdaiCollectorAppLabel
+		service.Labels["app"] = appName
 		service.Labels[hubNameLabel] = c.collectorCR.Name
 
 		service.Spec = corev1.ServiceSpec{
 			Selector: map[string]string{
-				"app": mdaiCollectorAppLabel,
+				"app": appName,
 			},
 			Ports: []corev1.ServicePort{
 				{
