@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
 
 // nolint:unused
@@ -35,12 +35,10 @@ var mdaicollectorlog = logf.Log.WithName("mdaicollector-resource")
 
 // SetupMdaiCollectorWebhookWithManager registers the webhook for MdaiCollector in the manager.
 func SetupMdaiCollectorWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).For(&hubv1.MdaiCollector{}).
+	return ctrl.NewWebhookManagedBy(mgr).For(&mdaiv1.MdaiCollector{}).
 		WithValidator(&MdaiCollectorCustomValidator{}).
 		Complete()
 }
-
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 // NOTE: The 'path' attribute must follow a specific pattern and should not be modified directly here.
@@ -60,39 +58,81 @@ var _ webhook.CustomValidator = &MdaiCollectorCustomValidator{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type MdaiCollector.
 func (v *MdaiCollectorCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	mdaicollector, ok := obj.(*hubv1.MdaiCollector)
+	mdaicollector, ok := obj.(*mdaiv1.MdaiCollector)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiCollector object but got %T", obj)
 	}
 	mdaicollectorlog.Info("Validation for MdaiCollector upon creation", "name", mdaicollector.GetName())
 
-	// TODO(user): fill in your validation logic upon object creation.
-
-	return nil, nil
+	return v.Validate(mdaicollector)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type MdaiCollector.
 func (v *MdaiCollectorCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	mdaicollector, ok := newObj.(*hubv1.MdaiCollector)
+	mdaicollector, ok := newObj.(*mdaiv1.MdaiCollector)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiCollector object for the newObj but got %T", newObj)
 	}
 	mdaicollectorlog.Info("Validation for MdaiCollector upon update", "name", mdaicollector.GetName())
 
-	// TODO(user): fill in your validation logic upon object update.
-
-	return nil, nil
+	return v.Validate(mdaicollector)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type MdaiCollector.
 func (v *MdaiCollectorCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	mdaicollector, ok := obj.(*hubv1.MdaiCollector)
+	mdaicollector, ok := obj.(*mdaiv1.MdaiCollector)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiCollector object but got %T", obj)
 	}
 	mdaicollectorlog.Info("Validation for MdaiCollector upon deletion", "name", mdaicollector.GetName())
 
-	// TODO(user): fill in your validation logic upon object deletion.
+	return v.Validate(mdaicollector)
+}
 
-	return nil, nil
+func (v *MdaiCollectorCustomValidator) Validate(mdaiCollector *mdaiv1.MdaiCollector) (admission.Warnings, error) {
+	warnings := admission.Warnings{}
+
+	if mdaiCollector == nil {
+		return warnings, fmt.Errorf("expected a MdaiCollector object but got nil")
+	}
+
+	spec := mdaiCollector.Spec
+
+	logsConfigPtr := spec.Logs
+	awsConfigPtr := spec.AWSConfig
+
+	if logsConfigPtr == nil {
+		warnings = append(warnings, "logs configuration not present in MDAI Collector spec")
+	} else {
+		var (
+			s3LogsConfigPtr *mdaiv1.S3LogsConfig
+			s3LogsConfig    mdaiv1.S3LogsConfig
+			accessKeySecret *string
+		)
+
+		s3LogsConfigPtr = logsConfigPtr.S3
+		if s3LogsConfigPtr != nil {
+			s3LogsConfig = *s3LogsConfigPtr
+			if s3LogsConfig.S3Bucket == nil {
+				return warnings, fmt.Errorf("s3 logs configuration given but s3Bucket not specified; cannot write logs to s3")
+			}
+			if s3LogsConfig.S3Region == nil {
+				return warnings, fmt.Errorf("s3 logs configuration given but s3Region not specified; cannot write logs to s3")
+			}
+		}
+
+		if awsConfigPtr == nil && s3LogsConfigPtr != nil {
+			return warnings, fmt.Errorf("got s3 logs configuration, but AWSConfig not specified; cannot write logs to s3 without access secret")
+		}
+
+		if awsConfigPtr != nil {
+			accessKeySecret = awsConfigPtr.AWSAccessKeySecret
+		}
+
+		if accessKeySecret == nil && s3LogsConfigPtr != nil {
+			return warnings, fmt.Errorf("got s3 logs configuration, but awsConfig.accessKeySecret not specified; cannot write logs to s3 without access secret")
+		}
+	}
+
+	return warnings, nil
 }
