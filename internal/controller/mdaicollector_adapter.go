@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"errors"
+
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -16,7 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	v1 "github.com/decisiveai/mdai-operator/api/v1"
 	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -182,8 +182,8 @@ func (c MdaiCollectorAdapter) deleteMdaiCollectorFinalizer(ctx context.Context, 
 func (c MdaiCollectorAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (OperationResult, error) {
 	namespace := c.collectorCR.Namespace
 	var (
-		awsConfig          *v1.AWSConfig
-		logsConfig         *v1.LogsConfig
+		awsConfig          *mdaiv1.AWSConfig
+		logsConfig         *mdaiv1.LogsConfig
 		awsAccessKeySecret *string
 	)
 	awsConfig = c.collectorCR.Spec.AWSConfig
@@ -236,7 +236,7 @@ func (c MdaiCollectorAdapter) getScopedMdaiCollectorResourceName(postfix string)
 	return fmt.Sprintf("%s-%s", c.collectorCR.Name, mdaiCollectorResourceNameBase)
 }
 
-func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *v1.LogsConfig, awsAccessKeySecret *string) (string, error) {
+func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *mdaiv1.LogsConfig, awsAccessKeySecret *string) (string, error) {
 	var mdaiCollectorConfig map[string]any
 	if err := yaml.Unmarshal([]byte(baseMdaiCollectorYAML), &mdaiCollectorConfig); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base mdai collector config")
@@ -270,7 +270,7 @@ func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *v1.LogsConfig, 
 	return collectorConfig, nil
 }
 
-func getS3ExporterForLogstream(hubName string, logstream MDAILogStream, s3LogsConfig v1.S3LogsConfig) (string, S3ExporterConfig) {
+func getS3ExporterForLogstream(hubName string, logstream MDAILogStream, s3LogsConfig mdaiv1.S3LogsConfig) (string, S3ExporterConfig) {
 	s3Prefix := fmt.Sprintf("%s-%s-logs", hubName, logstream)
 	exporterKey := fmt.Sprintf("awss3/%s", logstream)
 	filePrefix := fmt.Sprintf("%s-", logstream)
@@ -334,7 +334,7 @@ func (c MdaiCollectorAdapter) ensureMdaiCollectorStatusSetToDone(ctx context.Con
 	return ContinueProcessing()
 }
 
-func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, namespace string, logsConfig *v1.LogsConfig, awsAccessKeySecret *string) (string, string, error) {
+func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, namespace string, logsConfig *mdaiv1.LogsConfig, awsAccessKeySecret *string) (string, string, error) {
 	mdaiCollectorConfigConfigMapName := c.getScopedMdaiCollectorResourceName("config")
 	collectorYAML, err := c.getMdaiCollectorConfig(logsConfig, awsAccessKeySecret)
 	if err != nil {

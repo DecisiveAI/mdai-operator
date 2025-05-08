@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/record"
 
@@ -66,7 +67,7 @@ func (r *MdaiCollectorReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		// requeue (we'll need to wait for a new notification), and we can get them
 		// on deleted requests.
 		if !apierrors.IsNotFound(err) {
-			log.Error(err, "unable to fetch MdaiCollector CR:"+req.NamespacedName.Namespace+" : "+req.NamespacedName.Name)
+			log.Error(err, "unable to fetch MdaiCollector CR:"+req.Namespace+" : "+req.Name)
 		}
 		log.Info("-- Exiting MdaiCollector reconciliation, CR is deleted already --")
 		return ctrl.Result{}, client.IgnoreNotFound(err)

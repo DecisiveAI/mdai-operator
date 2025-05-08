@@ -91,7 +91,7 @@ func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		// requeue (we'll need to wait for a new notification), and we can get them
 		// on deleted requests.
 		if !apierrors.IsNotFound(err) {
-			log.Error(err, "unable to fetch MdaiHub CR:"+req.NamespacedName.Namespace+" : "+req.NamespacedName.Name)
+			log.Error(err, "unable to fetch MdaiHub CR:"+req.Namespace+" : "+req.Name)
 		}
 		log.Info("-- Exiting MdaiHub reconciliation, CR is deleted already --")
 		return ctrl.Result{}, client.IgnoreNotFound(err)

@@ -23,7 +23,6 @@ import (
 	"go.uber.org/mock/gomock"
 	appsv1 "k8s.io/api/apps/v1"
 	v1core "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -539,7 +538,7 @@ func TestEnsureEvaluationsSynchronized_NoEvaluations(t *testing.T) {
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: ruleName, Namespace: mdaiCR.Namespace}, promRule)
 	if err == nil {
 		t.Errorf("expected PrometheusRule %q to be deleted, but it still exists", ruleName)
-	} else if !errors.IsNotFound(err) {
+	} else if !apierrors.IsNotFound(err) {
 		t.Errorf("unexpected error getting PrometheusRule: %v", err)
 	}
 }

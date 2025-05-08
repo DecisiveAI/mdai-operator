@@ -611,6 +611,20 @@ var _ = Describe("Manager", Ordered, func() {
 
 		})
 
+		It("can delete MdaiCollector CRs and clean up resources", func() {
+			By("deleting a MdaiCollector CR")
+			verifyMdaiCollector := func(g Gomega) {
+				cmd := exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/internal-mdai-collector.yaml", "-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyMdaiCollector).Should(Succeed())
+
+			By("validating collector deleted")
+			// TODO
+
+		})
+
 		It("can delete OTEL CRs", func() {
 			verifyMdaiHub := func(g Gomega) {
 				cmd := exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/collector.yaml", "-n", otelNamespace)
