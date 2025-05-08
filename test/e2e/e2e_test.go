@@ -451,6 +451,16 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyWatcherLogs).Should(Succeed())
 		})
 
+		It("can reconcile a MDAI Collector CR", func() {
+			By("applying a managed OTEL CR")
+			verifyMdaiCollector := func(g Gomega) {
+				cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/internal-mdai-collector.yaml", "-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyMdaiCollector).Should(Succeed())
+		})
+
 		It("can deploy the mdai-collector", func() {
 			verifyMdaiCollectorRoleBinding := func(g Gomega) {
 				cmd := exec.Command(
@@ -462,12 +472,12 @@ var _ = Describe("Manager", Ordered, func() {
 				)
 				out, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(strings.Contains(out, "mdai-collector-rb")).To(BeTrue())
+				g.Expect(strings.Contains(out, "internal-mdai-collector-rb")).To(BeTrue())
 			}
 			Eventually(verifyMdaiCollectorRoleBinding, "1m", "5s").Should(Succeed())
 
 			verifyMdaiCollector := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "deployment", "mdai-collector", "-n", namespace)
+				cmd := exec.Command("kubectl", "get", "deployment", "internal-mdai-collector", "-n", namespace)
 				response, err := utils.Run(cmd)
 				g.Expect(response).To(ContainSubstring("mdai-collector   1/1"))
 				g.Expect(err).NotTo(HaveOccurred())
@@ -475,7 +485,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyMdaiCollector, "1m", "5s").Should(Succeed())
 
 			verifyMdaiCollectorPods := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l", "app=mdai-collector")
+				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l", "app=internal-mdai-collector")
 				out, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(strings.Contains(out, "Running")).To(BeTrue())

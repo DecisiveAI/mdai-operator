@@ -7,14 +7,6 @@ metadata:
   name: mdaihub-sample
   namespace: mdai
 spec:
-  config:
-    telemetry:
-      aws:
-        awsAccessKeySecret: awsy-awsface
-      logs:
-        s3:
-          s3Region: "uesc-marathon-7"
-          s3Bucket: "mdai-collector-logs"
   variables:
     - storageKey: service_list_1
       serializeAs:
