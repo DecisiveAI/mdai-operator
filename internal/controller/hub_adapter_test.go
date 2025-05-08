@@ -334,7 +334,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 		StorageType: storageType,
 		Type:        v1.VariableTypeComputed,
 		DataType:    variableType,
-		StorageKey:  "mykey",
+		Key:         "mykey",
 		SerializeAs: []v1.Serializer{varWith},
 	}
 	mdaiCR := newTestMdaiCR()
@@ -346,7 +346,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	fakeValkey := mock.NewClient(ctrl)
-	expectedKey := VariableKeyPrefix + mdaiCR.Name + "/" + variable.StorageKey
+	expectedKey := VariableKeyPrefix + mdaiCR.Name + "/" + variable.Key
 
 	fakeValkey.EXPECT().Do(ctx, XaddMatcher{Type: "collector_restart"}).Return(mock.Result(mock.ValkeyString(""))).Times(1)
 
@@ -429,7 +429,7 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 		Expr:           expr,
 		For:            &duration1,
 		Severity:       "critical",
-		RelevantLabels: &relevantLabels,
+		RelevantLabels: relevantLabels,
 		OnStatus:       onStatus,
 	}
 

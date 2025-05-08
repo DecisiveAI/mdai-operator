@@ -1,3 +1,16 @@
-valkey:
+global:
+  security:
+    allowInsecureImages: true
+primary:
   configuration: |-
     notify-keyspace-events KEA
+    enable-module-command yes
+    loadmodule /opt/bitnami/valkey/modules/priority_list.so
+    loadmodule /opt/bitnami/valkey/modules/hashset.so
+replica:
+  replicaCount: 1
+  configuration: |-
+    notify-keyspace-events KEA
+    enable-module-command yes
+    loadmodule /opt/bitnami/valkey/modules/priority_list.so
+    loadmodule /opt/bitnami/valkey/modules/hashset.so

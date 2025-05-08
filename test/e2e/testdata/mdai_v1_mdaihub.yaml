@@ -16,7 +16,7 @@ spec:
           s3Region: "uesc-marathon-7"
           s3Bucket: "mdai-collector-logs"
   variables:
-    - storageKey: service_list_1
+    - key: service_list_1
       serializeAs:
         - name: "SERVICE_LIST_REGEX"
           transformers:
@@ -29,7 +29,7 @@ spec:
               join:
                 delimiter: ","
       dataType: set
-    - storageKey: service_list_2
+    - key: service_list_2
       serializeAs:
         - name: "SERVICE_LIST_2_REGEX"
           transformers:

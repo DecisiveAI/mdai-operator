@@ -48,7 +48,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 		Spec: mdaiv1.MdaiHubSpec{
 			Variables: &[]mdaiv1.Variable{
 				{
-					StorageKey: "service_list_1",
+					Key: "service_list_1",
 					SerializeAs: []mdaiv1.Serializer{
 						{
 							Name: "SERVICE_LIST_REGEX",
@@ -75,7 +75,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					StorageType: mdaiv1.VariableStorageType(storageType),
 				},
 				{
-					StorageKey: "service_list_2",
+					Key: "service_list_2",
 					SerializeAs: []mdaiv1.Serializer{
 						{
 							Name: "SERVICE_LIST_2_REGEX",
@@ -187,7 +187,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 						},
 					},
 					For:            &duration1,
-					RelevantLabels: &relevantLabels,
+					RelevantLabels: relevantLabels,
 				},
 			},
 		},
@@ -235,7 +235,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 		It("Should deny creation if a required field is missing", func() {
 			By("simulating an invalid creation scenario")
 			obj := createSampleMdaiHub()
-			(*obj.Spec.Variables)[0].StorageKey = "service_list_2"
+			(*obj.Spec.Variables)[0].Key = "service_list_2"
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).Error().To(HaveOccurred())
 		})
@@ -262,7 +262,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			By("simulating a valid update scenario")
 			oldObj = createSampleMdaiHub()
 			obj := createSampleMdaiHub()
-			(*obj.Spec.Variables)[1].StorageKey = "service_list_3"
+			(*obj.Spec.Variables)[1].Key = "service_list_3"
 			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(warnings).To(Equal(admission.Warnings{}))
