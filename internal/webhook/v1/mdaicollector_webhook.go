@@ -19,6 +19,7 @@ package v1
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -56,6 +57,13 @@ type MdaiCollectorCustomValidator struct {
 
 var _ webhook.CustomValidator = &MdaiCollectorCustomValidator{}
 
+// Regex explanation:
+// ^[a-z0-9] - must start with lowercase letter or digit
+// [a-z0-9-]* - can contain lowercase letters, digits, or hyphens
+// [a-z0-9]$ - must end with lowercase letter or digit
+// No underscores, dots, slashes, or other special chars that might cause S3 issues
+var validNameRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type MdaiCollector.
 func (v *MdaiCollectorCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	mdaicollector, ok := obj.(*mdaiv1.MdaiCollector)
@@ -89,11 +97,24 @@ func (v *MdaiCollectorCustomValidator) ValidateDelete(ctx context.Context, obj r
 	return v.Validate(mdaicollector)
 }
 
+func ValidateName(name string) bool {
+
+	if len(name) < 1 || len(name) > 32 {
+		return false
+	}
+
+	return validNameRegex.MatchString(name)
+}
+
 func (v *MdaiCollectorCustomValidator) Validate(mdaiCollector *mdaiv1.MdaiCollector) (admission.Warnings, error) {
 	warnings := admission.Warnings{}
 
 	if mdaiCollector == nil {
 		return warnings, fmt.Errorf("expected a MdaiCollector object but got nil")
+	}
+
+	if !ValidateName(mdaiCollector.Name) {
+		return warnings, fmt.Errorf("MdaiCollector name %q is not valid. Use a lowercase alphanumeric name no longer than 32 characters with dash separators", mdaiCollector.Name)
 	}
 
 	spec := mdaiCollector.Spec

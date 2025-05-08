@@ -6,10 +6,4 @@ metadata:
     app.kubernetes.io/name: mdai-operator
     app.kubernetes.io/managed-by: kustomize
   name: mdaicollector-sample
-spec:
-  aws:
-   awsAccessKeySecret: aws-credentials
-  logs:
-   s3:
-     s3Region: "us-east-1"
-     s3Bucket: "mdai-collector-logs"
+spec: {}

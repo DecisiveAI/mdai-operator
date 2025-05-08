@@ -271,7 +271,7 @@ func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *v1.LogsConfig, 
 }
 
 func getS3ExporterForLogstream(hubName string, logstream MDAILogStream, s3LogsConfig v1.S3LogsConfig) (string, S3ExporterConfig) {
-	s3Prefix := fmt.Sprintf("%s-%s", hubName, logstream)
+	s3Prefix := fmt.Sprintf("%s-%s-logs", hubName, logstream)
 	exporterKey := fmt.Sprintf("awss3/%s", logstream)
 	filePrefix := fmt.Sprintf("%s-", logstream)
 	exporter := S3ExporterConfig{

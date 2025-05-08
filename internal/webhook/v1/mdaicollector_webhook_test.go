@@ -72,6 +72,20 @@ var _ = Describe("MdaiCollector Webhook", func() {
 	})
 
 	Context("When creating or updating MdaiCollector under Validating Webhook", func() {
+		It("Should deny creation if name is funky", func() {
+			By("simulating an invalid creation scenario")
+			obj := createTestMdaiCollector()
+			obj.Name = "what/do"
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+		})
+		It("Should deny creation if name is something else funky", func() {
+			By("simulating an invalid creation scenario")
+			obj := createTestMdaiCollector()
+			obj.Name = "whoa?what?"
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+		})
 		It("Should deny creation if a required AWSConfig field is missing but s3 config is present", func() {
 			By("simulating an invalid creation scenario")
 			obj := createTestMdaiCollector()
