@@ -8,7 +8,7 @@ metadata:
   namespace: mdai
 spec:
   variables:
-    - storageKey: service_list
+    - key: service_list
       dataType: set
       serializeAs:
         - name: "SERVICE_LIST"
@@ -16,21 +16,52 @@ spec:
             - type: join
               join:
                 delimiter: "|"
-    - storageKey: service_counter
+    - key: filter
+      dataType: string
+      serializeAs:
+        - name: "FILTER"
+    - key: default
+      dataType: string
+      serializeAs:
+        - name: "DEFAULT"
+    - key: severity_number
       dataType: int
       serializeAs:
-        - name: "SERVICE_LIST_COUNT"
-    - storageKey: any_service_alerted
+        - name: "SEVERITY_NUMBER"
+    - key: any_service_alerted
       dataType: boolean
       serializeAs:
         - name: "SERVICE_ALERTED"
-    - storageKey: service_map
+    - key: attribute_map
       dataType: map
       serializeAs:
-        - name: "SERVICE_YAML"
-
+        - name: "ATTRIBUTES"
+    - key: severity_filters_by_level
+      dataType: map
+      serializeAs:
+        - name: "SEVERITY_FILTERS_BY_LEVEL"
+    - key: my_priority_list
+      type: meta
+      dataType: metaPriorityList
+      variableRefs:
+        - default
+        - service_list
+      serializeAs:
+        - name: "SERVICE_PRIORITY"
+          transformers:
+            - type: join
+              join:
+                delimiter: "|"
+    - key: my_hash_set
+      type: meta
+      dataType: metaHashSet
+      variableRefs:
+        - severity_number
+        - severity_filters_by_level
+      serializeAs:
+        - name: "SERVICE_HASH_SET"
   observers:
-    - name: service-bytes-watcher1
+    - name: service-bytes-watcher
       resourceRef: watcher-collector
       labelResourceAttributes:
       - service.name

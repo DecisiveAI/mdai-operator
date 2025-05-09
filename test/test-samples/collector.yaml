@@ -20,14 +20,18 @@ spec:
         tls:
           insecure: true
     processors:
+      filter/yaml:
+        logs:
+          log_record: ${env:FILTER}
+
       filter/ottl:
         logs:
           log_record:
             # Only drop when variable is set AND service is in the list.
             - '"${env:SERVICE_LIST}" != "" and IsMatch(resource.attributes["service.name"], "${env:SERVICE_LIST}") and severity_number < SEVERITY_NUMBER_WARN'
-      batch/mdai_datalyzer:
-        send_batch_size: 100
-        timeout: 15s
+      batch/mdai_datalyzer: ${env:ATTRIBUTES}
+#        send_batch_size: 100
+#        timeout: 15s
       resource:
         attributes:
           - action: insert

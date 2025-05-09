@@ -251,7 +251,11 @@ func (r *MdaiHubReconciler) startValkeySubscription() {
 			return
 		}
 		hubName := parts[1]
-		hubNamespace, err := r.findHubNamespace(ctx, log, hubName)
+		hubNamespace, found, err := r.findHubNamespace(ctx, log, hubName)
+		if !found {
+			log.Info("hub not found, skipping", "hubName", hubName)
+			return
+		}
 		if err != nil {
 			log.Error(err, "failed to find hub namespace", "hubName", hubName)
 			return
@@ -332,8 +336,8 @@ func (r *MdaiHubReconciler) requeueByLabels(ctx context.Context, obj client.Obje
 	}
 	log.Info("OpenTelemetryCollector for MdaiHub found with hubNameFromLabel", "hubNameFromLabel", hubNameFromLabel)
 
-	hubNamespace, err := r.findHubNamespace(ctx, log, hubNameFromLabel)
-	if err != nil {
+	hubNamespace, found, err := r.findHubNamespace(ctx, log, hubNameFromLabel)
+	if !found || err != nil {
 		return nil
 	}
 
@@ -349,14 +353,14 @@ func (r *MdaiHubReconciler) requeueByLabels(ctx context.Context, obj client.Obje
 	}
 }
 
-func (r *MdaiHubReconciler) findHubNamespace(ctx context.Context, log logr.Logger, hubNameFromLabel string) (string, error) {
+func (r *MdaiHubReconciler) findHubNamespace(ctx context.Context, log logr.Logger, hubNameFromLabel string) (string, bool, error) {
 	listOptions := []client.ListOption{
 		client.InNamespace(""), // all namespaces
 	}
 	hubList := &mdaiv1.MdaiHubList{}
 	if err := r.List(ctx, hubList, listOptions...); err != nil {
 		log.Error(err, "Failed to list MdaiHubs")
-		return "", err
+		return "", false, err
 	}
 
 	var targetHub *mdaiv1.MdaiHub
@@ -369,12 +373,12 @@ func (r *MdaiHubReconciler) findHubNamespace(ctx context.Context, log logr.Logge
 
 	if targetHub == nil {
 		log.Info("MdaiHub not found", "hubName", hubNameFromLabel)
-		return "", errors.New("mdaiHub not found")
+		return "", false, nil
 	}
 
 	// Assuming that hub names are unique across namespaces, take the first match
 	hubNamespace := targetHub.Namespace
-	return hubNamespace, nil
+	return hubNamespace, true, nil
 }
 
 var createPredicate = predicate.Funcs{

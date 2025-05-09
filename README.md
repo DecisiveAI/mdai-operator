@@ -24,6 +24,7 @@ MDAI k8s operator:
 - valkey key name has a structure: `variable/some_hub_name/some_variable_name`
 - Updates to variables are applied by triggering the collector’s restart
 - Supports the built-in ValKey storage type for variables 
+- Creates immutable meta variables that have references to other variables
 
 ## Getting Started
 ### Importing opentelemetry-operator module from private repo
@@ -60,7 +61,12 @@ kubectl wait --for=condition=available --timeout=600s deployment --all -n cert-m
 **Other prerequisites operator**   
 ```shell
 kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releases/latest/download/opentelemetry-operator.yaml
-helm install valkey oci://registry-1.docker.io/bitnamicharts/valkey --set auth.password=abc
+kind load docker-image valkey-custom:1.0.0 --name mdai-operator-test
+helm install valkey oci://registry-1.docker.io/bitnamicharts/valkey --set auth.password=abc \
+  --set image.registry="" \
+  --set image.repository=public.ecr.aws/decisiveai/valkey \
+  --set image.tag=latest \
+  -f test/test-samples/valkey-values.yaml
 helm install prometheus prometheus-community/kube-prometheus-stack
 helm upgrade prometheus prometheus-community/kube-prometheus-stack -f test/test-samples/prometheus-custom-values.yaml
 kubectl create namespace otel
