@@ -2,10 +2,11 @@ package controller
 
 import (
 	"fmt"
+	"testing"
+
 	v1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/utils/ptr"
-	"testing"
 )
 
 func TestGetS3ExporterForLogstream(t *testing.T) {
