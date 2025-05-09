@@ -11,7 +11,8 @@ import (
 	"strings"
 	"time"
 
-	audit "github.com/decisiveai/mdai-data-core/audit"
+	"github.com/decisiveai/mdai-data-core/audit"
+
 	datacore "github.com/decisiveai/mdai-data-core/variables"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
@@ -31,16 +32,6 @@ import (
 )
 
 const (
-	// typeAvailableHub represents the status of the Deployment reconciliation
-	typeAvailableHub = "Available"
-	// typeDegradedHub represents the status used when the custom resource is deleted and the finalizer operations are must occur.
-	typeDegradedHub = "Degraded"
-
-	hubFinalizer = "mydecisive.ai/finalizer"
-
-	ObjectModified  ObjectState = true
-	ObjectUnchanged ObjectState = false
-
 	envConfigMapNamePostfix = "-variables"
 
 	requeueTime = time.Second * 10
@@ -58,8 +49,6 @@ type HubAdapter struct {
 	valKeyClient            valkey.Client
 	valkeyAuditStreamExpiry time.Duration
 }
-
-type ObjectState bool
 
 func NewHubAdapter(
 	cr *mdaiv1.MdaiHub,

@@ -109,6 +109,9 @@ var _ = BeforeSuite(func() {
 	err = SetupMdaiHubWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = SetupMdaiCollectorWebhookWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
 	// +kubebuilder:scaffold:webhook
 
 	go func() {

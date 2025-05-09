@@ -262,6 +262,17 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiHub")
 			gracefullyShutdownWithCode(1)
 		}
+		if err = webhookmdaiv1.SetupMdaiCollectorWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiCollector")
+			os.Exit(1)
+		}
+	}
+	if err = (&controller.MdaiCollectorReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MdaiCollector")
+		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 
