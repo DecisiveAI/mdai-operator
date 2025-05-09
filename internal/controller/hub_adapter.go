@@ -334,7 +334,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 		switch variable.StorageType {
 		case mdaiv1.VariableSourceTypeBuiltInValkey:
 			key := variable.Key
-			valkeyKeysToKeep[variable.Key] = struct{}{}
+			valkeyKeysToKeep[key] = struct{}{}
 			switch variable.Type {
 			// from the operator's perspective, computed and manual are the same, they are differently processed by the handler
 			case mdaiv1.VariableTypeComputed, mdaiv1.VariableTypeManual:
