@@ -8,7 +8,7 @@ metadata:
   namespace: mdai
 spec:
   variables:
-    - storageKey: service_list_1
+    - key: service_list_1
       dataType: set
       storageType: "mdai-valkey"
       serializeAs:
@@ -22,7 +22,7 @@ spec:
             - type: join
               join:
                 delimiter: ","
-    - storageKey: service_list_2
+    - key: service_list_2
       dataType: set
       storageType: "mdai-valkey"
       serializeAs:

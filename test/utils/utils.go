@@ -209,8 +209,10 @@ func InstallValkey() error {
 	cmd := exec.Command("helm", "install", "valkey",
 		"oci://registry-1.docker.io/bitnamicharts/valkey",
 		"--set", "auth.password=abc",
-		"--set", "replica.replicaCount=0",
-		"--set", "primary.configuration=notify-keyspace-events KEA",
+		"--set", "image.registry=public.ecr.aws",
+		"--set", "image.repository=decisiveai/valkey",
+		"--set", "image.tag=latest",
+		"-f", "test/test-samples/valkey-values.yaml",
 	)
 	_, err := Run(cmd)
 	return err

@@ -148,7 +148,7 @@ func (c HubAdapter) finalizeHub(ctx context.Context) (ObjectState, error) {
 
 	prefix := VariableKeyPrefix + c.mdaiCR.Name + "/"
 	c.logger.Info("Cleaning up old variables from Valkey with prefix", "prefix", prefix)
-	if err := c.deleteKeysWithPrefixUsingScan(ctx, prefix, map[string]struct{}{}); err != nil {
+	if err := datacore.NewValkeyAdapter(c.valKeyClient, c.logger, c.mdaiCR.Name).DeleteKeysWithPrefixUsingScan(ctx, map[string]struct{}{}); err != nil {
 		return ObjectUnchanged, err
 	}
 
@@ -273,9 +273,9 @@ func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation) promet
 	}
 
 	if alertingRule.RelevantLabels != nil {
-		relevantLabelsJSON, err := json.Marshal(*alertingRule.RelevantLabels)
+		relevantLabelsJSON, err := json.Marshal(alertingRule.RelevantLabels)
 		if err != nil {
-			c.logger.Error(err, "Failed to compose relevant labels for eval", "name", alertName, "relevantLabels", *alertingRule.RelevantLabels)
+			c.logger.Error(err, "Failed to compose relevant labels for eval", "name", alertName, "relevantLabels", alertingRule.RelevantLabels)
 		}
 		prometheusRule.Annotations["relevant_labels"] = string(relevantLabelsJSON)
 	}
@@ -316,79 +316,80 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	}
 
 	envMap := make(map[string]string)
-	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.logger)
+	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.logger, c.mdaiCR.Name)
 	valkeyKeysToKeep := map[string]struct{}{}
 	for _, variable := range *variables {
-		if variable.Type != mdaiv1.VariableTypeComputed {
-			c.logger.Info("Variable type is not supported yet", "variable", variable.StorageKey, "type", variable.Type)
-			continue
-		}
+		c.logger.Info(fmt.Sprintf("Processing variable: %s", variable.Key))
 		switch variable.StorageType {
 		case mdaiv1.VariableSourceTypeBuiltInValkey:
-			valkeyKey := datacore.ComposeValkeyKey(c.mdaiCR.Name, variable.StorageKey)
-			valkeyKeysToKeep[valkeyKey] = struct{}{}
-			switch variable.DataType {
-			case mdaiv1.VariableDataTypeSet:
-				valueAsSlice, err := dataAdapter.GetSetAsStringSlice(ctx, valkeyKey)
-				if err != nil {
-					return RequeueAfter(requeueTime, err)
-				}
-
-				for _, serializer := range variable.SerializeAs {
-					exportedVariableName := serializer.Name
-					if envMap[exportedVariableName] != "" {
-						c.logger.Info("Serializer configuration overrides existing configuration", "exportedVariableName", exportedVariableName)
+			key := variable.Key
+			valkeyKeysToKeep[key] = struct{}{}
+			switch variable.Type {
+			// from the operator's perspective, computed and manual are the same, they are differently processed by the handler
+			case mdaiv1.VariableTypeComputed, mdaiv1.VariableTypeManual:
+				switch variable.DataType {
+				case mdaiv1.VariableDataTypeSet:
+					valueAsSlice, err := dataAdapter.GetSetAsStringSlice(ctx, key)
+					if err != nil {
+						return RequeueAfter(requeueTime, err)
+					}
+					c.applySetTransformation(variable, envMap, valueAsSlice)
+				case mdaiv1.VariableDataTypeString, mdaiv1.VariableDataTypeInt, mdaiv1.VariableDataTypeBoolean:
+					// int is represented as string in Valkey, we assume writer guarantee the variable type is correct
+					// boolean is represented as string in Valkey: false or true, we assume writer guarantee the variable type is correct
+					value, found, err := dataAdapter.GetString(ctx, key)
+					if err != nil {
+						return RequeueAfter(requeueTime, err)
+					}
+					if !found {
 						continue
 					}
-
-					transformers := serializer.Transformers
-					if len(transformers) == 0 {
-						c.logger.Info("No Transformers configured", "exportedVariableName", exportedVariableName)
-						continue
+					c.applySerializerToString(variable, envMap, value)
+				case mdaiv1.VariableDataTypeMap:
+					value, err := dataAdapter.GetMapAsString(ctx, key)
+					if err != nil {
+						return RequeueAfter(requeueTime, err)
 					}
-					for _, transformer := range transformers {
-						switch transformer.Type {
-						case mdaiv1.TransformerTypeJoin:
-							delimiter := transformer.Join.Delimiter
-							variableWithDelimiter := strings.Join(valueAsSlice, delimiter)
-							envMap[exportedVariableName] = variableWithDelimiter
-						default:
-							c.logger.Error(fmt.Errorf("unsupported Transformer type: %s", transformer.Type), "exportedVariableName", exportedVariableName)
-						}
-					}
-				}
-			case mdaiv1.VariableDataTypeString, mdaiv1.VariableDataTypeInt, mdaiv1.VariableDataTypeBoolean:
-				// int is represented as string in Valkey, we assume writer guarantee the variable type is correct
-				// boolean is represented as string in Valkey: false or true, we assume writer guarantee the variable type is correct
-				value, found, err := dataAdapter.GetString(ctx, valkeyKey)
-				if err != nil {
-					return RequeueAfter(requeueTime, err)
-				}
-				if !found {
+					c.applySerializerToString(variable, envMap, value)
+				default:
+					c.logger.Error(fmt.Errorf("unsupported variable data type: %s", variable.DataType), "key", variable.Key)
 					continue
 				}
-				for _, serializer := range variable.SerializeAs {
-					exportedVariableName := serializer.Name
-					envMap[exportedVariableName] = value
-				}
-			case mdaiv1.VariableDataTypeMap:
-				valueAsString, err := dataAdapter.GetMapAsString(ctx, valkeyKey)
-				if err != nil {
-					return RequeueAfter(requeueTime, err)
-				}
-				for _, serializer := range variable.SerializeAs {
-					exportedVariableName := serializer.Name
-					envMap[exportedVariableName] = valueAsString
+			case mdaiv1.VariableTypeMeta:
+				switch variable.DataType {
+				case mdaiv1.MetaVariableDataTypePriorityList:
+					valueAsSlice, found, err := dataAdapter.GetOrCreateMetaPriorityList(ctx, key, variable.VariableRefs)
+					if err != nil {
+						return RequeueAfter(requeueTime, err)
+					}
+					if !found {
+						continue
+					}
+					c.applySetTransformation(variable, envMap, valueAsSlice)
+				case mdaiv1.MetaVariableDateTypeHashSet:
+					value, found, err := dataAdapter.GetOrCreateMetaHashSet(ctx, key, variable.VariableRefs[0], variable.VariableRefs[1])
+					if err != nil {
+						return RequeueAfter(requeueTime, err)
+					}
+					if !found {
+						continue
+					}
+					c.applySerializerToString(variable, envMap, value)
+				default:
+					c.logger.Error(fmt.Errorf("unsupported variable data type: %s", variable.DataType), "key", variable.Key)
 				}
 			default:
-				c.logger.Info("Unsupported variable type", "variableType", variable.DataType, "variableStorageKey", variable.StorageKey)
+				c.logger.Error(fmt.Errorf("unsupported variable type: %s", variable.Type), "key", variable.Key)
 				continue
 			}
+		default:
+			c.logger.Error(fmt.Errorf("unsupported variable source type: %s", variable.StorageType), "key", variable.Key)
+			continue
 		}
 	}
 
 	c.logger.Info("Deleting old valkey keys", "valkeyKeysToKeep", valkeyKeysToKeep)
-	if err := c.deleteKeysWithPrefixUsingScan(ctx, VariableKeyPrefix+c.mdaiCR.Name+"/", valkeyKeysToKeep); err != nil {
+	if err := dataAdapter.DeleteKeysWithPrefixUsingScan(ctx, valkeyKeysToKeep); err != nil {
 		return OperationResult{}, err
 	}
 
@@ -442,31 +443,37 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	return ContinueProcessing()
 }
 
-func (c HubAdapter) deleteKeysWithPrefixUsingScan(ctx context.Context, prefix string, keep map[string]struct{}) error {
-	keyPattern := prefix + "*"
-	valkeyClient := c.valKeyClient
+func (c HubAdapter) applySerializerToString(variable mdaiv1.Variable, envMap map[string]string, value string) {
+	for _, serializer := range variable.SerializeAs {
+		exportedVariableName := serializer.Name
+		envMap[exportedVariableName] = value
+	}
+}
 
-	var cursor uint64
-	for {
-		scanResult, err := valkeyClient.Do(ctx, valkeyClient.B().Scan().Cursor(cursor).Match(keyPattern).Count(100).Build()).AsScanEntry()
-		if err != nil {
-			return fmt.Errorf("failed to scan with prefix %s: %w", prefix, err)
+func (c HubAdapter) applySetTransformation(variable mdaiv1.Variable, envMap map[string]string, valueAsSlice []string) {
+	for _, serializer := range variable.SerializeAs {
+		exportedVariableName := serializer.Name
+		if _, exists := envMap[exportedVariableName]; exists {
+			c.logger.Info("Serializer configuration overrides existing configuration", "exportedVariableName", exportedVariableName)
+			continue
 		}
-		for _, k := range scanResult.Elements {
-			if _, exists := keep[k]; exists {
-				continue
-			}
-			if _, err := valkeyClient.Do(ctx, valkeyClient.B().Del().Key(k).Build()).AsInt64(); err != nil {
-				return fmt.Errorf("failed to delete key %s: %w", k, err)
-			}
+
+		transformers := serializer.Transformers
+		if len(transformers) == 0 {
+			c.logger.Info("No Transformers configured", "exportedVariableName", exportedVariableName)
+			continue
 		}
-		cursor = scanResult.Cursor
-		if cursor == 0 {
-			break
+		for _, transformer := range transformers {
+			switch transformer.Type {
+			case mdaiv1.TransformerTypeJoin:
+				delimiter := transformer.Join.Delimiter
+				variableWithDelimiter := strings.Join(valueAsSlice, delimiter)
+				envMap[exportedVariableName] = variableWithDelimiter
+			default:
+				c.logger.Error(fmt.Errorf("unsupported Transformer type: %s", transformer.Type), "exportedVariableName", exportedVariableName)
+			}
 		}
 	}
-
-	return nil
 }
 
 func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, namespace string) (controllerutil.OperationResult, error) {

@@ -101,8 +101,8 @@ spec:
                                   - mdai/bulk_set_key_value
                                   type: string
                                 variableRef:
-                                  description: VariableRef The StorageKey of the variable
-                                    to be updated.
+                                  description: VariableRef The Key of the variable to
+                                    be updated.
                                   minLength: 1
                                   pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                                   type: string
@@ -133,8 +133,8 @@ spec:
                                   - mdai/bulk_set_key_value
                                   type: string
                                 variableRef:
-                                  description: VariableRef The StorageKey of the variable
-                                    to be updated.
+                                  description: VariableRef The Key of the variable to
+                                    be updated.
                                   minLength: 1
                                   pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                                   type: string
@@ -291,6 +291,15 @@ spec:
                       - set
                       - map
                       - boolean
+                      - metaHashSet
+                      - metaPriorityList
+                      type: string
+                    key:
+                      description: Key The key for which this variable's managed value
+                        is assigned. Will also be used as the environment variable name
+                        for variables of type "string"
+                      minLength: 1
+                      pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                       type: string
                     serializeAs:
                       items:
@@ -330,13 +339,6 @@ spec:
                         type: object
                       minItems: 1
                       type: array
-                    storageKey:
-                      description: StorageKey The key for which this variable's managed
-                        value is assigned. Will also be used as the environment variable
-                        name for variables of type "string"
-                      minLength: 1
-                      pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
-                      type: string
                     storageType:
                       default: mdai-valkey
                       description: StorageType defaults to "mdai-valkey" if not provided
@@ -350,11 +352,19 @@ spec:
                       enum:
                       - manual
                       - computed
+                      - meta
                       type: string
+                    variableRefs:
+                      description: VariableRefs name references to other managed variables
+                        to be included in meta calculation. Listed variables should
+                        be of the same data type.
+                      items:
+                        type: string
+                      type: array
                   required:
                   - dataType
+                  - key
                   - serializeAs
-                  - storageKey
                   - storageType
                   - type
                   type: object

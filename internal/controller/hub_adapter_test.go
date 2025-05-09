@@ -90,8 +90,8 @@ func TestFinalizeHub_Success(t *testing.T) {
 	defer ctrl.Finish()
 	fakeValkey := mock.NewClient(ctrl)
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Scan().Cursor(0).Match(VariableKeyPrefix+mdaiCR.Name+"/"+"*").Count(100).Build()).
-		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString("key")))))
-	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key("key").Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString(VariableKeyPrefix+mdaiCR.Name+"/"+"key")))))
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key(VariableKeyPrefix+mdaiCR.Name+"/"+"key").Build()).
 		Return(mock.Result(mock.ValkeyInt64(1)))
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
@@ -331,7 +331,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 		StorageType: storageType,
 		Type:        v1.VariableTypeComputed,
 		DataType:    variableType,
-		StorageKey:  "mykey",
+		Key:         "mykey",
 		SerializeAs: []v1.Serializer{varWith},
 	}
 	mdaiCR := newTestMdaiCR()
@@ -343,15 +343,15 @@ func TestEnsureVariableSynced(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	fakeValkey := mock.NewClient(ctrl)
-	expectedKey := VariableKeyPrefix + mdaiCR.Name + "/" + variable.StorageKey
+	expectedKey := VariableKeyPrefix + mdaiCR.Name + "/" + variable.Key
 
 	fakeValkey.EXPECT().Do(ctx, XaddMatcher{Type: "collector_restart"}).Return(mock.Result(mock.ValkeyString(""))).Times(1)
 
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Smembers().Key(expectedKey).Build()).
 		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("default"))))
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Scan().Cursor(0).Match(VariableKeyPrefix+mdaiCR.Name+"/"+"*").Count(100).Build()).
-		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString("key")))))
-	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key("key").Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString(VariableKeyPrefix+mdaiCR.Name+"/"+"key")))))
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key(VariableKeyPrefix+mdaiCR.Name+"/"+"key").Build()).
 		Return(mock.Result(mock.ValkeyInt64(1)))
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
@@ -426,7 +426,7 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 		Expr:           expr,
 		For:            &duration1,
 		Severity:       "critical",
-		RelevantLabels: &relevantLabels,
+		RelevantLabels: relevantLabels,
 		OnStatus:       onStatus,
 	}
 
@@ -563,8 +563,8 @@ func TestEnsureHubDeletionProcessed_WithDeletion(t *testing.T) {
 	defer ctrl.Finish()
 	fakeValkey := mock.NewClient(ctrl)
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Scan().Cursor(0).Match(VariableKeyPrefix+mdaiCR.Name+"/"+"*").Count(100).Build()).
-		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString("key")))))
-	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key("key").Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString(VariableKeyPrefix+mdaiCR.Name+"/"+"key")))))
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key(VariableKeyPrefix+mdaiCR.Name+"/"+"key").Build()).
 		Return(mock.Result(mock.ValkeyInt64(1)))
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))

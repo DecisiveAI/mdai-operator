@@ -39,3 +39,17 @@ TODO
 TODO
 ## Audit
 TODO
+
+## Variables
+```
+SET variable/mdaihub-second/any_service_alerted true
+SADD variable/mdaihub-second/service_list serviceA
+HSET variable/mdaihub-second/attribute_map send_batch_size 100 timeout 15s
+
+SET variable/mdaihub-second/default "default"
+SET  variable/mdaihub-second/filter "- severity_number < SEVERITY_NUMBER_WARN \n- IsMatch(resource.attributes[\"service.name\"], \"${env:SERVICE_LIST}\")"
+
+SET variable/mdaihub-second/severity_number 1
+HSET variable/mdaihub-second/severity_filters_by_level 1 "INFO|WARNING" 2 "INFO"
+```
+- check otel/mdaihub-second-variables config map

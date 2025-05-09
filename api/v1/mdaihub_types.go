@@ -49,31 +49,34 @@ type JoinTransformer struct {
 }
 
 type Variable struct {
-	// StorageKey The key for which this variable's managed value is assigned. Will also be used as the environment variable name for variables of type "string"
+	// Key The key for which this variable's managed value is assigned. Will also be used as the environment variable name for variables of type "string"
 	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Required
-	StorageKey string `json:"storageKey" yaml:"storageKey"`
+	Key string `json:"key" yaml:"key"`
 	// Type for the variable, defaults to "computed" if not provided
 	// +kubebuilder:validation:Required
 	// +kubebuilder:default="computed"
-	// +kubebuilder:validation:Enum:=manual;computed
+	// +kubebuilder:validation:Enum:=manual;computed;meta
 	Type VariableType `json:"type" yaml:"type"`
 	// DataType Data type for the managed variable value
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum:=string;int;set;map;boolean
+	// +kubebuilder:validation:Enum:=string;int;set;map;boolean;metaHashSet;metaPriorityList
 	DataType VariableDataType `json:"dataType" yaml:"dataType"`
 	// StorageType defaults to "mdai-valkey" if not provided
 	// +kubebuilder:default="mdai-valkey"
 	// +kubebuilder:validation:Enum:=mdai-valkey
 	StorageType VariableStorageType `json:"storageType" yaml:"storageType"`
+	// VariableRefs name references to other managed variables to be included in meta calculation. Listed variables should be of the same data type.
+	// +kubebuilder:validation:Optional
+	VariableRefs []string `json:"variableRefs,omitempty" yaml:"variableRefs,omitempty"`
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinItems=1
 	SerializeAs []Serializer `json:"serializeAs" yaml:"serializeAs"`
 }
 
 type VariableUpdate struct {
-	// VariableRef The StorageKey of the variable to be updated.
+	// VariableRef The Key of the variable to be updated.
 	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Required
@@ -124,7 +127,7 @@ type Evaluation struct {
 	Severity string `json:"severity" yaml:"severity"`
 	// RelevantLabels indicates which part(s) of the alert payload to forward to the Action.
 	// +kubebuilder:validation:Optional
-	RelevantLabels *[]string `json:"relevantLabels,omitempty" yaml:"relevantLabels,omitempty"`
+	RelevantLabels []string `json:"relevantLabels,omitempty" yaml:"relevantLabels,omitempty"`
 	// OnStatus allows the user to specify actions depending on the state of the evaluation
 	// +kubebuilder:validation:Optional
 	OnStatus *PrometheusAlertEvaluationStatus `json:"onStatus,omitempty" yaml:"onStatus,omitempty"`
@@ -243,22 +246,27 @@ type (
 const (
 	VariableSourceTypeBuiltInValkey VariableStorageType = "mdai-valkey"
 
-	VariableTypeManual   VariableType = "manual"
+	// VariableTypeManual Variable type that is managed externally by the user, not attached to any OODA loop
+	VariableTypeManual VariableType = "manual"
+	// VariableTypeComputed Variable type that is computed internally by MDAI, attached to an OODA loop
 	VariableTypeComputed VariableType = "computed"
-	VariableTypeMeta     VariableType = "meta" // meta variable disabled for now
+	// VariableTypeMeta Variable type that is derived from manual and computed variables
+	VariableTypeMeta VariableType = "meta"
 
+	// computed variable types
 	VariableDataTypeInt     VariableDataType = "int"     // internally stored in string
 	VariableDataTypeFloat   VariableDataType = "float"   // internally stored in string, disabled for now
 	VariableDataTypeBoolean VariableDataType = "boolean" // 0 or 1 as string in valkey
-	VariableDataTypeString  VariableDataType = "string"
-	VariableDataTypeSet     VariableDataType = "set" // valkey set
-	VariableDataTypeMap     VariableDataType = "map" // valkey hashes
+	// VariableDataTypeString the string variable, could be used to store yaml or any other string
+	VariableDataTypeString VariableDataType = "string"
+	VariableDataTypeSet    VariableDataType = "set" // valkey set
+	// VariableDataTypeMap implemented as hash map. Order is not guaranteed. Keys and values are strings.
+	VariableDataTypeMap VariableDataType = "map" // valkey hashes
 
-	// MetaVariableTypeHashSet LookupTable takes an input/key variable and a lookup variable, disabled for now
-	MetaVariableTypeHashSet VariableDataType = "hashSet"
-	// MetaVariableTypePriorityList takes a list of variable refs, and will evaluate to the first one that is not empty.
-	// disabled for now
-	MetaVariableTypePriorityList VariableDataType = "priorityList"
+	// MetaVariableDateTypeHashSet LookupTable takes an input/key variable and a lookup variable, disabled for now. Returns a string.
+	MetaVariableDateTypeHashSet VariableDataType = "metaHashSet"
+	// MetaVariableDataTypePriorityList takes a list of variable refs, and will evaluate to the first one that is not empty. Returns an array of strings.
+	MetaVariableDataTypePriorityList VariableDataType = "metaPriorityList"
 
 	EvaluationTypePrometheusAlert EvaluationType = "mdai/prometheus_alert"
 
