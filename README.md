@@ -64,8 +64,8 @@ kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releas
 kind load docker-image valkey-custom:1.0.0 --name mdai-operator-test
 helm install valkey oci://registry-1.docker.io/bitnamicharts/valkey --set auth.password=abc \
   --set image.registry="" \
-  --set image.repository=valkey-custom \
-  --set image.tag=1.0.0 \
+  --set image.repository=public.ecr.aws/decisiveai/valkey \
+  --set image.tag=latest \
   -f test/test-samples/valkey-values.yaml
 helm install prometheus prometheus-community/kube-prometheus-stack
 helm upgrade prometheus prometheus-community/kube-prometheus-stack -f test/test-samples/prometheus-custom-values.yaml
