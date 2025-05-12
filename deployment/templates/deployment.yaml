@@ -42,6 +42,8 @@ spec:
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: {{ quote .Values.controllerManager.manager.env.otelExporterOtlpEndpoint
             }}
+        - name: OTEL_SDK_DISABLED
+          value: {{ quote .Values.controllerManager.manager.env.otelSdkDisabled }}
         - name: USE_CONSOLE_LOG_ENCODER
           value: {{ quote .Values.controllerManager.manager.env.useConsoleLogEncoder }}
         - name: KUBERNETES_CLUSTER_DOMAIN

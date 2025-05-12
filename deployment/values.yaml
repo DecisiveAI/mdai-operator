@@ -13,6 +13,7 @@ controllerManager:
         - ALL
     env:
       otelExporterOtlpEndpoint: http://mdai-collector-service.mdai.svc.cluster.local:4318
+      otelSdkDisabled: "false"
       useConsoleLogEncoder: "false"
       valkeyAuditStreamExpiryMs: "2592000000"
     image:

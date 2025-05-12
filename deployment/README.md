@@ -16,6 +16,7 @@ MDAI Operator Helm Chart
 | controllerManager.manager.containerSecurityContext.allowPrivilegeEscalation | bool | `false` |  |
 | controllerManager.manager.containerSecurityContext.capabilities.drop[0] | string | `"ALL"` |  |
 | controllerManager.manager.env.otelExporterOtlpEndpoint | string | `"http://mdai-collector-service.mdai.svc.cluster.local:4318"` |  |
+| controllerManager.manager.env.otelSdkDisabled | string | `"false"` |  |
 | controllerManager.manager.env.useConsoleLogEncoder | string | `"false"` |  |
 | controllerManager.manager.env.valkeyAuditStreamExpiryMs | string | `"2592000000"` |  |
 | controllerManager.manager.image.repository | string | `"public.ecr.aws/p3k6k6h3/mdai-operator"` |  |
