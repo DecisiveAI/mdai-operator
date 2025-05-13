@@ -143,7 +143,9 @@ func main() {
 	}
 	otlpEndpointStr := os.Getenv(otelExporterOtlpEndpointEnvVar)
 	if otelSdkEnabledStr == "" && otlpEndpointStr == "" {
-		logger.Info("WARNING: No OTLP endpoint is defined, but OTEL SDK is enabled. Please set either " + otelSdkDisabledEnvVar + " or " + otelExporterOtlpEndpointEnvVar + " environment variable. You will receive 'OTEL SDK error' logs until this is resolved.")
+		logger.Info("WARNING: No OTLP endpoint is defined, but OTEL SDK is enabled." +
+			" Please set either " + otelSdkDisabledEnvVar + " or " + otelExporterOtlpEndpointEnvVar +
+			" environment variable. You will receive 'OTEL SDK error' logs until this is resolved.")
 	}
 	otelLogger := attachOtelLogger(logger)
 	ctrl.SetLogger(otelLogger)
