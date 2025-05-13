@@ -48,10 +48,13 @@ type JoinTransformer struct {
 	Delimiter string `json:"delimiter" yaml:"delimiter"`
 }
 
+// Variable defines mdai variable
+// +kubebuilder:validation:XValidation:rule="self.type == 'meta' ? (self.dataType == 'metaHashSet' || self.dataType == 'metaPriorityList') : (self.dataType == 'string' || self.dataType == 'int' || self.dataType == 'boolean' || self.dataType == 'set' || self.dataType == 'map')",messageExpression="\"variable '\" + self.key + \"': dataType is not allowed for type specified\"",reason="FieldValueInvalid"
 type Variable struct {
 	// Key The key for which this variable's managed value is assigned. Will also be used as the environment variable name for variables of type "string"
 	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Required
 	Key string `json:"key" yaml:"key"`
 	// Type for the variable, defaults to "computed" if not provided
@@ -184,7 +187,7 @@ type Config struct {
 
 // MdaiHubSpec defines the desired state of MdaiHub.
 type MdaiHubSpec struct {
-	// kubebuilder:validation:Optional
+	// +kubebuilder:validation:Optional
 	Config            *Config             `json:"config,omitempty" yaml:"config,omitempty"`
 	Observers         *[]Observer         `json:"observers,omitempty" yaml:"observers,omitempty"`
 	ObserverResources *[]ObserverResource `json:"observerResources,omitempty" yaml:"observerResources,omitempty"`
@@ -263,8 +266,8 @@ const (
 	// VariableDataTypeMap implemented as hash map. Order is not guaranteed. Keys and values are strings.
 	VariableDataTypeMap VariableDataType = "map" // valkey hashes
 
-	// MetaVariableDateTypeHashSet LookupTable takes an input/key variable and a lookup variable, disabled for now. Returns a string.
-	MetaVariableDateTypeHashSet VariableDataType = "metaHashSet"
+	// MetaVariableDataTypeHashSet LookupTable takes an input/key variable and a lookup variable. Returns a string.
+	MetaVariableDataTypeHashSet VariableDataType = "metaHashSet"
 	// MetaVariableDataTypePriorityList takes a list of variable refs, and will evaluate to the first one that is not empty. Returns an array of strings.
 	MetaVariableDataTypePriorityList VariableDataType = "metaPriorityList"
 

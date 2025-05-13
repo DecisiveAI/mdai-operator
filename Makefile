@@ -266,6 +266,10 @@ helm-update: manifests kustomize helmify helm-docs  helm-values-schema-json-plug
 .PHONY: local-deploy
 local-deploy: manifests install
 	go mod vendor
+	make manifests
+	make generate
+	make lint
+	make helm-update
 	make docker-build IMG=mdai-operator:${VERSION}
 	kind load docker-image mdai-operator:${VERSION} --name mdai-operator-test
 	make deploy IMG=mdai-operator:${VERSION}
