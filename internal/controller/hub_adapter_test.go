@@ -272,7 +272,7 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	envMap := map[string]string{"VAR": "value"}
-	_, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, "default")
+	_, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, false, "default")
 	if err != nil {
 		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
 	}
@@ -284,6 +284,31 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 		t.Fatalf("Failed to get ConfigMap %q: %v", cmName, err)
 	}
 	if cm.Data["VAR"] != "value" {
+		t.Errorf("Expected env var value %q, got %q", "value", cm.Data["VAR"])
+	}
+}
+
+func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
+	ctx := context.TODO()
+	scheme := createTestScheme()
+	mdaiCR := newTestMdaiCR()
+	fakeClient := newFakeClientForCR(mdaiCR, scheme)
+	recorder := record.NewFakeRecorder(10)
+
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
+	envMap := map[string]string{"VAR": "string"}
+	_, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, true, "default")
+	if err != nil {
+		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
+	}
+
+	cm := &v1core.ConfigMap{}
+	cmName := mdaiCR.Name + manualEnvConfigMapNamePostfix
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: "default"}, cm)
+	if err != nil {
+		t.Fatalf("Failed to get ConfigMap %q: %v", cmName, err)
+	}
+	if cm.Data["VAR"] != "string" {
 		t.Errorf("Expected env var value %q, got %q", "value", cm.Data["VAR"])
 	}
 }
@@ -327,15 +352,22 @@ func TestEnsureVariableSynced(t *testing.T) {
 			},
 		},
 	}
-	variable := v1.Variable{
+	computedVariable := v1.Variable{
 		StorageType: storageType,
 		Type:        v1.VariableTypeComputed,
 		DataType:    variableType,
 		Key:         "mykey",
 		SerializeAs: []v1.Serializer{varWith},
 	}
+	manualVariable := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeManual,
+		DataType:    variableType,
+		Key:         "mymanualkey",
+		SerializeAs: []v1.Serializer{varWith},
+	}
 	mdaiCR := newTestMdaiCR()
-	mdaiCR.Spec.Variables = &[]v1.Variable{variable}
+	mdaiCR.Spec.Variables = &[]v1.Variable{computedVariable, manualVariable}
 
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
@@ -343,16 +375,24 @@ func TestEnsureVariableSynced(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	fakeValkey := mock.NewClient(ctrl)
-	expectedKey := VariableKeyPrefix + mdaiCR.Name + "/" + variable.Key
+	expectedComputedKey := VariableKeyPrefix + mdaiCR.Name + "/" + computedVariable.Key
+	expectedManualKey := VariableKeyPrefix + mdaiCR.Name + "/" + manualVariable.Key
 
 	fakeValkey.EXPECT().Do(ctx, XaddMatcher{Type: "collector_restart"}).Return(mock.Result(mock.ValkeyString(""))).Times(1)
 
-	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Smembers().Key(expectedKey).Build()).
-		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("default"))))
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Smembers().Key(expectedComputedKey).Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("default")))).AnyTimes()
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Scan().Cursor(0).Match(VariableKeyPrefix+mdaiCR.Name+"/"+"*").Count(100).Build()).
-		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString(VariableKeyPrefix+mdaiCR.Name+"/"+"key")))))
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString(VariableKeyPrefix+mdaiCR.Name+"/"+"key"))))).AnyTimes()
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key(VariableKeyPrefix+mdaiCR.Name+"/"+"key").Build()).
-		Return(mock.Result(mock.ValkeyInt64(1)))
+		Return(mock.Result(mock.ValkeyInt64(1))).AnyTimes()
+
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Smembers().Key(expectedManualKey).Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("default")))).AnyTimes()
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Scan().Cursor(0).Match(VariableKeyPrefix+mdaiCR.Name+"/"+"*").Count(100).Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString(VariableKeyPrefix+mdaiCR.Name+"/"+"key"))))).AnyTimes()
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key(VariableKeyPrefix+mdaiCR.Name+"/"+"key").Build()).
+		Return(mock.Result(mock.ValkeyInt64(1))).AnyTimes()
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
 
@@ -370,6 +410,15 @@ func TestEnsureVariableSynced(t *testing.T) {
 		t.Fatalf("failed to get env ConfigMap %q: %v", envCMName, err)
 	}
 	if v, ok := envCM.Data["MY_ENV"]; !ok || v != "default" {
+		t.Errorf("expected env var MY_ENV to be 'default', got %q", v)
+	}
+
+	envManualCMName := mdaiCR.Name + envConfigMapNamePostfix
+	envManualCM := &v1core.ConfigMap{}
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: envManualCMName, Namespace: "default"}, envManualCM); err != nil {
+		t.Fatalf("failed to get env ConfigMap %q: %v", envManualCMName, err)
+	}
+	if v, ok := envManualCM.Data["MY_ENV"]; !ok || v != "default" {
 		t.Errorf("expected env var MY_ENV to be 'default', got %q", v)
 	}
 

@@ -32,7 +32,8 @@ import (
 )
 
 const (
-	envConfigMapNamePostfix = "-variables"
+	envConfigMapNamePostfix       = "-variables"
+	manualEnvConfigMapNamePostfix = "-manual-variables"
 
 	requeueTime = time.Second * 10
 
@@ -316,6 +317,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	}
 
 	envMap := make(map[string]string)
+	manualEnvMap := make(map[string]string)
 	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.logger, c.mdaiCR.Name)
 	valkeyKeysToKeep := map[string]struct{}{}
 	for _, variable := range *variables {
@@ -326,7 +328,10 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 			valkeyKeysToKeep[key] = struct{}{}
 			switch variable.Type {
 			// from the operator's perspective, computed and manual are the same, they are differently processed by the handler
-			case mdaiv1.VariableTypeComputed, mdaiv1.VariableTypeManual:
+			case mdaiv1.VariableTypeManual:
+				manualEnvMap[key] = string(variable.DataType)
+				fallthrough
+			case mdaiv1.VariableTypeComputed:
 				switch variable.DataType {
 				case mdaiv1.VariableDataTypeSet:
 					valueAsSlice, err := dataAdapter.GetSetAsStringSlice(ctx, key)
@@ -406,7 +411,13 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 
 	namespaceToRestart := make(map[string]struct{})
 	for namespace := range namespaces {
-		operationResult, err := c.createOrUpdateEnvConfigMap(ctx, envMap, namespace)
+		// computed variables
+		operationResult, err := c.createOrUpdateEnvConfigMap(ctx, envMap, false, namespace)
+		if err != nil {
+			return OperationResult{}, err
+		}
+		// manual variables
+		operationResult, err = c.createOrUpdateEnvConfigMap(ctx, manualEnvMap, true, namespace)
 		if err != nil {
 			return OperationResult{}, err
 		}
@@ -476,8 +487,13 @@ func (c HubAdapter) applySetTransformation(variable mdaiv1.Variable, envMap map[
 	}
 }
 
-func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, namespace string) (controllerutil.OperationResult, error) {
-	envConfigMapName := c.mdaiCR.Name + envConfigMapNamePostfix
+func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, manual bool, namespace string) (controllerutil.OperationResult, error) {
+	var envConfigMapName string
+	if manual {
+		envConfigMapName = c.mdaiCR.Name + manualEnvConfigMapNamePostfix
+	} else {
+		envConfigMapName = c.mdaiCR.Name + envConfigMapNamePostfix
+	}
 	desiredConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      envConfigMapName,
