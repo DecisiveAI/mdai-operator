@@ -412,16 +412,16 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	namespaceToRestart := make(map[string]struct{})
 	for namespace := range namespaces {
 		// computed variables
-		operationResult, err := c.createOrUpdateEnvConfigMap(ctx, envMap, false, namespace)
+		operationResultComputed, err := c.createOrUpdateEnvConfigMap(ctx, envMap, false, namespace)
 		if err != nil {
 			return OperationResult{}, err
 		}
 		// manual variables
-		operationResult, err = c.createOrUpdateEnvConfigMap(ctx, manualEnvMap, true, namespace)
+		operationResultManual, err := c.createOrUpdateEnvConfigMap(ctx, manualEnvMap, true, namespace)
 		if err != nil {
 			return OperationResult{}, err
 		}
-		if operationResult == controllerutil.OperationResultCreated || operationResult == controllerutil.OperationResultUpdated {
+		if operationResultComputed == controllerutil.OperationResultCreated || operationResultComputed == controllerutil.OperationResultUpdated || operationResultManual == controllerutil.OperationResultCreated || operationResultManual == controllerutil.OperationResultUpdated {
 			namespaceToRestart[namespace] = struct{}{}
 		}
 	}
