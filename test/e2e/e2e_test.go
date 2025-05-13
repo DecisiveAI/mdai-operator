@@ -400,6 +400,10 @@ var _ = Describe("Manager", Ordered, func() {
 			By("verifying the config map content for variables defaults")
 			verifyConfigMap := func(g Gomega) {
 				data := getVariablesFromMap(g)
+
+				b, _ := json.MarshalIndent(data, "", "  ")
+				fmt.Printf(">>> variables:\n%s", b)
+
 				g.Expect(len(data)).To(HaveLen(6))
 				g.Expect(data["ATTRIBUTES"]).To(Equal("{}\n"))
 				g.Expect(data["SEVERITY_FILTERS_BY_LEVEL"]).To(Equal("{}\n"))
