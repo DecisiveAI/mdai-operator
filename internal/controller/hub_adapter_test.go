@@ -381,18 +381,14 @@ func TestEnsureVariableSynced(t *testing.T) {
 	fakeValkey.EXPECT().Do(ctx, XaddMatcher{Type: "collector_restart"}).Return(mock.Result(mock.ValkeyString(""))).Times(1)
 
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Smembers().Key(expectedComputedKey).Build()).
-		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("default")))).AnyTimes()
-	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Scan().Cursor(0).Match(VariableKeyPrefix+mdaiCR.Name+"/"+"*").Count(100).Build()).
-		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString(VariableKeyPrefix+mdaiCR.Name+"/"+"key"))))).AnyTimes()
-	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key(VariableKeyPrefix+mdaiCR.Name+"/"+"key").Build()).
-		Return(mock.Result(mock.ValkeyInt64(1))).AnyTimes()
-
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("default"))))
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Smembers().Key(expectedManualKey).Build()).
-		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("default")))).AnyTimes()
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("default"))))
+
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Scan().Cursor(0).Match(VariableKeyPrefix+mdaiCR.Name+"/"+"*").Count(100).Build()).
-		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString(VariableKeyPrefix+mdaiCR.Name+"/"+"key"))))).AnyTimes()
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString(VariableKeyPrefix+mdaiCR.Name+"/"+"key")))))
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key(VariableKeyPrefix+mdaiCR.Name+"/"+"key").Build()).
-		Return(mock.Result(mock.ValkeyInt64(1))).AnyTimes()
+		Return(mock.Result(mock.ValkeyInt64(1)))
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
 
@@ -410,15 +406,15 @@ func TestEnsureVariableSynced(t *testing.T) {
 		t.Fatalf("failed to get env ConfigMap %q: %v", envCMName, err)
 	}
 	if v, ok := envCM.Data["MY_ENV"]; !ok || v != "default" {
-		t.Errorf("expected env var MY_ENV to be 'default', got %q", v)
+		t.Errorf("expected env var MY_ENV to be 'set', got %q", v)
 	}
 
-	envManualCMName := mdaiCR.Name + envConfigMapNamePostfix
+	envManualCMName := mdaiCR.Name + manualEnvConfigMapNamePostfix
 	envManualCM := &v1core.ConfigMap{}
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: envManualCMName, Namespace: "default"}, envManualCM); err != nil {
 		t.Fatalf("failed to get env ConfigMap %q: %v", envManualCMName, err)
 	}
-	if v, ok := envManualCM.Data["MY_ENV"]; !ok || v != "default" {
+	if v, ok := envManualCM.Data["mymanualkey"]; !ok || v != "set" {
 		t.Errorf("expected env var MY_ENV to be 'default', got %q", v)
 	}
 
