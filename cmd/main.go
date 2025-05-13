@@ -51,9 +51,10 @@ import (
 )
 
 const (
-	enableWebhooksEnvVar       = "ENABLE_WEBHOOKS"
-	useConsoleLogEncoderEnvVar = "USE_CONSOLE_LOG_ENCODER"
-	otelSdkDisabledEnvVar      = "OTEL_SDK_DISABLED"
+	enableWebhooksEnvVar           = "ENABLE_WEBHOOKS"
+	useConsoleLogEncoderEnvVar     = "USE_CONSOLE_LOG_ENCODER"
+	otelSdkDisabledEnvVar          = "OTEL_SDK_DISABLED"
+	otelExporterOtlpEndpointEnvVar = "OTEL_EXPORTER_OTLP_ENDPOINT"
 )
 
 var (
@@ -99,7 +100,8 @@ func main() {
 	ctx := context.Background()
 
 	// Set up OpenTelemetry.
-	otelSdkEnabled := os.Getenv(otelSdkDisabledEnvVar) != "true"
+	otelSdkEnabledStr := os.Getenv(otelSdkDisabledEnvVar)
+	otelSdkEnabled := otelSdkEnabledStr != "true"
 	otelShutdown, err := setupOTelSDK(ctx, otelSdkEnabled)
 	if err != nil {
 		setupLog.Error(err, "Error setting up OpenTelemetry SDK. Set "+otelSdkDisabledEnvVar+" to \"true\" to bypass this.")
@@ -138,6 +140,10 @@ func main() {
 	logger := ctrlzap.New(ctrlzap.UseFlagOptions(&zapOpts))
 	if !otelSdkEnabled {
 		logger.Info("OTEL SDK has been disabled with " + otelSdkDisabledEnvVar + " environment variable")
+	}
+	otlpEndpointStr := os.Getenv(otelExporterOtlpEndpointEnvVar)
+	if otelSdkEnabledStr == "" && otlpEndpointStr == "" {
+		logger.Info("WARNING: No OTLP endpoint is defined, but OTEL SDK is enabled. Please set either " + otelSdkDisabledEnvVar + " or " + otelExporterOtlpEndpointEnvVar + " environment variable. You will receive 'OTEL SDK error' logs until this is resolved.")
 	}
 	otelLogger := attachOtelLogger(logger)
 	ctrl.SetLogger(otelLogger)
