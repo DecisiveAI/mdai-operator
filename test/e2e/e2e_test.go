@@ -400,11 +400,7 @@ var _ = Describe("Manager", Ordered, func() {
 			By("verifying the config map content for variables defaults")
 			verifyConfigMap := func(g Gomega) {
 				data := getVariablesFromMap(g)
-
-				b, _ := json.MarshalIndent(data, "", "  ")
-				fmt.Printf(">>> variables:\n%s", b)
-
-				g.Expect(len(data)).To(HaveLen(6))
+				g.Expect(data).To(HaveLen(6))
 				g.Expect(data["ATTRIBUTES"]).To(Equal("{}\n"))
 				g.Expect(data["SEVERITY_FILTERS_BY_LEVEL"]).To(Equal("{}\n"))
 				g.Expect(data["SERVICE_LIST_2_CSV"]).To(Equal(""))
@@ -628,7 +624,7 @@ var _ = Describe("Manager", Ordered, func() {
 			By("validating that the config map has the updated variable value")
 			verifyConfigMap := func(g Gomega) {
 				data := getVariablesFromMap(g)
-				g.Expect(len(data)).To(HaveLen(12))
+				g.Expect(data).To(HaveLen(12))
 				g.Expect(data["ATTRIBUTES"]).To(Equal("send_batch_size: 100\ntimeout: 15s\n"))
 				g.Expect(data["SERVICE_ALERTED"]).To(Equal("true"))
 				g.Expect(data["SERVICE_HASH_SET"]).To(Equal("INFO|WARNING"))
