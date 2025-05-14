@@ -303,8 +303,7 @@ func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
 
 	cm := &v1core.ConfigMap{}
 	cmName := mdaiCR.Name + manualEnvConfigMapNamePostfix
-	err = fakeClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: "default"}, cm)
-	if err != nil {
+	if err = fakeClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: "default"}, cm); err != nil {
 		t.Fatalf("Failed to get ConfigMap %q: %v", cmName, err)
 	}
 	if cm.Data["VAR"] != "string" {
