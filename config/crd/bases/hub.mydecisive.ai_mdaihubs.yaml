@@ -375,10 +375,9 @@ spec:
                   - messageExpression: '"variable ''" + self.key + "'': dataType is
                       not allowed for type specified"'
                     reason: FieldValueInvalid
-                    rule: 'self.type == ''meta'' ? (self.dataType == ''metaHashSet''
-                      || self.dataType == ''metaPriorityList'') : (self.dataType ==
-                      ''string'' || self.dataType == ''int'' || self.dataType == ''boolean''
-                      || self.dataType == ''set'' || self.dataType == ''map'')'
+                    rule: 'self.type == ''meta'' ? self.dataType in [''metaHashSet'',
+                      ''metaPriorityList''] : self.dataType in [''string'', ''int'',
+                      ''boolean'', ''set'', ''map'']'
                 type: array
             type: object
           status:

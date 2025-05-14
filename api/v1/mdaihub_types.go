@@ -49,7 +49,7 @@ type JoinTransformer struct {
 }
 
 // Variable defines mdai variable
-// +kubebuilder:validation:XValidation:rule="self.type == 'meta' ? (self.dataType == 'metaHashSet' || self.dataType == 'metaPriorityList') : (self.dataType == 'string' || self.dataType == 'int' || self.dataType == 'boolean' || self.dataType == 'set' || self.dataType == 'map')",messageExpression="\"variable '\" + self.key + \"': dataType is not allowed for type specified\"",reason="FieldValueInvalid"
+// +kubebuilder:validation:XValidation:rule="self.type == 'meta' ? self.dataType in ['metaHashSet', 'metaPriorityList'] : self.dataType in ['string', 'int', 'boolean', 'set', 'map']",messageExpression="\"variable '\" + self.key + \"': dataType is not allowed for type specified\"",reason="FieldValueInvalid"
 type Variable struct {
 	// Key The key for which this variable's managed value is assigned. Will also be used as the environment variable name for variables of type "string"
 	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"

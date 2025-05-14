@@ -119,14 +119,13 @@ func (v *MdaiHubCustomValidator) ValidateUpdate(_ context.Context, oldObj, newOb
 			}
 		}
 
-		if oldMdaihub.Spec.Variables != nil && mdaihub.Spec.Variables != nil {
-			for _, newVariable := range *mdaihub.Spec.Variables {
-				if newVariable.Type == mdaiv1.VariableTypeMeta {
-					if oldVariable, found := oldVariablesMap[newVariable.Key]; found {
-						if !reflect.DeepEqual(oldVariable.VariableRefs, newVariable.VariableRefs) {
-							return nil, errors.New("meta variable references must not change, delete and recreate the variable to update references")
-						}
-					}
+		for _, newVariable := range *mdaihub.Spec.Variables {
+			if newVariable.Type != mdaiv1.VariableTypeMeta {
+				continue
+			}
+			if oldVariable, found := oldVariablesMap[newVariable.Key]; found {
+				if !reflect.DeepEqual(oldVariable.VariableRefs, newVariable.VariableRefs) {
+					return nil, errors.New("meta variable references must not change, delete and recreate the variable to update references")
 				}
 			}
 		}
@@ -187,7 +186,7 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 		}
 	}
 
-	return  v.validateObserversAndObserverResources(mdaihub, warnings)
+	return v.validateObserversAndObserverResources(mdaihub, warnings)
 }
 
 func (v *MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub, warnings admission.Warnings) (map[string]struct{}, admission.Warnings, error) {
