@@ -278,8 +278,7 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 
 	cm := &v1core.ConfigMap{}
 	cmName := mdaiCR.Name + envConfigMapNamePostfix
-	err = fakeClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: "default"}, cm)
-	if err != nil {
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: "default"}, cm); err != nil {
 		t.Fatalf("Failed to get ConfigMap %q: %v", cmName, err)
 	}
 	if cm.Data["VAR"] != "value" {
@@ -288,7 +287,7 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 }
 
 func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	scheme := createTestScheme()
 	mdaiCR := newTestMdaiCR()
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
@@ -296,13 +295,13 @@ func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	envMap := map[string]string{"VAR": "string"}
-	if_, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, true, "default"); err != nil {
+	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, true, "default"); err != nil {
 		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
 	}
 
 	cm := &v1core.ConfigMap{}
 	cmName := mdaiCR.Name + manualEnvConfigMapNamePostfix
-	if err = fakeClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: "default"}, cm); err != nil {
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: "default"}, cm); err != nil {
 		t.Fatalf("Failed to get ConfigMap %q: %v", cmName, err)
 	}
 	if cm.Data["VAR"] != "string" {
@@ -335,7 +334,7 @@ func TestBuildCollectorConfig(t *testing.T) {
 }
 
 func TestEnsureVariableSynced(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	scheme := createTestScheme()
 	storageType := v1.VariableSourceTypeBuiltInValkey
 	variableType := v1.VariableDataTypeSet
