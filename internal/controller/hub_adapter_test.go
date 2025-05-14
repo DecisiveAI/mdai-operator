@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/valkey-io/valkey-go"
 	"k8s.io/utils/ptr"
 
