@@ -287,7 +287,7 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 }
 
 func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.TODO()
 	scheme := createTestScheme()
 	mdaiCR := newTestMdaiCR()
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
@@ -334,7 +334,7 @@ func TestBuildCollectorConfig(t *testing.T) {
 }
 
 func TestEnsureVariableSynced(t *testing.T) {
-	ctx := t.Context()
+	ctx := context.TODO()
 	scheme := createTestScheme()
 	storageType := v1.VariableSourceTypeBuiltInValkey
 	variableType := v1.VariableDataTypeSet
