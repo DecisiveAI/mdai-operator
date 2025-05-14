@@ -417,11 +417,11 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 			return OperationResult{}, err
 		}
 		// manual variables
-		operationResultManual, err := c.createOrUpdateEnvConfigMap(ctx, manualEnvMap, true, namespace)
+		_, err = c.createOrUpdateEnvConfigMap(ctx, manualEnvMap, true, namespace)
 		if err != nil {
 			return OperationResult{}, err
 		}
-		if operationResultComputed == controllerutil.OperationResultCreated || operationResultComputed == controllerutil.OperationResultUpdated || operationResultManual == controllerutil.OperationResultCreated || operationResultManual == controllerutil.OperationResultUpdated {
+		if operationResultComputed == controllerutil.OperationResultCreated || operationResultComputed == controllerutil.OperationResultUpdated {
 			namespaceToRestart[namespace] = struct{}{}
 		}
 	}
