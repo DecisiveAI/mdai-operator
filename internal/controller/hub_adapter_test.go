@@ -273,18 +273,39 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	envMap := map[string]string{"VAR": "value"}
-	_, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, "default")
-	if err != nil {
+	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, false, "default"); err != nil {
 		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
 	}
 
 	cm := &v1core.ConfigMap{}
 	cmName := mdaiCR.Name + envConfigMapNamePostfix
-	err = fakeClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: "default"}, cm)
-	if err != nil {
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: "default"}, cm); err != nil {
 		t.Fatalf("Failed to get ConfigMap %q: %v", cmName, err)
 	}
 	if cm.Data["VAR"] != "value" {
+		t.Errorf("Expected env var value %q, got %q", "value", cm.Data["VAR"])
+	}
+}
+
+func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
+	ctx := context.TODO()
+	scheme := createTestScheme()
+	mdaiCR := newTestMdaiCR()
+	fakeClient := newFakeClientForCR(mdaiCR, scheme)
+	recorder := record.NewFakeRecorder(10)
+
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
+	envMap := map[string]string{"VAR": "string"}
+	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, true, "default"); err != nil {
+		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
+	}
+
+	cm := &v1core.ConfigMap{}
+	cmName := mdaiCR.Name + manualEnvConfigMapNamePostfix
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: "default"}, cm); err != nil {
+		t.Fatalf("Failed to get ConfigMap %q: %v", cmName, err)
+	}
+	if cm.Data["VAR"] != "string" {
 		t.Errorf("Expected env var value %q, got %q", "value", cm.Data["VAR"])
 	}
 }
@@ -499,6 +520,96 @@ func TestEnsureVariableSynced(t *testing.T) {
 	assert.Equal(t, envCM.Data["MY_ENV_MAP"], "field1: value1\nfield2: value1\n")
 	assert.Equal(t, envCM.Data["MY_ENV_PL"], "service1,service2")
 	assert.Equal(t, envCM.Data["MY_ENV_HS"], "INFO|WARNING")
+
+	updatedCollector := &v1beta1.OpenTelemetryCollector{}
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: "collector1", Namespace: "default"}, updatedCollector); err != nil {
+		t.Fatalf("failed to get updated collector: %v", err)
+	}
+	restartAnnotation := "kubectl.kubernetes.io/restartedAt"
+	if ann, ok := updatedCollector.Annotations[restartAnnotation]; !ok || strings.TrimSpace(ann) == "" {
+		t.Errorf("expected collector to have restart annotation %q set, got: %v", restartAnnotation, updatedCollector.Annotations)
+	}
+}
+func TestEnsureManualAndComputedVariableSynced(t *testing.T) {
+	ctx := context.TODO()
+	scheme := createTestScheme()
+	storageType := v1.VariableSourceTypeBuiltInValkey
+	variableType := v1.VariableDataTypeSet
+	varWith := v1.Serializer{
+		Name: "MY_ENV",
+		Transformers: []v1.VariableTransformer{
+			{Type: v1.TransformerTypeJoin,
+				Join: &v1.JoinTransformer{
+					Delimiter: ",",
+				},
+			},
+		},
+	}
+	computedVariable := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeComputed,
+		DataType:    variableType,
+		Key:         "mykey",
+		SerializeAs: []v1.Serializer{varWith},
+	}
+	manualVariable := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeManual,
+		DataType:    variableType,
+		Key:         "mymanualkey",
+		SerializeAs: []v1.Serializer{varWith},
+	}
+	mdaiCR := newTestMdaiCR()
+	mdaiCR.Spec.Variables = &[]v1.Variable{computedVariable, manualVariable}
+
+	fakeClient := newFakeClientForCR(mdaiCR, scheme)
+	recorder := record.NewFakeRecorder(10)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	fakeValkey := mock.NewClient(ctrl)
+	expectedComputedKey := VariableKeyPrefix + mdaiCR.Name + "/" + computedVariable.Key
+	expectedManualKey := VariableKeyPrefix + mdaiCR.Name + "/" + manualVariable.Key
+
+	fakeValkey.EXPECT().Do(ctx, XaddMatcher{Type: "collector_restart"}).Return(mock.Result(mock.ValkeyString(""))).Times(1)
+
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Smembers().Key(expectedComputedKey).Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("default"))))
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Smembers().Key(expectedManualKey).Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("default"))))
+
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Scan().Cursor(0).Match(VariableKeyPrefix+mdaiCR.Name+"/"+"*").Count(100).Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString(VariableKeyPrefix+mdaiCR.Name+"/"+"key")))))
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key(VariableKeyPrefix+mdaiCR.Name+"/"+"key").Build()).
+		Return(mock.Result(mock.ValkeyInt64(1)))
+
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
+
+	opResult, err := adapter.ensureVariableSynced(ctx)
+	if err != nil {
+		t.Fatalf("ensureVariableSynced returned error: %v", err)
+	}
+	if opResult != ContinueOperationResult() {
+		t.Errorf("expected ContinueProcessing, got: %v", opResult)
+	}
+
+	envCMName := mdaiCR.Name + envConfigMapNamePostfix
+	envCM := &v1core.ConfigMap{}
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: envCMName, Namespace: "default"}, envCM); err != nil {
+		t.Fatalf("failed to get env ConfigMap %q: %v", envCMName, err)
+	}
+	if v, ok := envCM.Data["MY_ENV"]; !ok || v != "default" {
+		t.Errorf("expected env var MY_ENV to be 'set', got %q", v)
+	}
+
+	envManualCMName := mdaiCR.Name + manualEnvConfigMapNamePostfix
+	envManualCM := &v1core.ConfigMap{}
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: envManualCMName, Namespace: "default"}, envManualCM); err != nil {
+		t.Fatalf("failed to get env ConfigMap %q: %v", envManualCMName, err)
+	}
+	if v, ok := envManualCM.Data["mymanualkey"]; !ok || v != "set" {
+		t.Errorf("expected env var MY_ENV to be 'default', got %q", v)
+	}
 
 	updatedCollector := &v1beta1.OpenTelemetryCollector{}
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: "collector1", Namespace: "default"}, updatedCollector); err != nil {

@@ -396,19 +396,31 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should create the config map for variables", func() {
 			By("verifying the config map for variables exists")
 			configMapExists("mdaihub-sample-variables", otelNamespace)
+			configMapExists("mdaihub-sample-manual-variables", otelNamespace)
 
 			By("verifying the config map content for variables defaults")
 			verifyConfigMap := func(g Gomega) {
-				data := getVariablesFromMap(g)
-				g.Expect(data).To(HaveLen(6))
+				data := getVariablesFromMap(g, "mdaihub-sample-variables")
+				g.Expect(data).To(HaveLen(8))
 				g.Expect(data["ATTRIBUTES"]).To(Equal("{}\n"))
 				g.Expect(data["SEVERITY_FILTERS_BY_LEVEL"]).To(Equal("{}\n"))
 				g.Expect(data["SERVICE_LIST_2_CSV"]).To(Equal(""))
 				g.Expect(data["SERVICE_LIST_2_REGEX"]).To(Equal(""))
 				g.Expect(data["SERVICE_LIST_CSV"]).To(Equal(""))
 				g.Expect(data["SERVICE_LIST_REGEX"]).To(Equal(""))
+				g.Expect(data["SERVICE_LIST_CSV_MANUAL"]).To(Equal(""))
+				g.Expect(data["SERVICE_LIST_REGEX_MANUAL"]).To(Equal(""))
 			}
 			Eventually(verifyConfigMap).Should(Succeed())
+
+			By("verifying the config map content for manual variables")
+			verifyConfigMapManual := func(g Gomega) {
+				data := getVariablesFromMap(g, "mdaihub-sample-manual-variables")
+				g.Expect(data).To(HaveLen(2))
+				g.Expect(data["manual_filter"]).To(Equal("string"))
+				g.Expect(data["service_list_manual"]).To(Equal("set"))
+			}
+			Eventually(verifyConfigMapManual).Should(Succeed())
 		})
 
 		It("can create the config map for watcher", func() {
@@ -623,8 +635,8 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("validating that the config map has the updated variable value")
 			verifyConfigMap := func(g Gomega) {
-				data := getVariablesFromMap(g)
-				g.Expect(data).To(HaveLen(12))
+				data := getVariablesFromMap(g, "mdaihub-sample-variables")
+				g.Expect(data).To(HaveLen(14))
 				g.Expect(data["ATTRIBUTES"]).To(Equal("send_batch_size: 100\ntimeout: 15s\n"))
 				g.Expect(data["SERVICE_ALERTED"]).To(Equal("true"))
 				g.Expect(data["SERVICE_HASH_SET"]).To(Equal("INFO|WARNING"))
@@ -638,6 +650,8 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(data["SERVICE_PRIORITY"]).To(Equal("default"))
 				g.Expect(data["SEVERITY_FILTERS_BY_LEVEL"]).To(Equal("\"1\": INFO|WARNING\n\"2\": INFO\n"))
 				g.Expect(data["SEVERITY_NUMBER"]).To(Equal("1"))
+				g.Expect(data["SERVICE_LIST_REGEX_MANUAL"]).To(Equal(""))
+				g.Expect(data["SERVICE_LIST_CSV_MANUAL"]).To(Equal(""))
 
 			}
 			Eventually(verifyConfigMap).Should(Succeed())
@@ -715,8 +729,8 @@ var _ = Describe("Manager", Ordered, func() {
 	})
 })
 
-func getVariablesFromMap(g Gomega) map[string]any {
-	cmd := exec.Command("kubectl", "get", "configmap", "mdaihub-sample-variables",
+func getVariablesFromMap(g Gomega, cmName string) map[string]any {
+	cmd := exec.Command("kubectl", "get", "configmap", cmName,
 		"-n", otelNamespace, "-o", "json")
 	out, err := utils.Run(cmd)
 	g.Expect(err).NotTo(HaveOccurred())
