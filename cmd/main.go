@@ -104,7 +104,7 @@ func main() {
 	otelSdkEnabled := otelSdkEnabledStr != "true"
 	otelShutdown, err := setupOTelSDK(ctx, otelSdkEnabled)
 	if err != nil {
-		setupLog.Error(err, "Error setting up OpenTelemetry SDK. Set "+otelSdkDisabledEnvVar+" to \"true\" to bypass this.")
+		setupLog.Error(err, "Error setting up OpenTelemetry SDK. Set "+otelSdkDisabledEnvVar+` to "true" to bypass this.`)
 		os.Exit(1)
 	}
 
