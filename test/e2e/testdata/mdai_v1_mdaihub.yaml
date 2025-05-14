@@ -35,6 +35,50 @@ spec:
                 delimiter: ","
       dataType: set
       storageType: "mdai-valkey"
+    - key: filter
+      dataType: string
+      serializeAs:
+        - name: "FILTER"
+    - key: default
+      dataType: string
+      serializeAs:
+        - name: "DEFAULT"
+    - key: severity_number
+      dataType: int
+      serializeAs:
+        - name: "SEVERITY_NUMBER"
+    - key: any_service_alerted
+      dataType: boolean
+      serializeAs:
+        - name: "SERVICE_ALERTED"
+    - key: attribute_map
+      dataType: map
+      serializeAs:
+        - name: "ATTRIBUTES"
+    - key: severity_filters_by_level
+      dataType: map
+      serializeAs:
+        - name: "SEVERITY_FILTERS_BY_LEVEL"
+    - key: my_priority_list
+      type: meta
+      dataType: metaPriorityList
+      variableRefs:
+        - default
+        - service_list
+      serializeAs:
+        - name: "SERVICE_PRIORITY"
+          transformers:
+            - type: join
+              join:
+                delimiter: "|"
+    - key: my_hash_set
+      type: meta
+      dataType: metaHashSet
+      variableRefs:
+        - severity_number
+        - severity_filters_by_level
+      serializeAs:
+        - name: "SERVICE_HASH_SET"
   observers:
     - name: watcher1
       resourceRef: watcher-collector

@@ -337,6 +337,202 @@ func TestEnsureVariableSynced(t *testing.T) {
 	ctx := context.TODO()
 	scheme := createTestScheme()
 	storageType := v1.VariableSourceTypeBuiltInValkey
+
+	variableSet := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeComputed,
+		DataType:    v1.VariableDataTypeSet,
+		Key:         "mykey_set",
+		SerializeAs: []v1.Serializer{
+			{
+				Name: "MY_ENV_SET",
+				Transformers: []v1.VariableTransformer{
+					{Type: v1.TransformerTypeJoin,
+						Join: &v1.JoinTransformer{
+							Delimiter: ",",
+						},
+					},
+				},
+			},
+		},
+	}
+	variableString := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeComputed,
+		DataType:    v1.VariableDataTypeString,
+		Key:         "mykey_string",
+		SerializeAs: []v1.Serializer{
+			{
+				Name: "MY_ENV_STR",
+			},
+		},
+	}
+	variableBoolean := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeComputed,
+		DataType:    v1.VariableDataTypeString,
+		Key:         "mykey_bool",
+		SerializeAs: []v1.Serializer{
+			{
+				Name: "MY_ENV_BOOL",
+			},
+		},
+	}
+
+	variableInt := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeComputed,
+		DataType:    v1.VariableDataTypeInt,
+		Key:         "mykey_int",
+		SerializeAs: []v1.Serializer{
+			{
+				Name: "MY_ENV_INT",
+			},
+		},
+	}
+
+	variableMap := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeComputed,
+		DataType:    v1.VariableDataTypeMap,
+		Key:         "mykey_map",
+		SerializeAs: []v1.Serializer{
+			{
+				Name: "MY_ENV_MAP",
+			},
+		},
+	}
+
+	variablePl := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeMeta,
+		DataType:    v1.MetaVariableDataTypePriorityList,
+		Key:         "mykey_pl",
+		VariableRefs: []string{
+			"some_key",
+			"mykey_set",
+		},
+		SerializeAs: []v1.Serializer{
+			{
+				Name: "MY_ENV_PL",
+				Transformers: []v1.VariableTransformer{
+					{Type: v1.TransformerTypeJoin,
+						Join: &v1.JoinTransformer{
+							Delimiter: ",",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	variableHs := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeMeta,
+		DataType:    v1.MetaVariableDataTypeHashSet,
+		Key:         "mykey_hs",
+		VariableRefs: []string{
+			"some_key",
+			"mykey_set",
+		},
+		SerializeAs: []v1.Serializer{
+			{
+				Name: "MY_ENV_HS",
+			},
+		},
+	}
+
+	mdaiCR := newTestMdaiCR()
+	mdaiCR.Spec.Variables = &[]v1.Variable{
+		variableSet,
+		variableString,
+		variableBoolean,
+		variableInt,
+		variableMap,
+		variablePl,
+		variableHs,
+	}
+
+	fakeClient := newFakeClientForCR(mdaiCR, scheme)
+	recorder := record.NewFakeRecorder(10)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	fakeValkey := mock.NewClient(ctrl)
+
+	// audit
+	fakeValkey.EXPECT().Do(ctx, XaddMatcher{Type: "collector_restart"}).Return(mock.Result(mock.ValkeyString(""))).Times(1)
+
+	// getting variables
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Smembers().Key(VariableKeyPrefix+mdaiCR.Name+"/"+variableSet.Key).Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("service1"), mock.ValkeyString("service2"))))
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Get().Key(VariableKeyPrefix+mdaiCR.Name+"/"+variableString.Key).Build()).
+		Return(mock.Result(mock.ValkeyString("serviceA")))
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Get().Key(VariableKeyPrefix+mdaiCR.Name+"/"+variableBoolean.Key).Build()).
+		Return(mock.Result(mock.ValkeyString("true")))
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Get().Key(VariableKeyPrefix+mdaiCR.Name+"/"+variableInt.Key).Build()).
+		Return(mock.Result(mock.ValkeyString("10")))
+
+	expectedMap := map[string]valkey.ValkeyMessage{
+		"field1": mock.ValkeyString("value1"),
+		"field2": mock.ValkeyString("value1"),
+	}
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Hgetall().Key(VariableKeyPrefix+mdaiCR.Name+"/"+variableMap.Key).Build()).
+		Return(mock.Result(mock.ValkeyMap(expectedMap)))
+
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Arbitrary("PRIORITYLIST.GETORCREATE").
+		Keys(VariableKeyPrefix+mdaiCR.Name+"/"+variablePl.Key).
+		Args(VariableKeyPrefix+mdaiCR.Name+"/"+"some_key", VariableKeyPrefix+mdaiCR.Name+"/"+"mykey_set").Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("service1"), mock.ValkeyString("service2"))))
+
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Arbitrary("HASHSET.GETORCREATE").
+		Keys(VariableKeyPrefix+mdaiCR.Name+"/"+variableHs.Key).
+		Args(VariableKeyPrefix+mdaiCR.Name+"/"+"some_key", VariableKeyPrefix+mdaiCR.Name+"/"+"mykey_set").Build()).
+		Return(mock.Result(mock.ValkeyString("INFO|WARNING")))
+
+	// scan for delete & actual delete of non defined variable
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Scan().Cursor(0).Match(VariableKeyPrefix+mdaiCR.Name+"/"+"*").Count(100).Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString(VariableKeyPrefix+mdaiCR.Name+"/"+"key")))))
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key(VariableKeyPrefix+mdaiCR.Name+"/"+"key").Build()).
+		Return(mock.Result(mock.ValkeyInt64(1)))
+
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
+
+	opResult, err := adapter.ensureVariableSynced(ctx)
+	if err != nil {
+		t.Fatalf("ensureVariableSynced returned error: %v", err)
+	}
+	if opResult != ContinueOperationResult() {
+		t.Errorf("expected ContinueProcessing, got: %v", opResult)
+	}
+
+	envCMName := mdaiCR.Name + envConfigMapNamePostfix
+	envCM := &v1core.ConfigMap{}
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: envCMName, Namespace: "default"}, envCM); err != nil {
+		t.Fatalf("failed to get env ConfigMap %q: %v", envCMName, err)
+	}
+	assert.Equal(t, len(envCM.Data), 7)
+	assert.Equal(t, envCM.Data["MY_ENV_SET"], "service1,service2")
+	assert.Equal(t, envCM.Data["MY_ENV_STR"], "serviceA")
+	assert.Equal(t, envCM.Data["MY_ENV_BOOL"], "true")
+	assert.Equal(t, envCM.Data["MY_ENV_INT"], "10")
+	assert.Equal(t, envCM.Data["MY_ENV_MAP"], "field1: value1\nfield2: value1\n")
+	assert.Equal(t, envCM.Data["MY_ENV_PL"], "service1,service2")
+	assert.Equal(t, envCM.Data["MY_ENV_HS"], "INFO|WARNING")
+
+	updatedCollector := &v1beta1.OpenTelemetryCollector{}
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: "collector1", Namespace: "default"}, updatedCollector); err != nil {
+		t.Fatalf("failed to get updated collector: %v", err)
+	}
+	restartAnnotation := "kubectl.kubernetes.io/restartedAt"
+	if ann, ok := updatedCollector.Annotations[restartAnnotation]; !ok || strings.TrimSpace(ann) == "" {
+		t.Errorf("expected collector to have restart annotation %q set, got: %v", restartAnnotation, updatedCollector.Annotations)
+	}
+}
+func TestEnsureManualAndComputedVariableSynced(t *testing.T) {
+	ctx := context.TODO()
+	scheme := createTestScheme()
+	storageType := v1.VariableSourceTypeBuiltInValkey
 	variableType := v1.VariableDataTypeSet
 	varWith := v1.Serializer{
 		Name: "MY_ENV",
