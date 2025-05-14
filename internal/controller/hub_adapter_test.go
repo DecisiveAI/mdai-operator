@@ -272,8 +272,7 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	envMap := map[string]string{"VAR": "value"}
-	_, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, false, "default")
-	if err != nil {
+	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, false, "default"); err != nil {
 		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
 	}
 
