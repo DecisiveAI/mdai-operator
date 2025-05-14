@@ -101,6 +101,61 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					DataType:    mdaiv1.VariableDataTypeSet,
 					StorageType: mdaiv1.VariableStorageType(storageType),
 				},
+				{
+					Key:         "string",
+					DataType:    mdaiv1.VariableDataTypeString,
+					StorageType: mdaiv1.VariableStorageType(storageType),
+					SerializeAs: []mdaiv1.Serializer{{Name: "STR"}},
+				},
+				{
+					Key:         "bool",
+					DataType:    mdaiv1.VariableDataTypeBoolean,
+					StorageType: mdaiv1.VariableStorageType(storageType),
+					SerializeAs: []mdaiv1.Serializer{{Name: "BOOL"}},
+				},
+				{
+					Key:         "int",
+					DataType:    mdaiv1.VariableDataTypeInt,
+					StorageType: mdaiv1.VariableStorageType(storageType),
+					SerializeAs: []mdaiv1.Serializer{{Name: "INT"}},
+				},
+				{
+					Key:         "map",
+					DataType:    mdaiv1.VariableDataTypeMap,
+					StorageType: mdaiv1.VariableStorageType(storageType),
+					SerializeAs: []mdaiv1.Serializer{{Name: "MAP"}},
+				},
+				{
+					Key:          "priority_list",
+					Type:         mdaiv1.VariableTypeMeta,
+					DataType:     mdaiv1.MetaVariableDataTypePriorityList,
+					VariableRefs: []string{"ref1", "ref2", "ref3"},
+					StorageType:  mdaiv1.VariableStorageType(storageType),
+					SerializeAs: []mdaiv1.Serializer{
+						{
+							Name: "PRIORITY_LIST",
+							Transformers: []mdaiv1.VariableTransformer{
+								{Type: mdaiv1.TransformerTypeJoin,
+									Join: &mdaiv1.JoinTransformer{
+										Delimiter: ",",
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Key:          "hashset",
+					Type:         mdaiv1.VariableTypeMeta,
+					DataType:     mdaiv1.MetaVariableDataTypeHashSet,
+					VariableRefs: []string{"ref1", "ref2"},
+					StorageType:  mdaiv1.VariableStorageType(storageType),
+					SerializeAs: []mdaiv1.Serializer{
+						{
+							Name: "HASH_SET",
+						},
+					},
+				},
 			},
 			Observers: &[]mdaiv1.Observer{
 				{
@@ -266,6 +321,77 @@ var _ = Describe("MdaiHub Webhook", func() {
 			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should fail validation if references changed", func() {
+			oldObj = createSampleMdaiHub()
+			obj := createSampleMdaiHub()
+			(*obj.Spec.Variables)[6].VariableRefs[0] = "service_list_3"
+			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).To(MatchError(ContainSubstring(`meta variable references must not change, delete and recreate the variable to update references`)))
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should warn is no variable specified", func() {
+			obj := createSampleMdaiHub()
+			*obj.Spec.Variables = nil
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(MatchError(ContainSubstring(`variable with key service_list_1 does not exist, evaluation: logBytesOutTooHighBySvc`)))
+			Expect(warnings).To(Equal(admission.Warnings{"variables are not specified"}))
+		})
+
+		It("Should fail if no references provided for meta variable", func() {
+			obj := createSampleMdaiHub()
+			(*obj.Spec.Variables)[6].VariableRefs = nil
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(MatchError(ContainSubstring(`hub mdaihub-sample, variable priority_list: no variable references provided for meta variable`)))
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should fail if references provided for non meta variable", func() {
+			obj := createSampleMdaiHub()
+			(*obj.Spec.Variables)[1].VariableRefs = []string{"ref1"}
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(MatchError(ContainSubstring(`hub mdaihub-sample, variable service_list_2: variable references are not supported for non-meta variables`)))
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should fail if more than two ref provided for hashmap", func() {
+			obj := createSampleMdaiHub()
+			(*obj.Spec.Variables)[7].VariableRefs = []string{"ref1", "ref2", "ref3"}
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(MatchError(ContainSubstring(`hub mdaihub-sample, variable hashset: variable references for Meta HashSet must have exactly 2 elements`)))
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should fail if exported variable name is duplicated", func() {
+			obj := createSampleMdaiHub()
+			(*obj.Spec.Variables)[7].SerializeAs[0].Name = "SERVICE_LIST_CSV"
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(MatchError(ContainSubstring(`hub mdaihub-sample, variable hashset: exported variable name SERVICE_LIST_CSV is duplicated`)))
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should fail if priority list doesn't have transformers", func() {
+			obj := createSampleMdaiHub()
+			(*obj.Spec.Variables)[6].SerializeAs[0].Transformers = nil
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(MatchError(ContainSubstring("hub mdaihub-sample, variable priority_list: at least one transformer must be provided, such as 'join'")))
+			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should fail if transformers specified for boolean", func() {
+			obj := createSampleMdaiHub()
+			(*obj.Spec.Variables)[3].SerializeAs[0].Transformers = []mdaiv1.VariableTransformer{
+				{Type: mdaiv1.TransformerTypeJoin,
+					Join: &mdaiv1.JoinTransformer{
+						Delimiter: "|",
+					},
+				},
+			}
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(MatchError(ContainSubstring("hub mdaihub-sample, variable bool: transformers are not supported for variable type boolean")))
+			Expect(warnings).To(BeEmpty())
 		})
 	})
 

@@ -400,7 +400,9 @@ var _ = Describe("Manager", Ordered, func() {
 			By("verifying the config map content for variables defaults")
 			verifyConfigMap := func(g Gomega) {
 				data := getVariablesFromMap(g)
-
+				g.Expect(data).To(HaveLen(6))
+				g.Expect(data["ATTRIBUTES"]).To(Equal("{}\n"))
+				g.Expect(data["SEVERITY_FILTERS_BY_LEVEL"]).To(Equal("{}\n"))
 				g.Expect(data["SERVICE_LIST_2_CSV"]).To(Equal(""))
 				g.Expect(data["SERVICE_LIST_2_REGEX"]).To(Equal(""))
 				g.Expect(data["SERVICE_LIST_CSV"]).To(Equal(""))
@@ -553,13 +555,90 @@ var _ = Describe("Manager", Ordered, func() {
 				Member("noisy-service").Build()).Error()
 			Expect(err).NotTo(HaveOccurred())
 
+			err = valkeyClient.Do(
+				context.TODO(),
+				valkeyClient.B().Set().
+					Key("variable/mdaihub-sample/any_service_alerted").
+					Value("true").
+					Build(),
+			).Error()
+			Expect(err).NotTo(HaveOccurred())
+
+			err = valkeyClient.Do(
+				context.TODO(),
+				valkeyClient.B().Sadd().
+					Key("variable/mdaihub-sample/service_list").
+					Member("serviceA").
+					Build(),
+			).Error()
+			Expect(err).NotTo(HaveOccurred())
+
+			err = valkeyClient.Do(
+				context.TODO(),
+				valkeyClient.B().Hset().
+					Key("variable/mdaihub-sample/attribute_map").FieldValue().
+					FieldValue("send_batch_size", "100").
+					FieldValue("timeout", "15s").
+					Build(),
+			).Error()
+			Expect(err).NotTo(HaveOccurred())
+
+			err = valkeyClient.Do(
+				context.TODO(),
+				valkeyClient.B().Set().
+					Key("variable/mdaihub-sample/default").
+					Value("default").
+					Build(),
+			).Error()
+			Expect(err).NotTo(HaveOccurred())
+
+			err = valkeyClient.Do(
+				context.TODO(),
+				valkeyClient.B().Set().
+					Key("variable/mdaihub-sample/filter").
+					Value(`- severity_number < SEVERITY_NUMBER_WARN
+- IsMatch(resource.attributes["service.name"], "${env:SERVICE_LIST}")`).
+					Build(),
+			).Error()
+			Expect(err).NotTo(HaveOccurred())
+
+			err = valkeyClient.Do(
+				context.TODO(),
+				valkeyClient.B().Set().
+					Key("variable/mdaihub-sample/severity_number").
+					Value("1").
+					Build(),
+			).Error()
+			Expect(err).NotTo(HaveOccurred())
+
+			err = valkeyClient.Do(
+				context.TODO(),
+				valkeyClient.B().Hset().
+					Key("variable/mdaihub-sample/severity_filters_by_level").FieldValue().
+					FieldValue("1", "INFO|WARNING").
+					FieldValue("2", "INFO").
+					Build(),
+			).Error()
+			Expect(err).NotTo(HaveOccurred())
+
 			By("validating that the config map has the updated variable value")
 			verifyConfigMap := func(g Gomega) {
 				data := getVariablesFromMap(g)
+				g.Expect(data).To(HaveLen(12))
+				g.Expect(data["ATTRIBUTES"]).To(Equal("send_batch_size: 100\ntimeout: 15s\n"))
+				g.Expect(data["SERVICE_ALERTED"]).To(Equal("true"))
+				g.Expect(data["SERVICE_HASH_SET"]).To(Equal("INFO|WARNING"))
 				g.Expect(data["SERVICE_LIST_2_CSV"]).To(Equal(""))
 				g.Expect(data["SERVICE_LIST_2_REGEX"]).To(Equal(""))
+				g.Expect(data["DEFAULT"]).To(Equal("default"))
+				g.Expect(data["FILTER"]).To(Equal("- severity_number < SEVERITY_NUMBER_WARN\n- " +
+					"IsMatch(resource.attributes[\"service.name\"], \"${env:SERVICE_LIST}\")"))
 				g.Expect(data["SERVICE_LIST_CSV"]).To(Equal("noisy-service"))
 				g.Expect(data["SERVICE_LIST_REGEX"]).To(Equal("noisy-service"))
+				g.Expect(data["SERVICE_PRIORITY"]).To(Equal("default"))
+				g.Expect(data["SEVERITY_FILTERS_BY_LEVEL"]).To(Equal("\"1\": INFO|WARNING\n\"2\": INFO\n"))
+				g.Expect(data["SEVERITY_NUMBER"]).To(Equal("1"))
+
 			}
 			Eventually(verifyConfigMap).Should(Succeed())
 

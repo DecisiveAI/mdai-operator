@@ -366,7 +366,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 						continue
 					}
 					c.applySetTransformation(variable, envMap, valueAsSlice)
-				case mdaiv1.MetaVariableDateTypeHashSet:
+				case mdaiv1.MetaVariableDataTypeHashSet:
 					value, found, err := dataAdapter.GetOrCreateMetaHashSet(ctx, key, variable.VariableRefs[0], variable.VariableRefs[1])
 					if err != nil {
 						return RequeueAfter(requeueTime, err)
