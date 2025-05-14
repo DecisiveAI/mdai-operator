@@ -187,12 +187,7 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 		}
 	}
 
-	warnings, err = v.validateObserversAndObserverResources(mdaihub, warnings)
-	if err != nil {
-		return warnings, err
-	}
-
-	return warnings, nil
+	return  v.validateObserversAndObserverResources(mdaihub, warnings)
 }
 
 func (v *MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub, warnings admission.Warnings) (map[string]struct{}, admission.Warnings, error) {
