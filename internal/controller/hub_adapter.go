@@ -445,7 +445,9 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 				return OperationResult{}, err
 			}
 
-			if err := auditAdapter.InsertAuditLogEventFromMap(ctx, auditAdapter.CreateRestartEvent(c.mdaiCR.Name, envMap)); err != nil {
+			restartEvent := auditAdapter.CreateRestartEvent(c.mdaiCR.Name, envMap)
+			c.logger.Info("AUDIT: Triggering restart of OpenTelemetry Collector", "mdaiHubEvent", restartEvent)
+			if err := auditAdapter.InsertAuditLogEventFromMap(ctx, restartEvent); err != nil {
 				return OperationResult{}, err
 			}
 		}
