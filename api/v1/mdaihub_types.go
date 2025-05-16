@@ -177,6 +177,8 @@ type ObserverResource struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Minimum=1
 	GrpcReceiverMaxMsgSize *uint64 `json:"grpcReceiverMaxMsgSize,omitempty" yaml:"grpcReceiverMaxMsgSize,omitempty"`
+	// +kubebuilder:validation:Optional
+	OwnLogsOtlpEndpoint *string `json:"ownLogsOtlpEndpoint,omitempty" yaml:"ownLogsOtlpEndpoint,omitempty"`
 }
 
 type Config struct {
