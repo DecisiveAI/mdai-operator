@@ -48,10 +48,13 @@ type JoinTransformer struct {
 	Delimiter string `json:"delimiter" yaml:"delimiter"`
 }
 
+// Variable defines mdai variable
+// +kubebuilder:validation:XValidation:rule="self.type == 'meta' ? self.dataType in ['metaHashSet', 'metaPriorityList'] : self.dataType in ['string', 'int', 'boolean', 'set', 'map']",messageExpression="\"variable '\" + self.key + \"': dataType is not allowed for type specified\"",reason="FieldValueInvalid"
 type Variable struct {
 	// Key The key for which this variable's managed value is assigned. Will also be used as the environment variable name for variables of type "string"
 	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Required
 	Key string `json:"key" yaml:"key"`
 	// Type for the variable, defaults to "computed" if not provided
@@ -176,37 +179,15 @@ type ObserverResource struct {
 	GrpcReceiverMaxMsgSize *uint64 `json:"grpcReceiverMaxMsgSize,omitempty" yaml:"grpcReceiverMaxMsgSize,omitempty"`
 }
 
-type AWSConfig struct {
-	AWSAccessKeySecret *string `json:"awsAccessKeySecret,omitempty" yaml:"awsAccessKeySecret,omitempty"`
-}
-
-type S3LogsConfig struct {
-	// TODO: Implement this and figure out a good way to marshal OTEL LOG severity level number for gt/lt in OTTL
-	// For now will be coded to WARN or greater
-	// LogLevel *string `json:"logLevel,omitempty" yaml:"logLevel,omitempty"`
-	S3Region *string `json:"s3Region,omitempty" yaml:"s3Region,omitempty"`
-	S3Bucket *string `json:"s3Bucket,omitempty" yaml:"s3Bucket,omitempty"`
-}
-
-type LogsConfig struct {
-	S3 *S3LogsConfig `json:"s3,omitempty" yaml:"s3,omitempty"`
-}
-
-type TelemetryConfig struct {
-	AWSConfig *AWSConfig  `json:"aws,omitempty" yaml:"aws,omitempty"`
-	Logs      *LogsConfig `json:"logs,omitempty" yaml:"logs,omitempty"`
-}
-
 type Config struct {
 	// EvaluationInterval Specify the interval at which all evaluations within this hub are assessed in the Prometheus infrastructure.
 	// +kubebuilder:validation:Optional
 	EvaluationInterval *prometheusv1.Duration `json:"evaluation_interval,omitempty" yaml:"evaluation_interval,omitempty"`
-	Telemetry          *TelemetryConfig       `json:"telemetry,omitempty" yaml:"telemetry,omitempty"`
 }
 
 // MdaiHubSpec defines the desired state of MdaiHub.
 type MdaiHubSpec struct {
-	// kubebuilder:validation:Optional
+	// +kubebuilder:validation:Optional
 	Config            *Config             `json:"config,omitempty" yaml:"config,omitempty"`
 	Observers         *[]Observer         `json:"observers,omitempty" yaml:"observers,omitempty"`
 	ObserverResources *[]ObserverResource `json:"observerResources,omitempty" yaml:"observerResources,omitempty"`
@@ -285,8 +266,8 @@ const (
 	// VariableDataTypeMap implemented as hash map. Order is not guaranteed. Keys and values are strings.
 	VariableDataTypeMap VariableDataType = "map" // valkey hashes
 
-	// MetaVariableDateTypeHashSet LookupTable takes an input/key variable and a lookup variable, disabled for now. Returns a string.
-	MetaVariableDateTypeHashSet VariableDataType = "metaHashSet"
+	// MetaVariableDataTypeHashSet LookupTable takes an input/key variable and a lookup variable. Returns a string.
+	MetaVariableDataTypeHashSet VariableDataType = "metaHashSet"
 	// MetaVariableDataTypePriorityList takes a list of variable refs, and will evaluate to the first one that is not empty. Returns an array of strings.
 	MetaVariableDataTypePriorityList VariableDataType = "metaPriorityList"
 

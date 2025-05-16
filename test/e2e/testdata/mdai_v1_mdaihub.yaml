@@ -7,14 +7,6 @@ metadata:
   name: mdaihub-sample
   namespace: mdai
 spec:
-  config:
-    telemetry:
-      aws:
-        awsAccessKeySecret: awsy-awsface
-      logs:
-        s3:
-          s3Region: "uesc-marathon-7"
-          s3Bucket: "mdai-collector-logs"
   variables:
     - key: service_list_1
       serializeAs:
@@ -43,6 +35,69 @@ spec:
                 delimiter: ","
       dataType: set
       storageType: "mdai-valkey"
+    - key: filter
+      dataType: string
+      serializeAs:
+        - name: "FILTER"
+    - key: default
+      dataType: string
+      serializeAs:
+        - name: "DEFAULT"
+    - key: severity_number
+      dataType: int
+      serializeAs:
+        - name: "SEVERITY_NUMBER"
+    - key: any_service_alerted
+      dataType: boolean
+      serializeAs:
+        - name: "SERVICE_ALERTED"
+    - key: attribute_map
+      dataType: map
+      serializeAs:
+        - name: "ATTRIBUTES"
+    - key: severity_filters_by_level
+      dataType: map
+      serializeAs:
+        - name: "SEVERITY_FILTERS_BY_LEVEL"
+    - key: my_priority_list
+      type: meta
+      dataType: metaPriorityList
+      variableRefs:
+        - default
+        - service_list
+      serializeAs:
+        - name: "SERVICE_PRIORITY"
+          transformers:
+            - type: join
+              join:
+                delimiter: "|"
+    - key: my_hash_set
+      type: meta
+      dataType: metaHashSet
+      variableRefs:
+        - severity_number
+        - severity_filters_by_level
+      serializeAs:
+        - name: "SERVICE_HASH_SET"
+    - key: manual_filter
+      type: manual
+      dataType: string
+      serializeAs:
+        - name: "MANUAL_FILTER"
+    - key: service_list_manual
+      type: manual
+      serializeAs:
+        - name: "SERVICE_LIST_REGEX_MANUAL"
+          transformers:
+            - type: join
+              join:
+                delimiter: "|"
+        - name: "SERVICE_LIST_CSV_MANUAL"
+          transformers:
+            - type: join
+              join:
+                delimiter: ","
+      dataType: set
   observers:
     - name: watcher1
       resourceRef: watcher-collector

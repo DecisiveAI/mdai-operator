@@ -5,12 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/valkey-io/valkey-go"
 	"k8s.io/utils/ptr"
 
@@ -18,12 +18,10 @@ import (
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/go-logr/logr"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	"github.com/stretchr/testify/assert"
 	"github.com/valkey-io/valkey-go/mock"
 	"go.uber.org/mock/gomock"
 	appsv1 "k8s.io/api/apps/v1"
 	v1core "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -275,18 +273,39 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	envMap := map[string]string{"VAR": "value"}
-	_, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, "default")
-	if err != nil {
+	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, false, "default"); err != nil {
 		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
 	}
 
 	cm := &v1core.ConfigMap{}
 	cmName := mdaiCR.Name + envConfigMapNamePostfix
-	err = fakeClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: "default"}, cm)
-	if err != nil {
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: "default"}, cm); err != nil {
 		t.Fatalf("Failed to get ConfigMap %q: %v", cmName, err)
 	}
 	if cm.Data["VAR"] != "value" {
+		t.Errorf("Expected env var value %q, got %q", "value", cm.Data["VAR"])
+	}
+}
+
+func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
+	ctx := context.TODO()
+	scheme := createTestScheme()
+	mdaiCR := newTestMdaiCR()
+	fakeClient := newFakeClientForCR(mdaiCR, scheme)
+	recorder := record.NewFakeRecorder(10)
+
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
+	envMap := map[string]string{"VAR": "string"}
+	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, true, "default"); err != nil {
+		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
+	}
+
+	cm := &v1core.ConfigMap{}
+	cmName := mdaiCR.Name + manualEnvConfigMapNamePostfix
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: "default"}, cm); err != nil {
+		t.Fatalf("Failed to get ConfigMap %q: %v", cmName, err)
+	}
+	if cm.Data["VAR"] != "string" {
 		t.Errorf("Expected env var value %q, got %q", "value", cm.Data["VAR"])
 	}
 }
@@ -319,6 +338,202 @@ func TestEnsureVariableSynced(t *testing.T) {
 	ctx := context.TODO()
 	scheme := createTestScheme()
 	storageType := v1.VariableSourceTypeBuiltInValkey
+
+	variableSet := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeComputed,
+		DataType:    v1.VariableDataTypeSet,
+		Key:         "mykey_set",
+		SerializeAs: []v1.Serializer{
+			{
+				Name: "MY_ENV_SET",
+				Transformers: []v1.VariableTransformer{
+					{Type: v1.TransformerTypeJoin,
+						Join: &v1.JoinTransformer{
+							Delimiter: ",",
+						},
+					},
+				},
+			},
+		},
+	}
+	variableString := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeComputed,
+		DataType:    v1.VariableDataTypeString,
+		Key:         "mykey_string",
+		SerializeAs: []v1.Serializer{
+			{
+				Name: "MY_ENV_STR",
+			},
+		},
+	}
+	variableBoolean := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeComputed,
+		DataType:    v1.VariableDataTypeString,
+		Key:         "mykey_bool",
+		SerializeAs: []v1.Serializer{
+			{
+				Name: "MY_ENV_BOOL",
+			},
+		},
+	}
+
+	variableInt := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeComputed,
+		DataType:    v1.VariableDataTypeInt,
+		Key:         "mykey_int",
+		SerializeAs: []v1.Serializer{
+			{
+				Name: "MY_ENV_INT",
+			},
+		},
+	}
+
+	variableMap := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeComputed,
+		DataType:    v1.VariableDataTypeMap,
+		Key:         "mykey_map",
+		SerializeAs: []v1.Serializer{
+			{
+				Name: "MY_ENV_MAP",
+			},
+		},
+	}
+
+	variablePl := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeMeta,
+		DataType:    v1.MetaVariableDataTypePriorityList,
+		Key:         "mykey_pl",
+		VariableRefs: []string{
+			"some_key",
+			"mykey_set",
+		},
+		SerializeAs: []v1.Serializer{
+			{
+				Name: "MY_ENV_PL",
+				Transformers: []v1.VariableTransformer{
+					{Type: v1.TransformerTypeJoin,
+						Join: &v1.JoinTransformer{
+							Delimiter: ",",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	variableHs := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeMeta,
+		DataType:    v1.MetaVariableDataTypeHashSet,
+		Key:         "mykey_hs",
+		VariableRefs: []string{
+			"some_key",
+			"mykey_set",
+		},
+		SerializeAs: []v1.Serializer{
+			{
+				Name: "MY_ENV_HS",
+			},
+		},
+	}
+
+	mdaiCR := newTestMdaiCR()
+	mdaiCR.Spec.Variables = &[]v1.Variable{
+		variableSet,
+		variableString,
+		variableBoolean,
+		variableInt,
+		variableMap,
+		variablePl,
+		variableHs,
+	}
+
+	fakeClient := newFakeClientForCR(mdaiCR, scheme)
+	recorder := record.NewFakeRecorder(10)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	fakeValkey := mock.NewClient(ctrl)
+
+	// audit
+	fakeValkey.EXPECT().Do(ctx, XaddMatcher{Type: "collector_restart"}).Return(mock.Result(mock.ValkeyString(""))).Times(1)
+
+	// getting variables
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Smembers().Key(VariableKeyPrefix+mdaiCR.Name+"/"+variableSet.Key).Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("service1"), mock.ValkeyString("service2"))))
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Get().Key(VariableKeyPrefix+mdaiCR.Name+"/"+variableString.Key).Build()).
+		Return(mock.Result(mock.ValkeyString("serviceA")))
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Get().Key(VariableKeyPrefix+mdaiCR.Name+"/"+variableBoolean.Key).Build()).
+		Return(mock.Result(mock.ValkeyString("true")))
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Get().Key(VariableKeyPrefix+mdaiCR.Name+"/"+variableInt.Key).Build()).
+		Return(mock.Result(mock.ValkeyString("10")))
+
+	expectedMap := map[string]valkey.ValkeyMessage{
+		"field1": mock.ValkeyString("value1"),
+		"field2": mock.ValkeyString("value1"),
+	}
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Hgetall().Key(VariableKeyPrefix+mdaiCR.Name+"/"+variableMap.Key).Build()).
+		Return(mock.Result(mock.ValkeyMap(expectedMap)))
+
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Arbitrary("PRIORITYLIST.GETORCREATE").
+		Keys(VariableKeyPrefix+mdaiCR.Name+"/"+variablePl.Key).
+		Args(VariableKeyPrefix+mdaiCR.Name+"/"+"some_key", VariableKeyPrefix+mdaiCR.Name+"/"+"mykey_set").Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("service1"), mock.ValkeyString("service2"))))
+
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Arbitrary("HASHSET.GETORCREATE").
+		Keys(VariableKeyPrefix+mdaiCR.Name+"/"+variableHs.Key).
+		Args(VariableKeyPrefix+mdaiCR.Name+"/"+"some_key", VariableKeyPrefix+mdaiCR.Name+"/"+"mykey_set").Build()).
+		Return(mock.Result(mock.ValkeyString("INFO|WARNING")))
+
+	// scan for delete & actual delete of non defined variable
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Scan().Cursor(0).Match(VariableKeyPrefix+mdaiCR.Name+"/"+"*").Count(100).Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString(VariableKeyPrefix+mdaiCR.Name+"/"+"key")))))
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key(VariableKeyPrefix+mdaiCR.Name+"/"+"key").Build()).
+		Return(mock.Result(mock.ValkeyInt64(1)))
+
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
+
+	opResult, err := adapter.ensureVariableSynced(ctx)
+	if err != nil {
+		t.Fatalf("ensureVariableSynced returned error: %v", err)
+	}
+	if opResult != ContinueOperationResult() {
+		t.Errorf("expected ContinueProcessing, got: %v", opResult)
+	}
+
+	envCMName := mdaiCR.Name + envConfigMapNamePostfix
+	envCM := &v1core.ConfigMap{}
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: envCMName, Namespace: "default"}, envCM); err != nil {
+		t.Fatalf("failed to get env ConfigMap %q: %v", envCMName, err)
+	}
+	assert.Equal(t, len(envCM.Data), 7)
+	assert.Equal(t, envCM.Data["MY_ENV_SET"], "service1,service2")
+	assert.Equal(t, envCM.Data["MY_ENV_STR"], "serviceA")
+	assert.Equal(t, envCM.Data["MY_ENV_BOOL"], "true")
+	assert.Equal(t, envCM.Data["MY_ENV_INT"], "10")
+	assert.Equal(t, envCM.Data["MY_ENV_MAP"], "field1: value1\nfield2: value1\n")
+	assert.Equal(t, envCM.Data["MY_ENV_PL"], "service1,service2")
+	assert.Equal(t, envCM.Data["MY_ENV_HS"], "INFO|WARNING")
+
+	updatedCollector := &v1beta1.OpenTelemetryCollector{}
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: "collector1", Namespace: "default"}, updatedCollector); err != nil {
+		t.Fatalf("failed to get updated collector: %v", err)
+	}
+	restartAnnotation := "kubectl.kubernetes.io/restartedAt"
+	if ann, ok := updatedCollector.Annotations[restartAnnotation]; !ok || strings.TrimSpace(ann) == "" {
+		t.Errorf("expected collector to have restart annotation %q set, got: %v", restartAnnotation, updatedCollector.Annotations)
+	}
+}
+func TestEnsureManualAndComputedVariableSynced(t *testing.T) {
+	ctx := context.TODO()
+	scheme := createTestScheme()
+	storageType := v1.VariableSourceTypeBuiltInValkey
 	variableType := v1.VariableDataTypeSet
 	varWith := v1.Serializer{
 		Name: "MY_ENV",
@@ -330,15 +545,22 @@ func TestEnsureVariableSynced(t *testing.T) {
 			},
 		},
 	}
-	variable := v1.Variable{
+	computedVariable := v1.Variable{
 		StorageType: storageType,
 		Type:        v1.VariableTypeComputed,
 		DataType:    variableType,
 		Key:         "mykey",
 		SerializeAs: []v1.Serializer{varWith},
 	}
+	manualVariable := v1.Variable{
+		StorageType: storageType,
+		Type:        v1.VariableTypeManual,
+		DataType:    variableType,
+		Key:         "mymanualkey",
+		SerializeAs: []v1.Serializer{varWith},
+	}
 	mdaiCR := newTestMdaiCR()
-	mdaiCR.Spec.Variables = &[]v1.Variable{variable}
+	mdaiCR.Spec.Variables = &[]v1.Variable{computedVariable, manualVariable}
 
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
@@ -346,12 +568,16 @@ func TestEnsureVariableSynced(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	fakeValkey := mock.NewClient(ctrl)
-	expectedKey := VariableKeyPrefix + mdaiCR.Name + "/" + variable.Key
+	expectedComputedKey := VariableKeyPrefix + mdaiCR.Name + "/" + computedVariable.Key
+	expectedManualKey := VariableKeyPrefix + mdaiCR.Name + "/" + manualVariable.Key
 
 	fakeValkey.EXPECT().Do(ctx, XaddMatcher{Type: "collector_restart"}).Return(mock.Result(mock.ValkeyString(""))).Times(1)
 
-	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Smembers().Key(expectedKey).Build()).
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Smembers().Key(expectedComputedKey).Build()).
 		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("default"))))
+	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Smembers().Key(expectedManualKey).Build()).
+		Return(mock.Result(mock.ValkeyArray(mock.ValkeyString("default"))))
+
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Scan().Cursor(0).Match(VariableKeyPrefix+mdaiCR.Name+"/"+"*").Count(100).Build()).
 		Return(mock.Result(mock.ValkeyArray(mock.ValkeyInt64(0), mock.ValkeyArray(mock.ValkeyString(VariableKeyPrefix+mdaiCR.Name+"/"+"key")))))
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key(VariableKeyPrefix+mdaiCR.Name+"/"+"key").Build()).
@@ -373,6 +599,15 @@ func TestEnsureVariableSynced(t *testing.T) {
 		t.Fatalf("failed to get env ConfigMap %q: %v", envCMName, err)
 	}
 	if v, ok := envCM.Data["MY_ENV"]; !ok || v != "default" {
+		t.Errorf("expected env var MY_ENV to be 'set', got %q", v)
+	}
+
+	envManualCMName := mdaiCR.Name + manualEnvConfigMapNamePostfix
+	envManualCM := &v1core.ConfigMap{}
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: envManualCMName, Namespace: "default"}, envManualCM); err != nil {
+		t.Fatalf("failed to get env ConfigMap %q: %v", envManualCMName, err)
+	}
+	if v, ok := envManualCM.Data["mymanualkey"]; !ok || v != "set" {
 		t.Errorf("expected env var MY_ENV to be 'default', got %q", v)
 	}
 
@@ -506,7 +741,7 @@ func TestEnsureEvaluationsSynchronized_NoEvaluations(t *testing.T) {
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: ruleName, Namespace: mdaiCR.Namespace}, promRule)
 	if err == nil {
 		t.Errorf("expected PrometheusRule %q to be deleted, but it still exists", ruleName)
-	} else if !errors.IsNotFound(err) {
+	} else if !apierrors.IsNotFound(err) {
 		t.Errorf("unexpected error getting PrometheusRule: %v", err)
 	}
 }
@@ -678,137 +913,5 @@ func TestEnsureStatusSetToDone(t *testing.T) {
 	}
 	if cond.Message != "reconciled successfully" {
 		t.Errorf("expected message 'reconciled successfully', got: %q", cond.Message)
-	}
-}
-
-func TestGetS3ExporterForLogstream(t *testing.T) {
-	testCases := []struct {
-		hubName                string
-		logstream              MDAILogStream
-		s3LogsConfig           v1.S3LogsConfig
-		expectedExporterName   string
-		expectedExporterConfig S3ExporterConfig
-	}{
-		{
-			hubName:   "test-hub",
-			logstream: CollectorLogstream,
-			s3LogsConfig: v1.S3LogsConfig{
-				S3Region: ptr.To("uesc-marathon-7"),
-				S3Bucket: ptr.To("whoa-bucket"),
-			},
-			expectedExporterName: "awss3/collector",
-			expectedExporterConfig: S3ExporterConfig{
-				S3Uploader: S3UploaderConfig{
-					Region:            "uesc-marathon-7",
-					S3Bucket:          "whoa-bucket",
-					S3Prefix:          "test-hub-collector",
-					FilePrefix:        "collector-",
-					S3PartitionFormat: S3PartitionFormat,
-					DisableSSL:        true,
-				},
-			},
-		}, {
-			hubName:   "inf",
-			logstream: HubLogstream,
-			s3LogsConfig: v1.S3LogsConfig{
-				S3Region: ptr.To("aeiou-meh-99"),
-				S3Bucket: ptr.To("qwerty"),
-			},
-			expectedExporterName: "awss3/hub",
-			expectedExporterConfig: S3ExporterConfig{
-				S3Uploader: S3UploaderConfig{
-					Region:            "aeiou-meh-99",
-					S3Bucket:          "qwerty",
-					S3Prefix:          "inf-hub",
-					FilePrefix:        "hub-",
-					S3PartitionFormat: S3PartitionFormat,
-					DisableSSL:        true,
-				},
-			},
-		}, {
-			hubName:   "whoa",
-			logstream: AuditLogstream,
-			s3LogsConfig: v1.S3LogsConfig{
-				S3Region: ptr.To("splat"),
-				S3Bucket: ptr.To("hey"),
-			},
-			expectedExporterName: "awss3/audit",
-			expectedExporterConfig: S3ExporterConfig{
-				S3Uploader: S3UploaderConfig{
-					Region:            "splat",
-					S3Bucket:          "hey",
-					S3Prefix:          "whoa-audit",
-					FilePrefix:        "audit-",
-					S3PartitionFormat: S3PartitionFormat,
-					DisableSSL:        true,
-				},
-			},
-		}, {
-			hubName:   "heh",
-			logstream: OtherLogstream,
-			s3LogsConfig: v1.S3LogsConfig{
-				S3Region: ptr.To("okay"),
-				S3Bucket: ptr.To("ytho"),
-			},
-			expectedExporterName: "awss3/other",
-			expectedExporterConfig: S3ExporterConfig{
-				S3Uploader: S3UploaderConfig{
-					Region:            "okay",
-					S3Bucket:          "ytho",
-					S3Prefix:          "heh-other",
-					FilePrefix:        "other-",
-					S3PartitionFormat: S3PartitionFormat,
-					DisableSSL:        true,
-				},
-			},
-		},
-	}
-	for idx, testCase := range testCases {
-		t.Run(fmt.Sprintf("Case %d %s %s %s", idx, testCase.hubName, testCase.logstream, testCase.expectedExporterName), func(t *testing.T) {
-			actualExporterName, actualExporterConfig := getS3ExporterForLogstream(testCase.hubName, testCase.logstream, testCase.s3LogsConfig)
-			assert.Equal(t, testCase.expectedExporterName, actualExporterName)
-			assert.Equal(t, testCase.expectedExporterConfig, actualExporterConfig)
-		})
-	}
-}
-
-func TestGetPipelineWithS3Exporter(t *testing.T) {
-	testCases := []struct {
-		pipeline     map[string]any
-		exporterName string
-		expected     map[string]any
-	}{
-		{
-			pipeline: map[string]any{
-				"receivers":  []any{"otlp"},
-				"processors": []any{"batch"},
-				"exporters":  []any{"debug"},
-			},
-			exporterName: "awss3/collector",
-			expected: map[string]any{
-				"receivers":  []any{"otlp"},
-				"processors": []any{"batch"},
-				"exporters":  []any{"debug", "awss3/collector"},
-			},
-		},
-		{
-			pipeline: map[string]any{
-				"receivers":  []any{"otlp", "qwer", "iouoip/ioeuwr"},
-				"processors": []any{"batch", "lsikdjflks", "klsjdlfjslr", "ewroije"},
-				"exporters":  []any{"debug", "slkdjflskdrn/selirjselkr", "zmcsdfkjls/slkdr/skjdlrjl"},
-			},
-			exporterName: "awss3/hub",
-			expected: map[string]any{
-				"receivers":  []any{"otlp", "qwer", "iouoip/ioeuwr"},
-				"processors": []any{"batch", "lsikdjflks", "klsjdlfjslr", "ewroije"},
-				"exporters":  []any{"debug", "slkdjflskdrn/selirjselkr", "zmcsdfkjls/slkdr/skjdlrjl", "awss3/hub"},
-			},
-		},
-	}
-
-	for idx, testCase := range testCases {
-		t.Run(fmt.Sprintf("Case %d %s", idx, testCase.exporterName), func(t *testing.T) {
-			assert.Equal(t, testCase.expected, getPipelineWithS3Exporter(testCase.pipeline, testCase.exporterName))
-		})
 	}
 }

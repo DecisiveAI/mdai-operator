@@ -11,7 +11,8 @@ import (
 	"strings"
 	"time"
 
-	audit "github.com/decisiveai/mdai-data-core/audit"
+	"github.com/decisiveai/mdai-data-core/audit"
+
 	datacore "github.com/decisiveai/mdai-data-core/variables"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
@@ -31,17 +32,8 @@ import (
 )
 
 const (
-	// typeAvailableHub represents the status of the Deployment reconciliation
-	typeAvailableHub = "Available"
-	// typeDegradedHub represents the status used when the custom resource is deleted and the finalizer operations are must occur.
-	typeDegradedHub = "Degraded"
-
-	hubFinalizer = "mydecisive.ai/finalizer"
-
-	ObjectModified  ObjectState = true
-	ObjectUnchanged ObjectState = false
-
-	envConfigMapNamePostfix = "-variables"
+	envConfigMapNamePostfix       = "-variables"
+	manualEnvConfigMapNamePostfix = "-manual-variables"
 
 	requeueTime = time.Second * 10
 
@@ -58,8 +50,6 @@ type HubAdapter struct {
 	valKeyClient            valkey.Client
 	valkeyAuditStreamExpiry time.Duration
 }
-
-type ObjectState bool
 
 func NewHubAdapter(
 	cr *mdaiv1.MdaiHub,
@@ -311,6 +301,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	}
 
 	envMap := make(map[string]string)
+	manualEnvMap := make(map[string]string)
 	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.logger, c.mdaiCR.Name)
 	valkeyKeysToKeep := map[string]struct{}{}
 	for _, variable := range *variables {
@@ -321,7 +312,10 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 			valkeyKeysToKeep[key] = struct{}{}
 			switch variable.Type {
 			// from the operator's perspective, computed and manual are the same, they are differently processed by the handler
-			case mdaiv1.VariableTypeComputed, mdaiv1.VariableTypeManual:
+			case mdaiv1.VariableTypeManual:
+				manualEnvMap[key] = string(variable.DataType)
+				fallthrough
+			case mdaiv1.VariableTypeComputed:
 				switch variable.DataType {
 				case mdaiv1.VariableDataTypeSet:
 					valueAsSlice, err := dataAdapter.GetSetAsStringSlice(ctx, key)
@@ -361,7 +355,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 						continue
 					}
 					c.applySetTransformation(variable, envMap, valueAsSlice)
-				case mdaiv1.MetaVariableDateTypeHashSet:
+				case mdaiv1.MetaVariableDataTypeHashSet:
 					value, found, err := dataAdapter.GetOrCreateMetaHashSet(ctx, key, variable.VariableRefs[0], variable.VariableRefs[1])
 					if err != nil {
 						return RequeueAfter(requeueTime, err)
@@ -401,11 +395,17 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 
 	namespaceToRestart := make(map[string]struct{})
 	for namespace := range namespaces {
-		operationResult, err := c.createOrUpdateEnvConfigMap(ctx, envMap, namespace)
+		// computed variables
+		operationResultComputed, err := c.createOrUpdateEnvConfigMap(ctx, envMap, false, namespace)
 		if err != nil {
 			return OperationResult{}, err
 		}
-		if operationResult == controllerutil.OperationResultCreated || operationResult == controllerutil.OperationResultUpdated {
+		// manual variables
+		_, err = c.createOrUpdateEnvConfigMap(ctx, manualEnvMap, true, namespace)
+		if err != nil {
+			return OperationResult{}, err
+		}
+		if operationResultComputed == controllerutil.OperationResultCreated || operationResultComputed == controllerutil.OperationResultUpdated {
 			namespaceToRestart[namespace] = struct{}{}
 		}
 	}
@@ -471,8 +471,13 @@ func (c HubAdapter) applySetTransformation(variable mdaiv1.Variable, envMap map[
 	}
 }
 
-func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, namespace string) (controllerutil.OperationResult, error) {
-	envConfigMapName := c.mdaiCR.Name + envConfigMapNamePostfix
+func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, manual bool, namespace string) (controllerutil.OperationResult, error) {
+	var envConfigMapName string
+	if manual {
+		envConfigMapName = c.mdaiCR.Name + manualEnvConfigMapNamePostfix
+	} else {
+		envConfigMapName = c.mdaiCR.Name + envConfigMapNamePostfix
+	}
 	desiredConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      envConfigMapName,

@@ -18,7 +18,9 @@ package v1
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 
 	"github.com/prometheus/prometheus/promql/parser"
@@ -108,7 +110,26 @@ func (v *MdaiHubCustomValidator) ValidateUpdate(_ context.Context, oldObj, newOb
 		return nil, fmt.Errorf("expected a MdaiHub object for the oldObj but got %T", oldMdaihub)
 	}
 
-	// TODO validate that meta variables keep the same references. Meta variables are immutable.
+	// validate that meta variables keep the same references. Meta variables are immutable.
+	if oldMdaihub.Spec.Variables != nil && mdaihub.Spec.Variables != nil {
+		oldVariablesMap := make(map[string]mdaiv1.Variable)
+		for _, oldVariables := range *oldMdaihub.Spec.Variables {
+			if oldVariables.Type == mdaiv1.VariableTypeMeta {
+				oldVariablesMap[oldVariables.Key] = oldVariables
+			}
+		}
+
+		for _, newVariable := range *mdaihub.Spec.Variables {
+			if newVariable.Type != mdaiv1.VariableTypeMeta {
+				continue
+			}
+			if oldVariable, found := oldVariablesMap[newVariable.Key]; found {
+				if !reflect.DeepEqual(oldVariable.VariableRefs, newVariable.VariableRefs) {
+					return nil, errors.New("meta variable references must not change, delete and recreate the variable to update references")
+				}
+			}
+		}
+	}
 
 	mdaihublog.Info("Validation for MdaiHub upon update", "name", mdaihub.GetName())
 
@@ -130,53 +151,9 @@ func (v *MdaiHubCustomValidator) ValidateDelete(_ context.Context, obj runtime.O
 func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Warnings, error) {
 	warnings := admission.Warnings{}
 
-	keys := map[string]struct{}{}
-	exportedVariableNames := map[string]struct{}{}
-	variables := mdaihub.Spec.Variables
-	if variables == nil || len(*variables) == 0 {
-		warnings = append(warnings, "variables are not specified")
-	} else {
-		for _, variable := range *variables {
-			if variable.StorageType != mdaiv1.VariableSourceTypeBuiltInValkey {
-				return warnings, fmt.Errorf("hub %s, variable %s: unsupported storage type %s", mdaihub.GetName(), variable.Key, variable.StorageType)
-			}
-			if _, exists := keys[variable.Key]; exists {
-				return warnings, fmt.Errorf("hub %s, variable key %s is duplicated", mdaihub.GetName(), variable.Key)
-			}
-			keys[variable.Key] = struct{}{}
-
-			refs := variable.VariableRefs
-			if len(refs) == 0 && mdaiv1.VariableTypeMeta == variable.Type {
-				return warnings, fmt.Errorf("hub %s, variable %s: no variable references provided for meta variable", mdaihub.GetName(), variable.Key)
-			}
-			if len(refs) > 0 && mdaiv1.VariableTypeMeta != variable.Type {
-				return warnings, fmt.Errorf("hub %s, variable %s: variable references are not supported for non-meta variables", mdaihub.GetName(), variable.Key)
-			}
-			if len(refs) != 2 && mdaiv1.VariableTypeMeta == variable.Type && mdaiv1.MetaVariableDateTypeHashSet == variable.DataType {
-				return warnings, fmt.Errorf("hub %s, variable %s: variable references for Meta HashSet must have exactly 2 elements", mdaihub.GetName(), variable.Key)
-			}
-
-			for _, with := range variable.SerializeAs {
-				if _, exists := exportedVariableNames[with.Name]; exists {
-					return warnings, fmt.Errorf("hub %s, variable %s: exported variable name %s is duplicated", mdaihub.GetName(), variable.Key, with.Name)
-				}
-				exportedVariableNames[with.Name] = struct{}{}
-
-				transformers := with.Transformers
-				switch variable.DataType {
-				case mdaiv1.VariableDataTypeSet, mdaiv1.MetaVariableDataTypePriorityList:
-					if len(transformers) == 0 {
-						return warnings, fmt.Errorf("hub %s, variable %s: at least one transformer must be provided, such as 'join'", mdaihub.GetName(), variable.Key)
-					}
-				case mdaiv1.VariableDataTypeString, mdaiv1.VariableDataTypeFloat, mdaiv1.VariableDataTypeInt, mdaiv1.VariableDataTypeBoolean, mdaiv1.VariableDataTypeMap, mdaiv1.MetaVariableDateTypeHashSet:
-					if len(transformers) > 0 {
-						return warnings, fmt.Errorf("hub %s, variable %s: transformers are not supported for variable type %s", mdaihub.GetName(), variable.Key, variable.DataType)
-					}
-				default:
-					return warnings, fmt.Errorf("hub %s, variable %s: unsupported variable type", mdaihub.GetName(), variable.Key)
-				}
-			}
-		}
+	keys, warnings, err := v.validateVariables(mdaihub, warnings)
+	if err != nil {
+		return warnings, err
 	}
 
 	evaluations := mdaihub.Spec.Evaluations
@@ -209,12 +186,59 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 		}
 	}
 
-	warnings, err := v.validateObserversAndObserverResources(mdaihub, warnings)
-	if err != nil {
-		return warnings, err
-	}
+	return v.validateObserversAndObserverResources(mdaihub, warnings)
+}
 
-	return warnings, nil
+func (v *MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub, warnings admission.Warnings) (map[string]struct{}, admission.Warnings, error) {
+	keys := map[string]struct{}{}
+	exportedVariableNames := map[string]struct{}{}
+	variables := mdaihub.Spec.Variables
+	if variables == nil || len(*variables) == 0 {
+		warnings = append(warnings, "variables are not specified")
+	} else {
+		for _, variable := range *variables {
+			if variable.StorageType != mdaiv1.VariableSourceTypeBuiltInValkey {
+				return nil, warnings, fmt.Errorf("hub %s, variable %s: unsupported storage type %s", mdaihub.GetName(), variable.Key, variable.StorageType)
+			}
+			if _, exists := keys[variable.Key]; exists {
+				return nil, warnings, fmt.Errorf("hub %s, variable key %s is duplicated", mdaihub.GetName(), variable.Key)
+			}
+			keys[variable.Key] = struct{}{}
+
+			refs := variable.VariableRefs
+			if len(refs) == 0 && mdaiv1.VariableTypeMeta == variable.Type {
+				return nil, warnings, fmt.Errorf("hub %s, variable %s: no variable references provided for meta variable", mdaihub.GetName(), variable.Key)
+			}
+			if len(refs) > 0 && mdaiv1.VariableTypeMeta != variable.Type {
+				return nil, warnings, fmt.Errorf("hub %s, variable %s: variable references are not supported for non-meta variables", mdaihub.GetName(), variable.Key)
+			}
+			if len(refs) != 2 && mdaiv1.VariableTypeMeta == variable.Type && mdaiv1.MetaVariableDataTypeHashSet == variable.DataType {
+				return nil, warnings, fmt.Errorf("hub %s, variable %s: variable references for Meta HashSet must have exactly 2 elements", mdaihub.GetName(), variable.Key)
+			}
+
+			for _, with := range variable.SerializeAs {
+				if _, exists := exportedVariableNames[with.Name]; exists {
+					return nil, warnings, fmt.Errorf("hub %s, variable %s: exported variable name %s is duplicated", mdaihub.GetName(), variable.Key, with.Name)
+				}
+				exportedVariableNames[with.Name] = struct{}{}
+
+				transformers := with.Transformers
+				switch variable.DataType {
+				case mdaiv1.VariableDataTypeSet, mdaiv1.MetaVariableDataTypePriorityList:
+					if len(transformers) == 0 {
+						return nil, warnings, fmt.Errorf("hub %s, variable %s: at least one transformer must be provided, such as 'join'", mdaihub.GetName(), variable.Key)
+					}
+				case mdaiv1.VariableDataTypeString, mdaiv1.VariableDataTypeFloat, mdaiv1.VariableDataTypeInt, mdaiv1.VariableDataTypeBoolean, mdaiv1.VariableDataTypeMap, mdaiv1.MetaVariableDataTypeHashSet:
+					if len(transformers) > 0 {
+						return nil, warnings, fmt.Errorf("hub %s, variable %s: transformers are not supported for variable type %s", mdaihub.GetName(), variable.Key, variable.DataType)
+					}
+				default:
+					return nil, warnings, fmt.Errorf("hub %s, variable %s: unsupported variable type", mdaihub.GetName(), variable.Key)
+				}
+			}
+		}
+	}
+	return keys, warnings, nil
 }
 
 func (v *MdaiHubCustomValidator) validateObserversAndObserverResources(mdaihub *mdaiv1.MdaiHub, existingWarnings admission.Warnings) (admission.Warnings, error) {
@@ -270,7 +294,7 @@ func (v *MdaiHubCustomValidator) validateOnStatus(action *mdaiv1.Action, keys ma
 	}
 	ref := action.VariableUpdate.VariableRef
 	if _, exists := keys[ref]; !exists {
-		return fmt.Errorf("storage key %s does not exist, evaluation: %s", ref, evaluation.Name)
+		return fmt.Errorf("variable with key %s does not exist, evaluation: %s", ref, evaluation.Name)
 	}
 
 	return nil

@@ -51,8 +51,10 @@ import (
 )
 
 const (
-	enableWebhooksEnvVar       = "ENABLE_WEBHOOKS"
-	useConsoleLogEncoderEnvVar = "USE_CONSOLE_LOG_ENCODER"
+	enableWebhooksEnvVar           = "ENABLE_WEBHOOKS"
+	useConsoleLogEncoderEnvVar     = "USE_CONSOLE_LOG_ENCODER"
+	otelSdkDisabledEnvVar          = "OTEL_SDK_DISABLED"
+	otelExporterOtlpEndpointEnvVar = "OTEL_EXPORTER_OTLP_ENDPOINT"
 )
 
 var (
@@ -98,9 +100,11 @@ func main() {
 	ctx := context.Background()
 
 	// Set up OpenTelemetry.
-	otelShutdown, err := setupOTelSDK(ctx)
+	otelSdkEnabledStr := os.Getenv(otelSdkDisabledEnvVar)
+	otelSdkEnabled := otelSdkEnabledStr != "true"
+	otelShutdown, err := setupOTelSDK(ctx, otelSdkEnabled)
 	if err != nil {
-		setupLog.Error(err, "Error setting up otel client")
+		setupLog.Error(err, "Error setting up OpenTelemetry SDK. Set "+otelSdkDisabledEnvVar+` to "true" to bypass this.`)
 		os.Exit(1)
 	}
 
@@ -134,6 +138,15 @@ func main() {
 	flag.Parse()
 
 	logger := ctrlzap.New(ctrlzap.UseFlagOptions(&zapOpts))
+	if !otelSdkEnabled {
+		logger.Info("OTEL SDK has been disabled with " + otelSdkDisabledEnvVar + " environment variable")
+	}
+	otlpEndpointStr := os.Getenv(otelExporterOtlpEndpointEnvVar)
+	if otelSdkEnabledStr == "" && otlpEndpointStr == "" {
+		logger.Info("WARNING: No OTLP endpoint is defined, but OTEL SDK is enabled." +
+			" Please set either " + otelSdkDisabledEnvVar + " or " + otelExporterOtlpEndpointEnvVar +
+			" environment variable. You will receive 'OTEL SDK error' logs until this is resolved.")
+	}
 	otelLogger := attachOtelLogger(logger)
 	ctrl.SetLogger(otelLogger)
 
@@ -262,6 +275,17 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiHub")
 			gracefullyShutdownWithCode(1)
 		}
+		if err = webhookmdaiv1.SetupMdaiCollectorWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiCollector")
+			os.Exit(1)
+		}
+	}
+	if err = (&controller.MdaiCollectorReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MdaiCollector")
+		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 

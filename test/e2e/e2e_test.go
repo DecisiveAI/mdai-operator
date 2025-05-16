@@ -396,17 +396,31 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should create the config map for variables", func() {
 			By("verifying the config map for variables exists")
 			configMapExists("mdaihub-sample-variables", otelNamespace)
+			configMapExists("mdaihub-sample-manual-variables", otelNamespace)
 
 			By("verifying the config map content for variables defaults")
 			verifyConfigMap := func(g Gomega) {
-				data := getVariablesFromMap(g)
-
+				data := getVariablesFromMap(g, "mdaihub-sample-variables")
+				g.Expect(data).To(HaveLen(8))
+				g.Expect(data["ATTRIBUTES"]).To(Equal("{}\n"))
+				g.Expect(data["SEVERITY_FILTERS_BY_LEVEL"]).To(Equal("{}\n"))
 				g.Expect(data["SERVICE_LIST_2_CSV"]).To(Equal(""))
 				g.Expect(data["SERVICE_LIST_2_REGEX"]).To(Equal(""))
 				g.Expect(data["SERVICE_LIST_CSV"]).To(Equal(""))
 				g.Expect(data["SERVICE_LIST_REGEX"]).To(Equal(""))
+				g.Expect(data["SERVICE_LIST_CSV_MANUAL"]).To(Equal(""))
+				g.Expect(data["SERVICE_LIST_REGEX_MANUAL"]).To(Equal(""))
 			}
 			Eventually(verifyConfigMap).Should(Succeed())
+
+			By("verifying the config map content for manual variables")
+			verifyConfigMapManual := func(g Gomega) {
+				data := getVariablesFromMap(g, "mdaihub-sample-manual-variables")
+				g.Expect(data).To(HaveLen(2))
+				g.Expect(data["manual_filter"]).To(Equal("string"))
+				g.Expect(data["service_list_manual"]).To(Equal("set"))
+			}
+			Eventually(verifyConfigMapManual).Should(Succeed())
 		})
 
 		It("can create the config map for watcher", func() {
@@ -451,6 +465,16 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyWatcherLogs).Should(Succeed())
 		})
 
+		It("can reconcile a MDAI Collector CR", func() {
+			By("applying a managed OTEL CR")
+			verifyMdaiCollector := func(g Gomega) {
+				cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/internal-mdai-collector.yaml", "-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyMdaiCollector).Should(Succeed())
+		})
+
 		It("can deploy the mdai-collector", func() {
 			verifyMdaiCollectorRoleBinding := func(g Gomega) {
 				cmd := exec.Command(
@@ -462,12 +486,12 @@ var _ = Describe("Manager", Ordered, func() {
 				)
 				out, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(strings.Contains(out, "mdai-collector-rb")).To(BeTrue())
+				g.Expect(strings.Contains(out, "internal-mdai-collector-rb")).To(BeTrue())
 			}
 			Eventually(verifyMdaiCollectorRoleBinding, "1m", "5s").Should(Succeed())
 
 			verifyMdaiCollector := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "deployment", "mdai-collector", "-n", namespace)
+				cmd := exec.Command("kubectl", "get", "deployment", "internal-mdai-collector", "-n", namespace)
 				response, err := utils.Run(cmd)
 				g.Expect(response).To(ContainSubstring("mdai-collector   1/1"))
 				g.Expect(err).NotTo(HaveOccurred())
@@ -475,7 +499,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyMdaiCollector, "1m", "5s").Should(Succeed())
 
 			verifyMdaiCollectorPods := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l", "app=mdai-collector")
+				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l", "app=internal-mdai-collector")
 				out, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(strings.Contains(out, "Running")).To(BeTrue())
@@ -543,13 +567,92 @@ var _ = Describe("Manager", Ordered, func() {
 				Member("noisy-service").Build()).Error()
 			Expect(err).NotTo(HaveOccurred())
 
+			err = valkeyClient.Do(
+				context.TODO(),
+				valkeyClient.B().Set().
+					Key("variable/mdaihub-sample/any_service_alerted").
+					Value("true").
+					Build(),
+			).Error()
+			Expect(err).NotTo(HaveOccurred())
+
+			err = valkeyClient.Do(
+				context.TODO(),
+				valkeyClient.B().Sadd().
+					Key("variable/mdaihub-sample/service_list").
+					Member("serviceA").
+					Build(),
+			).Error()
+			Expect(err).NotTo(HaveOccurred())
+
+			err = valkeyClient.Do(
+				context.TODO(),
+				valkeyClient.B().Hset().
+					Key("variable/mdaihub-sample/attribute_map").FieldValue().
+					FieldValue("send_batch_size", "100").
+					FieldValue("timeout", "15s").
+					Build(),
+			).Error()
+			Expect(err).NotTo(HaveOccurred())
+
+			err = valkeyClient.Do(
+				context.TODO(),
+				valkeyClient.B().Set().
+					Key("variable/mdaihub-sample/default").
+					Value("default").
+					Build(),
+			).Error()
+			Expect(err).NotTo(HaveOccurred())
+
+			err = valkeyClient.Do(
+				context.TODO(),
+				valkeyClient.B().Set().
+					Key("variable/mdaihub-sample/filter").
+					Value(`- severity_number < SEVERITY_NUMBER_WARN
+- IsMatch(resource.attributes["service.name"], "${env:SERVICE_LIST}")`).
+					Build(),
+			).Error()
+			Expect(err).NotTo(HaveOccurred())
+
+			err = valkeyClient.Do(
+				context.TODO(),
+				valkeyClient.B().Set().
+					Key("variable/mdaihub-sample/severity_number").
+					Value("1").
+					Build(),
+			).Error()
+			Expect(err).NotTo(HaveOccurred())
+
+			err = valkeyClient.Do(
+				context.TODO(),
+				valkeyClient.B().Hset().
+					Key("variable/mdaihub-sample/severity_filters_by_level").FieldValue().
+					FieldValue("1", "INFO|WARNING").
+					FieldValue("2", "INFO").
+					Build(),
+			).Error()
+			Expect(err).NotTo(HaveOccurred())
+
 			By("validating that the config map has the updated variable value")
 			verifyConfigMap := func(g Gomega) {
-				data := getVariablesFromMap(g)
+				data := getVariablesFromMap(g, "mdaihub-sample-variables")
+				g.Expect(data).To(HaveLen(14))
+				g.Expect(data["ATTRIBUTES"]).To(Equal("send_batch_size: 100\ntimeout: 15s\n"))
+				g.Expect(data["SERVICE_ALERTED"]).To(Equal("true"))
+				g.Expect(data["SERVICE_HASH_SET"]).To(Equal("INFO|WARNING"))
 				g.Expect(data["SERVICE_LIST_2_CSV"]).To(Equal(""))
 				g.Expect(data["SERVICE_LIST_2_REGEX"]).To(Equal(""))
+				g.Expect(data["DEFAULT"]).To(Equal("default"))
+				g.Expect(data["FILTER"]).To(Equal("- severity_number < SEVERITY_NUMBER_WARN\n- " +
+					"IsMatch(resource.attributes[\"service.name\"], \"${env:SERVICE_LIST}\")"))
 				g.Expect(data["SERVICE_LIST_CSV"]).To(Equal("noisy-service"))
 				g.Expect(data["SERVICE_LIST_REGEX"]).To(Equal("noisy-service"))
+				g.Expect(data["SERVICE_PRIORITY"]).To(Equal("default"))
+				g.Expect(data["SEVERITY_FILTERS_BY_LEVEL"]).To(Equal("\"1\": INFO|WARNING\n\"2\": INFO\n"))
+				g.Expect(data["SEVERITY_NUMBER"]).To(Equal("1"))
+				g.Expect(data["SERVICE_LIST_REGEX_MANUAL"]).To(Equal(""))
+				g.Expect(data["SERVICE_LIST_CSV_MANUAL"]).To(Equal(""))
+
 			}
 			Eventually(verifyConfigMap).Should(Succeed())
 
@@ -601,6 +704,20 @@ var _ = Describe("Manager", Ordered, func() {
 
 		})
 
+		It("can delete MdaiCollector CRs and clean up resources", func() {
+			By("deleting a MdaiCollector CR")
+			verifyMdaiCollector := func(g Gomega) {
+				cmd := exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/internal-mdai-collector.yaml", "-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyMdaiCollector).Should(Succeed())
+
+			By("validating collector deleted")
+			// TODO
+
+		})
+
 		It("can delete OTEL CRs", func() {
 			verifyMdaiHub := func(g Gomega) {
 				cmd := exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/collector.yaml", "-n", otelNamespace)
@@ -612,8 +729,8 @@ var _ = Describe("Manager", Ordered, func() {
 	})
 })
 
-func getVariablesFromMap(g Gomega) map[string]any {
-	cmd := exec.Command("kubectl", "get", "configmap", "mdaihub-sample-variables",
+func getVariablesFromMap(g Gomega, cmName string) map[string]any {
+	cmd := exec.Command("kubectl", "get", "configmap", cmName,
 		"-n", otelNamespace, "-o", "json")
 	out, err := utils.Run(cmd)
 	g.Expect(err).NotTo(HaveOccurred())

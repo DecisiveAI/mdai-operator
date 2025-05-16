@@ -62,6 +62,9 @@ var _ = BeforeSuite(func() {
 	err = mdaiv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = mdaiv1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	// +kubebuilder:scaffold:scheme
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
