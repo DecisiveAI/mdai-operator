@@ -18,15 +18,23 @@ processors:
     error_mode: ignore
     logs:
       log_record:
-        - 'severity_number < ${env:LOG_SEVERITY}'
+        - severity_number < ${env:LOG_SEVERITY} and attributes["mdai-logstream"] != "audit"
   resource/k8slogstream:
     attributes:
       - key: mdai-logstream
         value: "hub"
         action: upsert
+  resource/hub-to-audit:
+    attributes:
+      - key: mdai-logstream
+        value: "audit"
+        action: upsert
 
 exporters:
   debug: {}
+  debug/audit: {}
+  debug/hub: {}
+  debug/collector: {}
   debug/verbose:
     verbosity: detailed
 
@@ -34,7 +42,7 @@ connectors:
   routing/logstream:
     default_pipelines: [logs/other]
     table:
-      - context: resource
+      - context: log
         condition: attributes["mdai-logstream"] == "audit"
         pipelines: [logs/audit]
       - context: resource
@@ -64,16 +72,16 @@ service:
 
     logs/audit:
       receivers: [routing/logstream]
-      processors: [batch]
-      exporters: [debug]
+      processors: [resource/hub-to-audit, batch]
+      exporters: [debug/audit]
     logs/hub:
       receivers: [routing/logstream]
       processors: [batch]
-      exporters: [debug]
+      exporters: [debug/hub]
     logs/collector:
       receivers: [routing/logstream]
       processors: [batch]
-      exporters: [debug]
+      exporters: [debug/collector]
     logs/other:
       receivers: [routing/logstream]
       processors: [filter/severity, batch]
