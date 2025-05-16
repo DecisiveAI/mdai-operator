@@ -273,7 +273,7 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	envMap := map[string]string{"VAR": "value"}
-	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, false, "default"); err != nil {
+	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, envConfigMapNamePostfix, "default"); err != nil {
 		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
 	}
 
@@ -296,7 +296,7 @@ func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	envMap := map[string]string{"VAR": "string"}
-	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, true, "default"); err != nil {
+	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, manualEnvConfigMapNamePostfix, "default"); err != nil {
 		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
 	}
 
@@ -318,7 +318,7 @@ func TestBuildCollectorConfig(t *testing.T) {
 			LabelResourceAttributes: []string{"label1", "label2"},
 		},
 	}
-	mdaiCR.Spec.Observers = &observers
+	mdaiCR.Spec.Observers = observers
 
 	scheme := createTestScheme()
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
@@ -444,7 +444,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 	}
 
 	mdaiCR := newTestMdaiCR()
-	mdaiCR.Spec.Variables = &[]v1.Variable{
+	mdaiCR.Spec.Variables = []v1.Variable{
 		variableSet,
 		variableString,
 		variableBoolean,
@@ -560,7 +560,7 @@ func TestEnsureManualAndComputedVariableSynced(t *testing.T) {
 		SerializeAs: []v1.Serializer{varWith},
 	}
 	mdaiCR := newTestMdaiCR()
-	mdaiCR.Spec.Variables = &[]v1.Variable{computedVariable, manualVariable}
+	mdaiCR.Spec.Variables = []v1.Variable{computedVariable, manualVariable}
 
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
@@ -644,14 +644,14 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 	alertName := "alert1"
 	var expr = intstr.FromString("up == 0")
 	var duration1 prometheusv1.Duration = "5m"
-	eval := v1.Evaluation{
+	eval := v1.PrometheusAlert{
 		Name:     alertName,
 		Expr:     expr,
 		For:      &duration1,
 		Severity: "critical",
 	}
 
-	evals := []v1.Evaluation{eval}
+	evals := []v1.PrometheusAlert{eval}
 	var interval prometheusv1.Duration = "10m"
 	mdaiCR := &v1.MdaiHub{
 		ObjectMeta: metav1.ObjectMeta{
@@ -659,7 +659,7 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: v1.MdaiHubSpec{
-			Evaluations: &evals,
+			PrometheusAlert: evals,
 			Config: &v1.Config{
 				EvaluationInterval: &interval,
 			},
@@ -671,9 +671,9 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
 
-	opResult, err := adapter.ensureEvaluationsSynchronized(ctx)
+	opResult, err := adapter.ensurePrometheusAlertsSynchronized(ctx)
 	if err != nil {
-		t.Fatalf("ensureEvaluationsSynchronized returned error: %v", err)
+		t.Fatalf("ensurePrometheusAlertsSynchronized returned error: %v", err)
 	}
 	if opResult != ContinueOperationResult() {
 		t.Errorf("expected ContinueOperationResult, got: %v", opResult)
@@ -730,9 +730,9 @@ func TestEnsureEvaluationsSynchronized_NoEvaluations(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
 
-	opResult, err := adapter.ensureEvaluationsSynchronized(ctx)
+	opResult, err := adapter.ensurePrometheusAlertsSynchronized(ctx)
 	if err != nil {
-		t.Fatalf("ensureEvaluationsSynchronized returned error: %v", err)
+		t.Fatalf("ensurePrometheusAlertsSynchronized returned error: %v", err)
 	}
 	if opResult != ContinueOperationResult() {
 		t.Errorf("expected ContinueOperationResult, got: %v", opResult)
@@ -824,8 +824,8 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: v1.MdaiHubSpec{
-			Observers:         &observers,
-			ObserverResources: &observerResources,
+			Observers:         observers,
+			ObserverResources: observerResources,
 		},
 		Status: v1.MdaiHubStatus{},
 	}

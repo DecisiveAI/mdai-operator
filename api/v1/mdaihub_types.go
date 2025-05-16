@@ -27,18 +27,18 @@ type Serializer struct {
 	// Name The environment variable name to be used to access the variable's value.
 	// +kubeuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubebuilder:validation:MinLength=1
-	// +kubeuilder:validation:Required
+	// + required
 	Name string `json:"name" yaml:"name"`
 	// Transformers The transformation applied to the value of the variable in the order provided before it is assigned
 	// as an environment variable.
-	// +kubebuilder:validation:Optional
+	// +optional
 	Transformers []VariableTransformer `json:"transformers,omitempty" yaml:"transformers,omitempty"`
 }
 
 type VariableTransformer struct {
 	Type TransformerType `json:"type" yaml:"type"`
 	// Join For use with "set" or "array" type variables, joins the items of the collection into a string.
-	// +kubebuilder:validation:Optional
+	// +optional
 	Join *JoinTransformer `json:"join,omitempty" yaml:"join,omitempty"`
 }
 
@@ -96,27 +96,12 @@ type Action struct {
 	VariableUpdate *VariableUpdate `json:"variableUpdate,omitempty" yaml:"variableUpdate,omitempty"`
 }
 
-type PrometheusAlertEvaluationStatus struct {
-	// Firing Action performed when the Prometheus Alert status changes to "firing"
-	// +kubebuilder:validation:Optional
-	Firing *Action `json:"firing,omitempty" yaml:"firing,omitempty"`
-	// Resolved Action performed when the Prometheus Alert status changes to "resolved"
-	// +kubebuilder:validation:Optional
-	Resolved *Action `json:"resolved,omitempty" yaml:"resolved,omitempty"`
-}
-
-type Evaluation struct {
+type PrometheusAlert struct {
 	// Name How this evaluation will be referred to elsewhere in the config. Also, the name applied to the Prometheus Alert
 	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
-	// Type The type of evaluation. Currently only "mdai/prometheus_alert" is supported and set as default value.
-	// +kubebuilder:validation:Enum:=mdai/prometheus_alert
-	// +kubebuilder:validation:Required
-	// +kubebuilder:default="mdai/prometheus_alert"
-	Type EvaluationType `json:"type" yaml:"type"`
-	// Expr A valid PromQL query expression
 	// +kubebuilder:validation:Required
 	Expr intstr.IntOrString `json:"expr" yaml:"expr"`
 	// For Alerts are considered firing once they have been returned for this long.
@@ -128,12 +113,6 @@ type Evaluation struct {
 	// +kubebuilder:validation:Pattern:="^(warning|critical)$"
 	// +kubebuilder:validation:Required
 	Severity string `json:"severity" yaml:"severity"`
-	// RelevantLabels indicates which part(s) of the alert payload to forward to the Action.
-	// +kubebuilder:validation:Optional
-	RelevantLabels []string `json:"relevantLabels,omitempty" yaml:"relevantLabels,omitempty"`
-	// OnStatus allows the user to specify actions depending on the state of the evaluation
-	// +kubebuilder:validation:Optional
-	OnStatus *PrometheusAlertEvaluationStatus `json:"onStatus,omitempty" yaml:"onStatus,omitempty"`
 }
 
 type ObserverLogsFilter struct {
@@ -185,14 +164,34 @@ type Config struct {
 	EvaluationInterval *prometheusv1.Duration `json:"evaluation_interval,omitempty" yaml:"evaluation_interval,omitempty"`
 }
 
+type Automation struct {
+	// + required
+	EventRef string `json:"eventRef"`
+	// + required
+	Workflow []AutomationStep `json:"workflow"` // we are using a slice here to keep the order
+}
+
+type AutomationStep struct {
+	// +required
+	HandlerRef string `json:"handlerRef"`
+	// +optional
+	Arguments map[string]string `json:"args,omitempty"`
+}
+
 // MdaiHubSpec defines the desired state of MdaiHub.
 type MdaiHubSpec struct {
-	// +kubebuilder:validation:Optional
-	Config            *Config             `json:"config,omitempty" yaml:"config,omitempty"`
-	Observers         *[]Observer         `json:"observers,omitempty" yaml:"observers,omitempty"`
-	ObserverResources *[]ObserverResource `json:"observerResources,omitempty" yaml:"observerResources,omitempty"`
-	Variables         *[]Variable         `json:"variables,omitempty"`
-	Evaluations       *[]Evaluation       `json:"evaluations,omitempty"` // evaluation configuration (alerting rules)
+	// +optional
+	Config *Config `json:"config,omitempty" yaml:"config,omitempty"`
+	// +optional
+	Observers []Observer `json:"observers,omitempty" yaml:"observers,omitempty"`
+	// +optional
+	ObserverResources []ObserverResource `json:"observerResources,omitempty" yaml:"observerResources,omitempty"`
+	// +optional
+	Variables []Variable `json:"variables,omitempty"`
+	// +optional
+	PrometheusAlert []PrometheusAlert `json:"prometheusAlert,omitempty"` // evaluation configuration (alerting rules)
+	// +optional
+	Automations []Automation `json:"automations,omitempty"`
 }
 
 // MdaiHubStatus defines the observed state of MdaiHub.
@@ -240,7 +239,6 @@ type (
 	VariableType            string
 	VariableDataType        string
 	VariableTransform       string
-	EvaluationType          string
 	VariableUpdateOperation string
 	ObserverResourceType    string
 	TransformerType         string
@@ -270,8 +268,6 @@ const (
 	MetaVariableDataTypeHashSet VariableDataType = "metaHashSet"
 	// MetaVariableDataTypePriorityList takes a list of variable refs, and will evaluate to the first one that is not empty. Returns an array of strings.
 	MetaVariableDataTypePriorityList VariableDataType = "metaPriorityList"
-
-	EvaluationTypePrometheusAlert EvaluationType = "mdai/prometheus_alert"
 
 	TransformerTypeJoin TransformerType = "join"
 

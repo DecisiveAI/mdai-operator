@@ -33,7 +33,6 @@ import (
 
 func createSampleMdaiHub() *mdaiv1.MdaiHub {
 	storageType := "mdai-valkey"
-	relevantLabels := []string{"service_name"}
 	var duration1 prometheusv1.Duration = "5m"
 
 	return &mdaiv1.MdaiHub{
@@ -46,7 +45,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 			},
 		},
 		Spec: mdaiv1.MdaiHubSpec{
-			Variables: &[]mdaiv1.Variable{
+			Variables: []mdaiv1.Variable{
 				{
 					Key: "service_list_1",
 					SerializeAs: []mdaiv1.Serializer{
@@ -157,7 +156,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					},
 				},
 			},
-			Observers: &[]mdaiv1.Observer{
+			Observers: []mdaiv1.Observer{
 				{
 					Name:                    "watcher1",
 					ResourceRef:             "watcher-collector",
@@ -191,7 +190,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					},
 				},
 			},
-			ObserverResources: &[]mdaiv1.ObserverResource{
+			ObserverResources: []mdaiv1.ObserverResource{
 				{
 					Name:     "watcher-collector",
 					Image:    ptr.To("watcher-image:9.9.9"),
@@ -221,28 +220,12 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					},
 				},
 			},
-			Evaluations: &[]mdaiv1.Evaluation{
+			PrometheusAlert: []mdaiv1.PrometheusAlert{
 				{
 					Name:     "logBytesOutTooHighBySvc",
-					Type:     "mdai/prometheus_alert",
 					Expr:     intstr.FromString("increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024"),
 					Severity: "warning",
-					OnStatus: &mdaiv1.PrometheusAlertEvaluationStatus{
-						Firing: &mdaiv1.Action{
-							VariableUpdate: &mdaiv1.VariableUpdate{
-								VariableRef: "service_list_1",
-								Operation:   "mdai/add_element",
-							},
-						},
-						Resolved: &mdaiv1.Action{
-							VariableUpdate: &mdaiv1.VariableUpdate{
-								VariableRef: "service_list_1",
-								Operation:   "mdai/remove_element",
-							},
-						},
-					},
-					For:            &duration1,
-					RelevantLabels: relevantLabels,
+					For:      &duration1,
 				},
 			},
 		},
@@ -290,7 +273,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 		It("Should deny creation if a required field is missing", func() {
 			By("simulating an invalid creation scenario")
 			obj := createSampleMdaiHub()
-			(*obj.Spec.Variables)[0].Key = "service_list_2"
+			(obj.Spec.Variables)[0].Key = "service_list_2"
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).Error().To(HaveOccurred())
 		})
@@ -306,7 +289,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 		It("Should fail creation if expr does not validate", func() {
 			By("simulating an invalid creation scenario")
 			obj := createSampleMdaiHub()
-			(*obj.Spec.Evaluations)[0].Expr = intstr.FromString("increaser(mdai_log_bytes_sent_total[1h]) > 100*1024*1024")
+			(obj.Spec.PrometheusAlert)[0].Expr = intstr.FromString("increaser(mdai_log_bytes_sent_total[1h]) > 100*1024*1024")
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(MatchError(ContainSubstring(`parse error: unknown function with name "increaser"`)))
@@ -317,7 +300,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			By("simulating a valid update scenario")
 			oldObj = createSampleMdaiHub()
 			obj := createSampleMdaiHub()
-			(*obj.Spec.Variables)[1].Key = "service_list_3"
+			(obj.Spec.Variables)[1].Key = "service_list_3"
 			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(warnings).To(Equal(admission.Warnings{}))
@@ -326,7 +309,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 		It("Should fail validation if references changed", func() {
 			oldObj = createSampleMdaiHub()
 			obj := createSampleMdaiHub()
-			(*obj.Spec.Variables)[6].VariableRefs[0] = "service_list_3"
+			(obj.Spec.Variables)[6].VariableRefs[0] = "service_list_3"
 			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
 			Expect(err).To(MatchError(ContainSubstring(`meta variable references must not change, delete and recreate the variable to update references`)))
 			Expect(warnings).To(BeEmpty())
@@ -334,7 +317,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 
 		It("Should warn is no variable specified", func() {
 			obj := createSampleMdaiHub()
-			*obj.Spec.Variables = nil
+			obj.Spec.Variables = nil
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(MatchError(ContainSubstring(`variable with key service_list_1 does not exist, evaluation: logBytesOutTooHighBySvc`)))
 			Expect(warnings).To(Equal(admission.Warnings{"variables are not specified"}))
@@ -342,7 +325,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 
 		It("Should fail if no references provided for meta variable", func() {
 			obj := createSampleMdaiHub()
-			(*obj.Spec.Variables)[6].VariableRefs = nil
+			(obj.Spec.Variables)[6].VariableRefs = nil
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(MatchError(ContainSubstring(`hub mdaihub-sample, variable priority_list: no variable references provided for meta variable`)))
 			Expect(warnings).To(BeEmpty())
@@ -350,7 +333,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 
 		It("Should fail if references provided for non meta variable", func() {
 			obj := createSampleMdaiHub()
-			(*obj.Spec.Variables)[1].VariableRefs = []string{"ref1"}
+			(obj.Spec.Variables)[1].VariableRefs = []string{"ref1"}
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(MatchError(ContainSubstring(`hub mdaihub-sample, variable service_list_2: variable references are not supported for non-meta variables`)))
 			Expect(warnings).To(BeEmpty())
@@ -358,7 +341,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 
 		It("Should fail if more than two ref provided for hashmap", func() {
 			obj := createSampleMdaiHub()
-			(*obj.Spec.Variables)[7].VariableRefs = []string{"ref1", "ref2", "ref3"}
+			(obj.Spec.Variables)[7].VariableRefs = []string{"ref1", "ref2", "ref3"}
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(MatchError(ContainSubstring(`hub mdaihub-sample, variable hashset: variable references for Meta HashSet must have exactly 2 elements`)))
 			Expect(warnings).To(BeEmpty())
@@ -366,7 +349,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 
 		It("Should fail if exported variable name is duplicated", func() {
 			obj := createSampleMdaiHub()
-			(*obj.Spec.Variables)[7].SerializeAs[0].Name = "SERVICE_LIST_CSV"
+			(obj.Spec.Variables)[7].SerializeAs[0].Name = "SERVICE_LIST_CSV"
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(MatchError(ContainSubstring(`hub mdaihub-sample, variable hashset: exported variable name SERVICE_LIST_CSV is duplicated`)))
 			Expect(warnings).To(BeEmpty())
@@ -374,7 +357,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 
 		It("Should fail if priority list doesn't have transformers", func() {
 			obj := createSampleMdaiHub()
-			(*obj.Spec.Variables)[6].SerializeAs[0].Transformers = nil
+			(obj.Spec.Variables)[6].SerializeAs[0].Transformers = nil
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(MatchError(ContainSubstring("hub mdaihub-sample, variable priority_list: at least one transformer must be provided, such as 'join'")))
 			Expect(warnings).To(BeEmpty())
@@ -382,7 +365,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 
 		It("Should fail if transformers specified for boolean", func() {
 			obj := createSampleMdaiHub()
-			(*obj.Spec.Variables)[3].SerializeAs[0].Transformers = []mdaiv1.VariableTransformer{
+			(obj.Spec.Variables)[3].SerializeAs[0].Transformers = []mdaiv1.VariableTransformer{
 				{Type: mdaiv1.TransformerTypeJoin,
 					Join: &mdaiv1.JoinTransformer{
 						Delimiter: "|",

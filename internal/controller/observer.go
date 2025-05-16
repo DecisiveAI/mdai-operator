@@ -42,10 +42,10 @@ func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationR
 	}
 
 	configObserverResources := make([]string, 0)
-	for _, observerResource := range *observerResources {
+	for _, observerResource := range observerResources {
 		configObserverResources = append(configObserverResources, observerResource.Name)
 		observersForResource := make([]v1.Observer, 0)
-		for _, observer := range *observers {
+		for _, observer := range observers {
 			if observer.ResourceRef == observerResource.Name {
 				observersForResource = append(observersForResource, observer)
 			}
