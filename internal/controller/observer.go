@@ -148,7 +148,7 @@ func (c HubAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Context,
 	namespace := c.mdaiCR.Namespace
 	configMapName := c.getScopedObserverResourceName(observerResource, "config")
 
-	collectorYAML, err := c.getObserverCollectorConfig(observers, observerResource.GrpcReceiverMaxMsgSize)
+	collectorYAML, err := c.getObserverCollectorConfig(observers, observerResource)
 	if err != nil {
 		return "", fmt.Errorf("failed to build observer configuration: %w", err)
 	}
@@ -308,13 +308,13 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 	return nil
 }
 
-func (c HubAdapter) getObserverCollectorConfig(observers []v1.Observer, grpcReceiverMaxMsgSize *uint64) (string, error) {
+func (c HubAdapter) getObserverCollectorConfig(observers []v1.Observer, observerResource v1.ObserverResource) (string, error) {
 	var config map[string]any
 	if err := yaml.Unmarshal([]byte(baseObserverCollectorYAML), &config); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base collector config")
 		return "", err
 	}
-
+	grpcReceiverMaxMsgSize := observerResource.GrpcReceiverMaxMsgSize
 	if grpcReceiverMaxMsgSize != nil {
 		config["receivers"].(map[string]any)["otlp"].(map[string]any)["protocols"].(map[string]any)["grpc"].(map[string]any)["max_recv_msg_size_mib"] = *grpcReceiverMaxMsgSize
 	}
@@ -362,10 +362,29 @@ func (c HubAdapter) getObserverCollectorConfig(observers []v1.Observer, grpcRece
 		dataVolumeReceivers = append(dataVolumeReceivers, dvKey)
 	}
 
-	config["service"].(map[string]any)["pipelines"].(map[string]any)["metrics/observeroutput"] = map[string]any{
+	serviceBlock := config["service"].(map[string]any)
+	serviceBlock["pipelines"].(map[string]any)["metrics/observeroutput"] = map[string]any{
 		"receivers":  dataVolumeReceivers,
 		"processors": []string{"deltatocumulative"},
 		"exporters":  []string{"prometheus"},
+	}
+
+	ownLogsOtlpEndpoint := observerResource.OwnLogsOtlpEndpoint
+	if (ownLogsOtlpEndpoint != nil) && len(*ownLogsOtlpEndpoint) > 0 {
+		serviceBlock["telemetry"].(map[string]any)["logs"] = map[string]any{
+			"processors": []map[string]any{
+				{
+					"batch": map[string]any{
+						"exporter": map[string]any{
+							"otlp": map[string]any{
+								"protocol": "http/protobuf",
+								"endpoint": *ownLogsOtlpEndpoint,
+							},
+						},
+					},
+				},
+			},
+		}
 	}
 
 	raw, err := yaml.Marshal(config)
