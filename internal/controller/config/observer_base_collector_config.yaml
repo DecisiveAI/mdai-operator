@@ -30,6 +30,8 @@ connectors: {}
 service:
   extensions: [ cgroupruntime ]
   telemetry:
+    resource:
+      mdai-logstream: hub
     logs:
       processors:
         - batch:
