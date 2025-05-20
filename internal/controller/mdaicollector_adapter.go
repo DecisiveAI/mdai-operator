@@ -477,6 +477,11 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 					MountPath: "/conf/collector.yaml",
 					SubPath:   "collector.yaml",
 				},
+				{
+					Name:      "varlog",
+					MountPath: "/var/log",
+					ReadOnly:  true,
+				},
 			},
 			EnvFrom: []corev1.EnvFromSource{
 				{
@@ -523,6 +528,14 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: collectorConfigMapName,
 						},
+					},
+				},
+			},
+			{
+				Name: "varlog",
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: "/var/log",
 					},
 				},
 			},

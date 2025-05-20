@@ -8,6 +8,48 @@ receivers:
   k8s_events:
     namespaces:
       - '${env:K8S_NAMESPACE}'
+# grafana logger=plugins.update.checker t=2025-05-20T16:31:09.097731628Z level=info msg="Update check succeeded" duration=245.722667ms
+# prometheus ts=2025-05-20T07:00:01.506Z caller=head.go:1317 level=info component=tsdb msg="WAL checkpoint complete" first=0 last=1 duration=121.856792ms
+# alertmanager ts=2025-05-15T17:57:43.430Z caller=coordinator.go:126 level=info component=configuration msg="Completed loading of configuration file" file=/etc/alertmanager/config_out/alertmanager.env.yaml
+# 1:M 15 May 2025 17:57:29.714 * Creating AOF incr file appendonly.aof.1.incr.aof on server start
+  filelog/prom:
+    include:
+      - /var/log/containers/mdai-prometheus*.log
+      - /var/log/containers/mdai-alertmanager*.log
+    start_at: end
+    include_file_name: true
+    include_file_path: true
+    operators:
+      - type: key_value_parser
+#        timestamp:
+#          parse_from: "prometheus ts"
+#          layout: "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
+  filelog/grafana:
+    include:
+      - /var/log/containers/mdai-grafana*.log
+    start_at: end
+    include_file_name: true
+    include_file_path: true
+    operators:
+      - type: key_value_parser
+#        timestamp:
+#          parse_from: "t"
+#          layout: "YYYY-MM-DDTHH:mm:ss.SSSSSSSSSZ"
+  filelog/valkey:
+    include:
+      - /var/log/containers/mdai-valkey*.log
+    start_at: end
+    include_file_name: true
+    include_file_path: true
+    operators:
+      - type: regex_parser
+        regex: '^(?P<pid>\d+):(?P<role>[MSC]) (?P<day>\d{1,2}) (?P<month>[A-Za-z]{3}) (?P<year>\d{4}) (?P<time>\d{2}:\d{2}:\d{2}\.\d{3}) \* (?P<message>.+)$'
+#        timestamp:
+#          parse_from: time
+#          layout: '%02d %s %04d %02d:%02d:%02d.%03d'
+#          layout_type: strptime
+#        severity:
+#          parse_from: message
 
 processors:
   batch:
@@ -32,6 +74,7 @@ processors:
 
 exporters:
   debug: {}
+  debug/filelog: {}
   debug/audit: {}
   debug/hub: {}
   debug/collector: {}
@@ -65,6 +108,10 @@ service:
       receivers: [k8s_events]
       processors: [resource/k8slogstream]
       exporters: [routing/logstream]
+    logs/mdai_components:
+      receivers: [filelog/prom, filelog/grafana, filelog/valkey]
+      processors: [resource/k8slogstream, batch]
+      exporters: [routing/logstream, debug/filelog]
     logs/input:
       receivers: [otlp]
       processors: [filter/severity, batch]
