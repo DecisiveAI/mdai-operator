@@ -177,6 +177,8 @@ spec:
                       type: string
                     name:
                       type: string
+                    ownLogsOtlpEndpoint:
+                      type: string
                     replicas:
                       format: int32
                       type: integer
