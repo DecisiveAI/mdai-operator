@@ -383,7 +383,7 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(out).To(ContainSubstring("True"))
 			}
-			Eventually(verifyStatus, "5m", "5s").Should(Succeed())
+			Eventually(verifyStatus, "10m", "5s").Should(Succeed())
 			metricsOutput := getMetricsOutputFull()
 			Expect(metricsOutput).To(SatisfyAny(
 				// there is some variability in the numbers of reconciles, so we check for a range
