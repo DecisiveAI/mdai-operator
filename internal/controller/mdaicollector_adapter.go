@@ -462,7 +462,7 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 
 		containerSpec := corev1.Container{
 			Name:  mdaiCollectorDeploymentName,
-			Image: "public.ecr.aws/decisiveai/mdai-collector:0.1.4",
+			Image: "public.ecr.aws/decisiveai/mdai-collector:0.1",
 			Command: []string{
 				"/mdai-collector",
 				"--config=/conf/collector.yaml",

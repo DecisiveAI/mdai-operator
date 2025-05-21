@@ -833,11 +833,11 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 	scheme := createTestScheme()
 
 	observer := v1.Observer{
-		Name:                    "watcher4",
-		ResourceRef:             "watcher-collector",
+		Name:                    "observer4",
+		ResourceRef:             "observer-collector",
 		LabelResourceAttributes: []string{"service.name", "team", "region"},
-		CountMetricName:         ptr.To("mdai_watcher_four_count_total"),
-		BytesMetricName:         ptr.To("mdai_watcher_four_bytes_total"),
+		CountMetricName:         ptr.To("mdai_observer_four_count_total"),
+		BytesMetricName:         ptr.To("mdai_observer_four_bytes_total"),
 		Filter: &v1.ObserverFilter{
 			ErrorMode: ptr.To("ignore"),
 			Logs: &v1.ObserverLogsFilter{
@@ -847,8 +847,8 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 	}
 	observers := []v1.Observer{observer}
 	observerResource := v1.ObserverResource{
-		Name:  "watcher-collector",
-		Image: ptr.To("public.ecr.aws/p3k6k6h3/watcher-observer"),
+		Name:  "observer-collector",
+		Image: ptr.To("public.ecr.aws/p3k6k6h3/observer-observer"),
 	}
 	observerResources := []v1.ObserverResource{observerResource}
 
@@ -886,7 +886,7 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 		t.Errorf("expected collector.yaml key in ConfigMap data, got: %v", cm.Data)
 	}
 
-	deploymentName := mdaiCR.Name + "-watcher-collector"
+	deploymentName := mdaiCR.Name + "-observer-collector"
 	deploy := &appsv1.Deployment{}
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: mdaiCR.Namespace}, deploy); err != nil {
 		t.Fatalf("failed to get Deployment %q: %v", deploymentName, err)
@@ -896,12 +896,12 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 		t.Errorf("expected mdai-collector-config/sha256 annotation to be set in Deployment, got: %v", deploy.Spec.Template.Annotations)
 	}
 
-	serviceName := mdaiCR.Name + "-watcher-collector-service"
+	serviceName := mdaiCR.Name + "-observer-collector-service"
 	svc := &v1core.Service{}
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: serviceName, Namespace: mdaiCR.Namespace}, svc); err != nil {
 		t.Fatalf("failed to get Service %q: %v", serviceName, err)
 	}
-	expectedAppLabel := mdaiCR.Name + "-watcher-collector"
+	expectedAppLabel := mdaiCR.Name + "-observer-collector"
 	if svc.Spec.Selector["app"] != expectedAppLabel {
 		t.Errorf("expected service selector app to be %q, got: %q", expectedAppLabel, svc.Spec.Selector["app"])
 	}
