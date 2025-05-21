@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -49,6 +50,7 @@ type HubAdapter struct {
 	scheme                  *runtime.Scheme
 	valKeyClient            valkey.Client
 	valkeyAuditStreamExpiry time.Duration
+	releaseName             string
 }
 
 func NewHubAdapter(
@@ -68,6 +70,7 @@ func NewHubAdapter(
 		scheme:                  scheme,
 		valKeyClient:            valkeyClient,
 		valkeyAuditStreamExpiry: valkeyAuditStreamExpiry,
+		releaseName:             os.Getenv("RELEASE_NAME"),
 	}
 }
 
@@ -209,6 +212,11 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      defaultPrometheusRuleName,
 				Namespace: c.mdaiCR.Namespace,
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "Helm",
+					"app.kubernetes.io/part-of":    "kube-prometheus-stack",
+					"app.kubernetes.io/instance":   c.releaseName,
+				},
 			},
 			Spec: prometheusv1.PrometheusRuleSpec{
 				Groups: []prometheusv1.RuleGroup{
