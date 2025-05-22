@@ -78,24 +78,6 @@ type Variable struct {
 	SerializeAs []Serializer `json:"serializeAs" yaml:"serializeAs"`
 }
 
-type VariableUpdate struct {
-	// VariableRef The Key of the variable to be updated.
-	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:Required
-	VariableRef string `json:"variableRef" yaml:"variableRef"`
-	// Operation how the variable will be updated
-	// +kubebuilder:validation:Enum:=mdai/add_element;mdai/remove_element;mdai/set;mdai/delete;mdai/incr_by;mdai/decr_by;mdai/map_set_entry;mdai/map_remove_entry;mdai/bulk_set_key_value
-	// +kubebuilder:validation:Required
-	Operation VariableUpdateOperation `json:"operation" yaml:"operation"`
-}
-
-type Action struct {
-	// VariableUpdate Modify the value of a managed variable.
-	// +kubebuilder:validation:Optional
-	VariableUpdate *VariableUpdate `json:"variableUpdate,omitempty" yaml:"variableUpdate,omitempty"`
-}
-
 type PrometheusAlert struct {
 	// Name How this evaluation will be referred to elsewhere in the config. Also, the name applied to the Prometheus Alert
 	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"

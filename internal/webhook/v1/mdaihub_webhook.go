@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"slices"
 
+	"github.com/prometheus/prometheus/promql/parser"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -158,6 +159,12 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 	evaluations := mdaihub.Spec.PrometheusAlert
 	if len(evaluations) == 0 {
 		warnings = append(warnings, "Evaluations are not specified")
+	} else {
+		for _, evaluation := range evaluations {
+			if _, err := parser.ParseExpr(evaluation.Expr.StrVal); err != nil {
+				return warnings, err
+			}
+		}
 	}
 
 	return v.validateObserversAndObserverResources(mdaihub, warnings)

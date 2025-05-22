@@ -6,5 +6,6 @@
 
 ## TODOs:
 1. Manage `event-hub-poc` spin up? - we can do this with helm unless there is anything dynamic
-3. Tests?
+3. Fix e2e test, write new to cover automation
 4. Version?
+5. Check if any new validation needed for automation

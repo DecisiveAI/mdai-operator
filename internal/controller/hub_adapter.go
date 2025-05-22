@@ -150,7 +150,7 @@ func (c HubAdapter) finalizeHub(ctx context.Context) (ObjectState, error) {
 
 	prefix := VariableKeyPrefix + c.mdaiCR.Name + "/"
 	c.logger.Info("Cleaning up old variables from Valkey with prefix", "prefix", prefix)
-	if err := datacore.NewValkeyAdapter(c.valKeyClient, c.logger, c.mdaiCR.Name).DeleteKeysWithPrefixUsingScan(ctx, map[string]struct{}{}); err != nil {
+	if err := datacore.NewValkeyAdapter(c.valKeyClient, c.logger).DeleteKeysWithPrefixUsingScan(ctx, map[string]struct{}{}, c.mdaiCR.Name); err != nil {
 		return ObjectUnchanged, err
 	}
 
@@ -303,7 +303,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 
 	envMap := make(map[string]string)
 	manualEnvMap := make(map[string]string)
-	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.logger, c.mdaiCR.Name)
+	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.logger)
 	valkeyKeysToKeep := map[string]struct{}{}
 	for _, variable := range variables {
 		c.logger.Info(fmt.Sprintf("Processing variable: %s", variable.Key))
@@ -319,7 +319,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 			case mdaiv1.VariableTypeComputed:
 				switch variable.DataType {
 				case mdaiv1.VariableDataTypeSet:
-					valueAsSlice, err := dataAdapter.GetSetAsStringSlice(ctx, key)
+					valueAsSlice, err := dataAdapter.GetSetAsStringSlice(ctx, key, c.mdaiCR.Name)
 					if err != nil {
 						return RequeueAfter(requeueTime, err)
 					}
@@ -327,7 +327,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 				case mdaiv1.VariableDataTypeString, mdaiv1.VariableDataTypeInt, mdaiv1.VariableDataTypeBoolean:
 					// int is represented as string in Valkey, we assume writer guarantee the variable type is correct
 					// boolean is represented as string in Valkey: false or true, we assume writer guarantee the variable type is correct
-					value, found, err := dataAdapter.GetString(ctx, key)
+					value, found, err := dataAdapter.GetString(ctx, key, c.mdaiCR.Name)
 					if err != nil {
 						return RequeueAfter(requeueTime, err)
 					}
@@ -336,7 +336,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 					}
 					c.applySerializerToString(variable, envMap, value)
 				case mdaiv1.VariableDataTypeMap:
-					value, err := dataAdapter.GetMapAsString(ctx, key)
+					value, err := dataAdapter.GetMapAsString(ctx, key, c.mdaiCR.Name)
 					if err != nil {
 						return RequeueAfter(requeueTime, err)
 					}
@@ -348,7 +348,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 			case mdaiv1.VariableTypeMeta:
 				switch variable.DataType {
 				case mdaiv1.MetaVariableDataTypePriorityList:
-					valueAsSlice, found, err := dataAdapter.GetOrCreateMetaPriorityList(ctx, key, variable.VariableRefs)
+					valueAsSlice, found, err := dataAdapter.GetOrCreateMetaPriorityList(ctx, key, c.mdaiCR.Name, variable.VariableRefs)
 					if err != nil {
 						return RequeueAfter(requeueTime, err)
 					}
@@ -357,7 +357,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 					}
 					c.applySetTransformation(variable, envMap, valueAsSlice)
 				case mdaiv1.MetaVariableDataTypeHashSet:
-					value, found, err := dataAdapter.GetOrCreateMetaHashSet(ctx, key, variable.VariableRefs[0], variable.VariableRefs[1])
+					value, found, err := dataAdapter.GetOrCreateMetaHashSet(ctx, key, c.mdaiCR.Name, variable.VariableRefs[0], variable.VariableRefs[1])
 					if err != nil {
 						return RequeueAfter(requeueTime, err)
 					}
@@ -379,7 +379,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	}
 
 	c.logger.Info("Deleting old valkey keys", "valkeyKeysToKeep", valkeyKeysToKeep)
-	if err := dataAdapter.DeleteKeysWithPrefixUsingScan(ctx, valkeyKeysToKeep); err != nil {
+	if err := dataAdapter.DeleteKeysWithPrefixUsingScan(ctx, valkeyKeysToKeep, c.mdaiCR.Name); err != nil {
 		return OperationResult{}, err
 	}
 

@@ -315,14 +315,6 @@ var _ = Describe("MdaiHub Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
-		It("Should warn is no variable specified", func() {
-			obj := createSampleMdaiHub()
-			obj.Spec.Variables = nil
-			warnings, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).To(MatchError(ContainSubstring(`variable with key service_list_1 does not exist, evaluation: logBytesOutTooHighBySvc`)))
-			Expect(warnings).To(Equal(admission.Warnings{"variables are not specified"}))
-		})
-
 		It("Should fail if no references provided for meta variable", func() {
 			obj := createSampleMdaiHub()
 			(obj.Spec.Variables)[6].VariableRefs = nil
