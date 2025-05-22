@@ -30,6 +30,15 @@ connectors: {}
 service:
   extensions: [ cgroupruntime ]
   telemetry:
+    resource:
+      mdai-logstream: hub
+    logs:
+      processors:
+        - batch:
+            exporter:
+              otlp:
+                protocol: http/protobuf
+                endpoint: http://hub-monitor-mdai-collector-service.mdai.svc.cluster.local:4318
     metrics:
       readers:
         - pull:

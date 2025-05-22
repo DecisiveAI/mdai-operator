@@ -319,13 +319,14 @@ func TestBuildCollectorConfig(t *testing.T) {
 		},
 	}
 	mdaiCR.Spec.Observers = observers
+	observerResource := v1.ObserverResource{}
 
 	scheme := createTestScheme()
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
-	config, err := adapter.getObserverCollectorConfig(observers, nil)
+	config, err := adapter.getObserverCollectorConfig(observers, observerResource)
 	if err != nil {
 		t.Fatalf("getObserverCollectorConfig returned error: %v", err)
 	}
