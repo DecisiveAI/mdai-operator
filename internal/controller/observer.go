@@ -244,7 +244,7 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 			Image: observerDefaultImage,
 			Ports: []corev1.ContainerPort{
 				{ContainerPort: 8888, Name: "otelcol-metrics"},
-				{ContainerPort: 8899, Name: "observer-metrics"},
+				{ContainerPort: 8899, Name: "observe-metrics"},
 				{ContainerPort: 4317, Name: "otlp-grpc"},
 				{ContainerPort: 4318, Name: "otlp-http"},
 			},
