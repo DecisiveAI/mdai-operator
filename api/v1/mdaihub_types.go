@@ -276,6 +276,4 @@ const (
 	EvaluationTypePrometheusAlert EvaluationType = "mdai/prometheus_alert"
 
 	TransformerTypeJoin TransformerType = "join"
-
-	ObserverResourceTypeWatcherCollector ObserverResourceType = "mdai-watcher"
 )
