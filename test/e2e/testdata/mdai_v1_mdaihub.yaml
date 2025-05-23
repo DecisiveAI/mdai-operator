@@ -99,32 +99,32 @@ spec:
                 delimiter: ","
       dataType: set
   observers:
-    - name: watcher1
-      resourceRef: watcher-collector
+    - name: observer1
+      resourceRef: observer-collector
       labelResourceAttributes:
         - service.name
-      countMetricName: mdai_watcher_one_count_total
-      bytesMetricName: mdai_watcher_one_bytes_total
-    - name: watcher2
-      resourceRef: watcher-collector
+      countMetricName: mdai_observer_one_count_total
+      bytesMetricName: mdai_observer_one_bytes_total
+    - name: observer2
+      resourceRef: observer-collector
       labelResourceAttributes:
       - team
       - log_level
-      countMetricName: mdai_watcher_two_count_total
-    - name: watcher3
-      resourceRef: watcher-collector
+      countMetricName: mdai_observer_two_count_total
+    - name: observer3
+      resourceRef: observer-collector
       labelResourceAttributes:
       - region
       - log_level
-      bytesMetricName: mdai_watcher_three_count_total
-    - name: watcher4
-      resourceRef: watcher-collector
+      bytesMetricName: mdai_observer_three_count_total
+    - name: observer4
+      resourceRef: observer-collector
       labelResourceAttributes:
       - service.name
       - team
       - region
-      countMetricName: mdai_watcher_four_count_total
-      bytesMetricName: mdai_watcher_four_bytes_total
+      countMetricName: mdai_observer_four_count_total
+      bytesMetricName: mdai_observer_four_bytes_total
       filter:
         error_mode: ignore
         logs:
@@ -132,8 +132,8 @@ spec:
             - 'attributes["log_level"] == "INFO"'
 
   observerResources:
-    - name: watcher-collector
-      image: public.ecr.aws/decisiveai/watcher-collector:0.1
+    - name: observer-collector
+      image: public.ecr.aws/decisiveai/observer-collector:0.1
       replicas: 2
 
   evaluations:

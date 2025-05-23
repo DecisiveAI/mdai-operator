@@ -80,9 +80,7 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd = exec.Command("kubectl", "create", "secret", "generic", "valkey-secret",
 			"--namespace", namespace,
 			"--from-literal=VALKEY_ENDPOINT=valkey-primary.default.svc.cluster.local:6379",
-			"--from-literal=VALKEY_PASSWORD=abc",
-			"--from-literal=OTEL_SDK_DISABLED=true",
-			"--from-literal=USE_CONSOLE_LOG_ENCODER=true")
+			"--from-literal=VALKEY_PASSWORD=abc")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create secret")
 
