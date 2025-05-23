@@ -4,7 +4,7 @@ metadata:
   labels:
     app.kubernetes.io/name: mdai-operator
     app.kubernetes.io/managed-by: kustomize
-  name: mdaihub-second
+  name: mdaihub-sample
   namespace: mdai
 spec:
   variables:
@@ -89,10 +89,10 @@ spec:
   automations:
     - eventRef: logBytesOutTooHighBySvc
       workflow:
-        - handlerRef: setVariable
+        - handlerRef: HandleAddNoisyServiceToSet
           args:
-            key: service_name
-            default: default_service
+            payload_val_ref: service_name
+            variable_ref: service_list
         - handlerRef: publishMetrics
         - handlerRef: notifySlack
           args:
