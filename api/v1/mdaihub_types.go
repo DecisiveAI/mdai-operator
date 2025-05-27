@@ -254,6 +254,4 @@ const (
 	MetaVariableDataTypePriorityList VariableDataType = "metaPriorityList"
 
 	TransformerTypeJoin TransformerType = "join"
-
-	ObserverResourceTypeWatcherCollector ObserverResourceType = "mdai-watcher"
 )

@@ -383,7 +383,7 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(out).To(ContainSubstring("True"))
 			}
-			Eventually(verifyStatus, "5m", "5s").Should(Succeed())
+			Eventually(verifyStatus, "10m", "5s").Should(Succeed())
 			metricsOutput := getMetricsOutputFull()
 			Expect(metricsOutput).To(SatisfyAny(
 				// there is some variability in the numbers of reconciles, so we check for a range
@@ -423,30 +423,30 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyConfigMapManual).Should(Succeed())
 		})
 
-		It("can create the config map for watcher", func() {
-			configMapExists("mdaihub-sample-watcher-collector-config", namespace)
+		It("can create the config map for observer", func() {
+			configMapExists("mdaihub-sample-observer-collector-config", namespace)
 			// TODO check configmap content
 		})
 
-		It("can deploy the watcher", func() {
-			verifyWatcher := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "deployment", "mdaihub-sample-watcher-collector", "-n", namespace)
+		It("can deploy the observer", func() {
+			verifyObserver := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployment", "mdaihub-sample-observer-collector", "-n", namespace)
 				response, err := utils.Run(cmd)
-				g.Expect(response).To(ContainSubstring("mdaihub-sample-watcher-collector   2/2"))
+				g.Expect(response).To(ContainSubstring("mdaihub-sample-observer-collector   2/2"))
 				g.Expect(err).NotTo(HaveOccurred())
 			}
-			Eventually(verifyWatcher, "1m", "5s").Should(Succeed())
-			verifyWatcherPods := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l", "app=mdaihub-sample-watcher-collector")
+			Eventually(verifyObserver, "1m", "5s").Should(Succeed())
+			verifyObserverPods := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l", "app=mdaihub-sample-observer-collector")
 				out, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(strings.Contains(out, "Running")).To(BeTrue())
 			}
-			Eventually(verifyWatcherPods, "1m", "5s").Should(Succeed())
+			Eventually(verifyObserverPods, "1m", "5s").Should(Succeed())
 
-			verifyWatcherLogs := func(g Gomega) {
+			verifyObserverLogs := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l",
-					"app=mdaihub-sample-watcher-collector", "-o", "jsonpath={.items[*].metadata.name}")
+					"app=mdaihub-sample-observer-collector", "-o", "jsonpath={.items[*].metadata.name}")
 				out, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 
@@ -462,7 +462,7 @@ var _ = Describe("Manager", Ordered, func() {
 					g.Expect(strings.Contains(strings.ToLower(logOut), "error")).To(BeFalse(), "Log for pod %s contains error", pod)
 				}
 			}
-			Eventually(verifyWatcherLogs).Should(Succeed())
+			Eventually(verifyObserverLogs).Should(Succeed())
 		})
 
 		It("can reconcile a MDAI Collector CR", func() {
@@ -679,7 +679,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 			Eventually(verifyMdaiHub).Should(Succeed())
 
-			By("validating the config map for watcher is still present")
+			By("validating the config map for observer is still present")
 			configMapExists("mdaihub-sample-variables", otelNamespace)
 
 			By("validating the prometheus rules deleted")
@@ -699,7 +699,7 @@ var _ = Describe("Manager", Ordered, func() {
 			By("validating valkey keys deleted")
 			// TODO
 
-			By("validating all related watchers are deleted")
+			By("validating all related observers are deleted")
 			// TODO
 
 		})

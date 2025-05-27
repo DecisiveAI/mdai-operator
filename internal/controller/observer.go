@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	observerDefaultImage     = "public.ecr.aws/decisiveai/watcher-collector:0.1.4"
+	observerDefaultImage     = "public.ecr.aws/decisiveai/observer-collector:0.1"
 	observerResourceLabel    = "mdai_observer_resource"
 	mdaiObserverHubComponent = "mdai-observer"
 )
@@ -137,10 +137,10 @@ func (c HubAdapter) createOrUpdateObserverResourceService(ctx context.Context, n
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create or update watcher-collector-service: %w", err)
+		return fmt.Errorf("failed to create or update observer-collector-service: %w", err)
 	}
 
-	c.logger.Info("Successfully created or updated watcher-collector-service", "service", name, "namespace", namespace, "operation", operationResult)
+	c.logger.Info("Successfully created or updated observer-collector-service", "service", name, "namespace", namespace, "operation", operationResult)
 	return nil
 }
 
@@ -236,7 +236,7 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 		deployment.Spec.Template.Annotations["prometheus.io/port"] = "8899"
 		deployment.Spec.Template.Annotations["prometheus.io/scrape"] = "true"
 		// FIXME: replace this annotation with mdai_observer_resource in other hub components (prometheus scraping config)
-		deployment.Spec.Template.Annotations["mdai_component_type"] = "mdai-watcher"
+		deployment.Spec.Template.Annotations["mdai_component_type"] = "mdai-observer"
 		deployment.Spec.Template.Annotations["mdai-collector-config/sha256"] = hash
 
 		containerSpec := corev1.Container{
@@ -244,8 +244,7 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 			Image: observerDefaultImage,
 			Ports: []corev1.ContainerPort{
 				{ContainerPort: 8888, Name: "otelcol-metrics"},
-				// FIXME: update name away from watcher
-				{ContainerPort: 8899, Name: "watcher-metrics"},
+				{ContainerPort: 8899, Name: "observe-metrics"},
 				{ContainerPort: 4317, Name: "otlp-grpc"},
 				{ContainerPort: 4318, Name: "otlp-http"},
 			},
@@ -257,8 +256,8 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 				},
 			},
 			Command: []string{
-				// FIXME: update name away from watcher
-				"/mdai-watcher-collector",
+				// FIXME: update name away from observer
+				"/mdai-observer-collector",
 				"--config=/conf/collector.yaml",
 			},
 			SecurityContext: &corev1.SecurityContext{
