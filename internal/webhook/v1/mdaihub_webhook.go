@@ -113,13 +113,13 @@ func (v *MdaiHubCustomValidator) ValidateUpdate(_ context.Context, oldObj, newOb
 	// validate that meta variables keep the same references. Meta variables are immutable.
 	if oldMdaihub.Spec.Variables != nil && mdaihub.Spec.Variables != nil {
 		oldVariablesMap := make(map[string]mdaiv1.Variable)
-		for _, oldVariables := range *oldMdaihub.Spec.Variables {
+		for _, oldVariables := range oldMdaihub.Spec.Variables {
 			if oldVariables.Type == mdaiv1.VariableTypeMeta {
 				oldVariablesMap[oldVariables.Key] = oldVariables
 			}
 		}
 
-		for _, newVariable := range *mdaihub.Spec.Variables {
+		for _, newVariable := range mdaihub.Spec.Variables {
 			if newVariable.Type != mdaiv1.VariableTypeMeta {
 				continue
 			}
@@ -151,38 +151,19 @@ func (v *MdaiHubCustomValidator) ValidateDelete(_ context.Context, obj runtime.O
 func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Warnings, error) {
 	warnings := admission.Warnings{}
 
-	keys, warnings, err := v.validateVariables(mdaihub, warnings)
+	_, warnings, err := v.validateVariables(mdaihub, warnings)
 	if err != nil {
 		return warnings, err
 	}
 
-	evaluations := mdaihub.Spec.Evaluations
-	if evaluations == nil || len(*evaluations) == 0 {
+	evaluations := mdaihub.Spec.PrometheusAlert
+	if len(evaluations) == 0 {
 		warnings = append(warnings, "Evaluations are not specified")
 	} else {
-		for _, evaluation := range *evaluations {
-			switch evaluation.Type {
-			case mdaiv1.EvaluationTypePrometheusAlert:
-				if evaluation.OnStatus == nil || (evaluation.OnStatus.Resolved == nil && evaluation.OnStatus.Firing == nil) {
-					warnings = append(warnings, fmt.Sprintf("evaluation %s: 'onStatus' is not specified for evaluation type Prometheus Alert", evaluation.Name))
-					continue
-				}
-
-				if _, err := parser.ParseExpr(evaluation.Expr.StrVal); err != nil {
-					return warnings, err
-				}
-
-				if err := v.validateOnStatus(evaluation.OnStatus.Firing, keys, evaluation, "firing"); err != nil {
-					return warnings, err
-				}
-
-				if err := v.validateOnStatus(evaluation.OnStatus.Resolved, keys, evaluation, "resolved"); err != nil {
-					return warnings, err
-				}
-			default:
-				return warnings, fmt.Errorf("evaluation %s: unsupported type", evaluation.Name)
+		for _, evaluation := range evaluations {
+			if _, err := parser.ParseExpr(evaluation.Expr.StrVal); err != nil {
+				return warnings, err
 			}
-
 		}
 	}
 
@@ -193,10 +174,10 @@ func (v *MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub, warn
 	keys := map[string]struct{}{}
 	exportedVariableNames := map[string]struct{}{}
 	variables := mdaihub.Spec.Variables
-	if variables == nil || len(*variables) == 0 {
+	if len(variables) == 0 {
 		warnings = append(warnings, "variables are not specified")
 	} else {
-		for _, variable := range *variables {
+		for _, variable := range variables {
 			if variable.StorageType != mdaiv1.VariableSourceTypeBuiltInValkey {
 				return nil, warnings, fmt.Errorf("hub %s, variable %s: unsupported storage type %s", mdaihub.GetName(), variable.Key, variable.StorageType)
 			}
@@ -247,10 +228,10 @@ func (v *MdaiHubCustomValidator) validateObserversAndObserverResources(mdaihub *
 	observerResources := mdaihub.Spec.ObserverResources
 	observerResourceNames := make([]string, 0)
 	observerResourcesUsedInObservers := make([]string, 0)
-	if observerResources == nil || len(*observerResources) == 0 {
+	if len(observerResources) == 0 {
 		newWarnings = append(newWarnings, "ObserverResources are not specified")
 	} else {
-		for _, observerResource := range *observerResources {
+		for _, observerResource := range observerResources {
 			observerResourceNames = append(observerResourceNames, observerResource.Name)
 			if observerResource.Replicas == nil {
 				newWarnings = append(newWarnings, "ObserverResource "+observerResource.Name+" does not define a replica count")
@@ -260,10 +241,10 @@ func (v *MdaiHubCustomValidator) validateObserversAndObserverResources(mdaihub *
 			}
 		}
 	}
-	if observers == nil || len(*observers) == 0 {
+	if len(observers) == 0 {
 		newWarnings = append(newWarnings, "Observers are not specified")
 	} else {
-		for _, observer := range *observers {
+		for _, observer := range observers {
 			if observer.ResourceRef == "" || !slices.Contains(observerResourceNames, observer.ResourceRef) {
 				return newWarnings, fmt.Errorf("observer %s does not reference a valid resource", observer.Name)
 			}
@@ -283,19 +264,4 @@ func (v *MdaiHubCustomValidator) validateObserversAndObserverResources(mdaihub *
 	}
 
 	return append(existingWarnings, newWarnings...), nil
-}
-
-func (v *MdaiHubCustomValidator) validateOnStatus(action *mdaiv1.Action, keys map[string]struct{}, evaluation mdaiv1.Evaluation, actionName string) error {
-	if action == nil {
-		return nil
-	}
-	if action.VariableUpdate == nil {
-		return fmt.Errorf("action has to be specified for '%s', ex. 'variableUpdate', evaluation name: %s", actionName, evaluation.Name)
-	}
-	ref := action.VariableUpdate.VariableRef
-	if _, exists := keys[ref]; !exists {
-		return fmt.Errorf("variable with key %s does not exist, evaluation: %s", ref, evaluation.Name)
-	}
-
-	return nil
 }

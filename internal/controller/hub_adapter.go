@@ -32,8 +32,9 @@ import (
 )
 
 const (
-	envConfigMapNamePostfix       = "-variables"
-	manualEnvConfigMapNamePostfix = "-manual-variables"
+	envConfigMapNamePostfix        = "-variables"
+	manualEnvConfigMapNamePostfix  = "-manual-variables"
+	automationConfigMapNamePostfix = "-automation"
 
 	requeueTime = time.Second * 10
 
@@ -149,7 +150,7 @@ func (c HubAdapter) finalizeHub(ctx context.Context) (ObjectState, error) {
 
 	prefix := VariableKeyPrefix + c.mdaiCR.Name + "/"
 	c.logger.Info("Cleaning up old variables from Valkey with prefix", "prefix", prefix)
-	if err := datacore.NewValkeyAdapter(c.valKeyClient, c.logger, c.mdaiCR.Name).DeleteKeysWithPrefixUsingScan(ctx, map[string]struct{}{}); err != nil {
+	if err := datacore.NewValkeyAdapter(c.valKeyClient, c.logger).DeleteKeysWithPrefixUsingScan(ctx, map[string]struct{}{}, c.mdaiCR.Name); err != nil {
 		return ObjectUnchanged, err
 	}
 
@@ -178,11 +179,11 @@ func (c HubAdapter) deleteFinalizer(ctx context.Context, object client.Object, f
 }
 
 // ensurePrometheusRuleSynchronized creates or updates PrometheusFilter CR
-func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (OperationResult, error) {
+func (c HubAdapter) ensurePrometheusAlertsSynchronized(ctx context.Context) (OperationResult, error) {
 	defaultPrometheusRuleName := "mdai-" + c.mdaiCR.Name + "-alert-rules"
 	c.logger.Info("EnsurePrometheusRuleSynchronized")
 
-	evals := c.mdaiCR.Spec.Evaluations
+	evals := c.mdaiCR.Spec.PrometheusAlert
 
 	prometheusRule := &prometheusv1.PrometheusRule{}
 	err := c.client.Get(
@@ -233,8 +234,8 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 		prometheusRule.Spec.Groups[0].Interval = c.mdaiCR.Spec.Config.EvaluationInterval
 	}
 
-	rules := make([]prometheusv1.Rule, 0, len(*evals))
-	for _, eval := range *evals {
+	rules := make([]prometheusv1.Rule, 0, len(evals))
+	for _, eval := range evals {
 		rule := c.composePrometheusRule(eval)
 		rules = append(rules, rule)
 	}
@@ -247,7 +248,7 @@ func (c HubAdapter) ensureEvaluationsSynchronized(ctx context.Context) (Operatio
 	return ContinueProcessing()
 }
 
-func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation) prometheusv1.Rule {
+func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.PrometheusAlert) prometheusv1.Rule {
 	alertName := alertingRule.Name
 
 	prometheusRule := prometheusv1.Rule{
@@ -263,22 +264,6 @@ func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.Evaluation) promet
 		Labels: map[string]string{
 			"severity": alertingRule.Severity,
 		},
-	}
-
-	if alertingRule.OnStatus != nil {
-		actionContextJSON, err := json.Marshal(alertingRule.OnStatus)
-		if err != nil {
-			c.logger.Error(err, "Failed to compose action context for eval", "name", alertName, "status", *alertingRule.OnStatus)
-		}
-		prometheusRule.Annotations["action_context"] = string(actionContextJSON)
-	}
-
-	if alertingRule.RelevantLabels != nil {
-		relevantLabelsJSON, err := json.Marshal(alertingRule.RelevantLabels)
-		if err != nil {
-			c.logger.Error(err, "Failed to compose relevant labels for eval", "name", alertName, "relevantLabels", alertingRule.RelevantLabels)
-		}
-		prometheusRule.Annotations["relevant_labels"] = string(relevantLabelsJSON)
 	}
 
 	return prometheusRule
@@ -318,9 +303,9 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 
 	envMap := make(map[string]string)
 	manualEnvMap := make(map[string]string)
-	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.logger, c.mdaiCR.Name)
+	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.logger)
 	valkeyKeysToKeep := map[string]struct{}{}
-	for _, variable := range *variables {
+	for _, variable := range variables {
 		c.logger.Info(fmt.Sprintf("Processing variable: %s", variable.Key))
 		switch variable.StorageType {
 		case mdaiv1.VariableSourceTypeBuiltInValkey:
@@ -334,7 +319,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 			case mdaiv1.VariableTypeComputed:
 				switch variable.DataType {
 				case mdaiv1.VariableDataTypeSet:
-					valueAsSlice, err := dataAdapter.GetSetAsStringSlice(ctx, key)
+					valueAsSlice, err := dataAdapter.GetSetAsStringSlice(ctx, key, c.mdaiCR.Name)
 					if err != nil {
 						return RequeueAfter(requeueTime, err)
 					}
@@ -342,7 +327,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 				case mdaiv1.VariableDataTypeString, mdaiv1.VariableDataTypeInt, mdaiv1.VariableDataTypeBoolean:
 					// int is represented as string in Valkey, we assume writer guarantee the variable type is correct
 					// boolean is represented as string in Valkey: false or true, we assume writer guarantee the variable type is correct
-					value, found, err := dataAdapter.GetString(ctx, key)
+					value, found, err := dataAdapter.GetString(ctx, key, c.mdaiCR.Name)
 					if err != nil {
 						return RequeueAfter(requeueTime, err)
 					}
@@ -351,7 +336,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 					}
 					c.applySerializerToString(variable, envMap, value)
 				case mdaiv1.VariableDataTypeMap:
-					value, err := dataAdapter.GetMapAsString(ctx, key)
+					value, err := dataAdapter.GetMapAsString(ctx, key, c.mdaiCR.Name)
 					if err != nil {
 						return RequeueAfter(requeueTime, err)
 					}
@@ -363,7 +348,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 			case mdaiv1.VariableTypeMeta:
 				switch variable.DataType {
 				case mdaiv1.MetaVariableDataTypePriorityList:
-					valueAsSlice, found, err := dataAdapter.GetOrCreateMetaPriorityList(ctx, key, variable.VariableRefs)
+					valueAsSlice, found, err := dataAdapter.GetOrCreateMetaPriorityList(ctx, key, c.mdaiCR.Name, variable.VariableRefs)
 					if err != nil {
 						return RequeueAfter(requeueTime, err)
 					}
@@ -372,7 +357,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 					}
 					c.applySetTransformation(variable, envMap, valueAsSlice)
 				case mdaiv1.MetaVariableDataTypeHashSet:
-					value, found, err := dataAdapter.GetOrCreateMetaHashSet(ctx, key, variable.VariableRefs[0], variable.VariableRefs[1])
+					value, found, err := dataAdapter.GetOrCreateMetaHashSet(ctx, key, c.mdaiCR.Name, variable.VariableRefs[0], variable.VariableRefs[1])
 					if err != nil {
 						return RequeueAfter(requeueTime, err)
 					}
@@ -394,7 +379,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	}
 
 	c.logger.Info("Deleting old valkey keys", "valkeyKeysToKeep", valkeyKeysToKeep)
-	if err := dataAdapter.DeleteKeysWithPrefixUsingScan(ctx, valkeyKeysToKeep); err != nil {
+	if err := dataAdapter.DeleteKeysWithPrefixUsingScan(ctx, valkeyKeysToKeep, c.mdaiCR.Name); err != nil {
 		return OperationResult{}, err
 	}
 
@@ -412,12 +397,12 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	namespaceToRestart := make(map[string]struct{})
 	for namespace := range namespaces {
 		// computed variables
-		operationResultComputed, err := c.createOrUpdateEnvConfigMap(ctx, envMap, false, namespace)
+		operationResultComputed, err := c.createOrUpdateEnvConfigMap(ctx, envMap, envConfigMapNamePostfix, namespace)
 		if err != nil {
 			return OperationResult{}, err
 		}
 		// manual variables
-		_, err = c.createOrUpdateEnvConfigMap(ctx, manualEnvMap, true, namespace)
+		_, err = c.createOrUpdateEnvConfigMap(ctx, manualEnvMap, manualEnvConfigMapNamePostfix, namespace)
 		if err != nil {
 			return OperationResult{}, err
 		}
@@ -493,13 +478,30 @@ func (c HubAdapter) applySetTransformation(variable mdaiv1.Variable, envMap map[
 	}
 }
 
-func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, manual bool, namespace string) (controllerutil.OperationResult, error) {
-	var envConfigMapName string
-	if manual {
-		envConfigMapName = c.mdaiCR.Name + manualEnvConfigMapNamePostfix
-	} else {
-		envConfigMapName = c.mdaiCR.Name + envConfigMapNamePostfix
+func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (OperationResult, error) {
+	if c.mdaiCR.Spec.Automations == nil {
+		return ContinueProcessing()
 	}
+	c.logger.Info("Creating or updating ConfigMap for automations", "name", c.mdaiCR.Name)
+	automationMap := make(map[string]string)
+	for _, automation := range c.mdaiCR.Spec.Automations {
+		key := automation.EventRef
+		workflowJSON, err := json.Marshal(automation.Workflow)
+		if err != nil {
+			return OperationResult{}, fmt.Errorf("failed to marshal automation workflow: %w", err)
+		}
+		automationMap[key] = string(workflowJSON)
+	}
+	operationResult, err := c.createOrUpdateEnvConfigMap(ctx, automationMap, automationConfigMapNamePostfix, c.mdaiCR.Namespace) // TODO trigger reload of configmap at event hub through some API
+	c.logger.Info(fmt.Sprintf("Successfully %s ConfigMap for automations", operationResult), "name", c.mdaiCR.Name)
+	if err != nil {
+		return OperationResult{}, err
+	}
+	return ContinueProcessing()
+}
+
+func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, configMapPostfix string, namespace string) (controllerutil.OperationResult, error) {
+	envConfigMapName := c.mdaiCR.Name + configMapPostfix
 	desiredConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      envConfigMapName,

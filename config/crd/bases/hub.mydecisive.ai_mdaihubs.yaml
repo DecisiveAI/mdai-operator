@@ -39,6 +39,29 @@ spec:
           spec:
             description: MdaiHubSpec defines the desired state of MdaiHub.
             properties:
+              automations:
+                items:
+                  properties:
+                    eventRef:
+                      type: string
+                    workflow:
+                      items:
+                        properties:
+                          args:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          handlerRef:
+                            type: string
+                        required:
+                        - handlerRef
+                        type: object
+                      type: array
+                  required:
+                  - eventRef
+                  - workflow
+                  type: object
+                type: array
               config:
                 properties:
                   evaluation_interval:
@@ -48,126 +71,6 @@ spec:
                     pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
                     type: string
                 type: object
-              evaluations:
-                items:
-                  properties:
-                    expr:
-                      anyOf:
-                      - type: integer
-                      - type: string
-                      description: Expr A valid PromQL query expression
-                      x-kubernetes-int-or-string: true
-                    for:
-                      description: For Alerts are considered firing once they have
-                        been returned for this long.
-                      pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
-                      type: string
-                    keep_firing_for:
-                      description: KeepFiringFor defines how long an alert will continue
-                        firing after the condition that triggered it has cleared.
-                      minLength: 1
-                      pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
-                      type: string
-                    name:
-                      description: Name How this evaluation will be referred to elsewhere
-                        in the config. Also, the name applied to the Prometheus Alert
-                      minLength: 1
-                      pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
-                      type: string
-                    onStatus:
-                      description: OnStatus allows the user to specify actions depending
-                        on the state of the evaluation
-                      properties:
-                        firing:
-                          description: Firing Action performed when the Prometheus
-                            Alert status changes to "firing"
-                          properties:
-                            variableUpdate:
-                              description: VariableUpdate Modify the value of a managed
-                                variable.
-                              properties:
-                                operation:
-                                  description: Operation how the variable will be
-                                    updated
-                                  enum:
-                                  - mdai/add_element
-                                  - mdai/remove_element
-                                  - mdai/set
-                                  - mdai/delete
-                                  - mdai/incr_by
-                                  - mdai/decr_by
-                                  - mdai/map_set_entry
-                                  - mdai/map_remove_entry
-                                  - mdai/bulk_set_key_value
-                                  type: string
-                                variableRef:
-                                  description: VariableRef The Key of the variable
-                                    to be updated.
-                                  minLength: 1
-                                  pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
-                                  type: string
-                              required:
-                              - operation
-                              - variableRef
-                              type: object
-                          type: object
-                        resolved:
-                          description: Resolved Action performed when the Prometheus
-                            Alert status changes to "resolved"
-                          properties:
-                            variableUpdate:
-                              description: VariableUpdate Modify the value of a managed
-                                variable.
-                              properties:
-                                operation:
-                                  description: Operation how the variable will be
-                                    updated
-                                  enum:
-                                  - mdai/add_element
-                                  - mdai/remove_element
-                                  - mdai/set
-                                  - mdai/delete
-                                  - mdai/incr_by
-                                  - mdai/decr_by
-                                  - mdai/map_set_entry
-                                  - mdai/map_remove_entry
-                                  - mdai/bulk_set_key_value
-                                  type: string
-                                variableRef:
-                                  description: VariableRef The Key of the variable
-                                    to be updated.
-                                  minLength: 1
-                                  pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
-                                  type: string
-                              required:
-                              - operation
-                              - variableRef
-                              type: object
-                          type: object
-                      type: object
-                    relevantLabels:
-                      description: RelevantLabels indicates which part(s) of the alert
-                        payload to forward to the Action.
-                      items:
-                        type: string
-                      type: array
-                    severity:
-                      pattern: ^(warning|critical)$
-                      type: string
-                    type:
-                      default: mdai/prometheus_alert
-                      description: Type The type of evaluation. Currently only "mdai/prometheus_alert"
-                        is supported and set as default value.
-                      enum:
-                      - mdai/prometheus_alert
-                      type: string
-                  required:
-                  - expr
-                  - name
-                  - severity
-                  - type
-                  type: object
-                type: array
               observerResources:
                 items:
                   properties:
@@ -281,6 +184,40 @@ spec:
                   - labelResourceAttributes
                   - name
                   - resourceRef
+                  type: object
+                type: array
+              prometheusAlert:
+                items:
+                  properties:
+                    expr:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      x-kubernetes-int-or-string: true
+                    for:
+                      description: For Alerts are considered firing once they have
+                        been returned for this long.
+                      pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
+                      type: string
+                    keep_firing_for:
+                      description: KeepFiringFor defines how long an alert will continue
+                        firing after the condition that triggered it has cleared.
+                      minLength: 1
+                      pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
+                      type: string
+                    name:
+                      description: Name How this evaluation will be referred to elsewhere
+                        in the config. Also, the name applied to the Prometheus Alert
+                      minLength: 1
+                      pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
+                      type: string
+                    severity:
+                      pattern: ^(warning|critical)$
+                      type: string
+                  required:
+                  - expr
+                  - name
+                  - severity
                   type: object
                 type: array
               variables:
