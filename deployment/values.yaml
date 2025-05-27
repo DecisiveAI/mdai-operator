@@ -18,7 +18,7 @@ controllerManager:
       valkeyAuditStreamExpiryMs: "2592000000"
     image:
       repository: public.ecr.aws/p3k6k6h3/mdai-operator
-      tag: 0.1.18
+      tag: 0.1.19
     resources:
       limits:
         cpu: 500m
