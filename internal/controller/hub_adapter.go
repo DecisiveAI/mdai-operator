@@ -480,6 +480,12 @@ func (c HubAdapter) applySetTransformation(variable mdaiv1.Variable, envMap map[
 
 func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (OperationResult, error) {
 	if c.mdaiCR.Spec.Automations == nil {
+		c.logger.Info("No automations defined in the MDAI CR", "name", c.mdaiCR.Name)
+		err := c.deleteEnvConfigMap(ctx, automationConfigMapNamePostfix, c.mdaiCR.Namespace)
+		if err != nil {
+			c.logger.Error(err, "Failed to delete automations ConfigMap", "name", c.mdaiCR.Name)
+			return OperationResult{}, err
+		}
 		return ContinueProcessing()
 	}
 	c.logger.Info("Creating or updating ConfigMap for automations", "name", c.mdaiCR.Name)
@@ -498,6 +504,27 @@ func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (Operatio
 		return OperationResult{}, err
 	}
 	return ContinueProcessing()
+}
+
+func (c HubAdapter) deleteEnvConfigMap(ctx context.Context, postfix string, namespace string) error {
+	configMapName := c.mdaiCR.Name + postfix
+	c.logger.Info("Deleting ConfigMap", "name", configMapName, "namespace", namespace)
+	configMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: namespace,
+		},
+	}
+
+	if err := c.client.Delete(ctx, configMap); err != nil {
+		if apierrors.IsNotFound(err) {
+			c.logger.Info("ConfigMap not found, skipping deletion", "name", configMapName, "namespace", namespace)
+			return nil
+		}
+		c.logger.Error(err, "Failed to delete ConfigMap", "name", configMapName, "namespace", namespace)
+		return fmt.Errorf("failed to delete ConfigMap: %w", err)
+	}
+	return nil
 }
 
 func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, configMapPostfix string, namespace string) (controllerutil.OperationResult, error) {

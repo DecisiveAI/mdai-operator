@@ -916,3 +916,52 @@ func TestEnsureStatusSetToDone(t *testing.T) {
 		t.Errorf("expected message 'reconciled successfully', got: %q", cond.Message)
 	}
 }
+
+func TestEnsureAutomationsSynchronized(t *testing.T) {
+	ctx := context.TODO()
+
+	mdaiCR := newTestMdaiCR()
+	mdaiCR.Spec.Automations = []v1.Automation{
+		{
+			EventRef: "event1",
+			Workflow: []v1.AutomationStep{{
+				HandlerRef: "",
+				Arguments:  map[string]string{"key": "value"},
+			},
+			},
+		},
+	}
+
+	scheme := createTestScheme()
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mdaiCR).Build()
+	adapter := HubAdapter{
+		mdaiCR: mdaiCR,
+		client: fakeClient,
+		logger: logr.Discard(),
+	}
+
+	opResult, err := adapter.ensureAutomationsSynchronized(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, ContinueOperationResult(), opResult)
+
+	configMapName := mdaiCR.Name + automationConfigMapNamePostfix
+	cm := &v1core.ConfigMap{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: "default"}, cm)
+	assert.NoError(t, err)
+
+	workflowJSON, _ := json.Marshal(mdaiCR.Spec.Automations[0].Workflow)
+	expectedData := string(workflowJSON)
+	actualData, exists := cm.Data["event1"]
+	assert.True(t, exists)
+	assert.Equal(t, expectedData, actualData)
+
+	mdaiCR.Spec.Automations = nil
+	adapter.mdaiCR = mdaiCR
+
+	opResult, err = adapter.ensureAutomationsSynchronized(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, ContinueOperationResult(), opResult)
+
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: "default"}, cm)
+	assert.True(t, apierrors.IsNotFound(err))
+}
