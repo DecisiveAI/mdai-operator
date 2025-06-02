@@ -167,7 +167,7 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 		}
 	}
 
-	eventRefsMap := map[string]interface{}{}
+	eventRefsMap := map[string]any{}
 	if mdaihub.Spec.Automations != nil {
 		for _, automation := range mdaihub.Spec.Automations {
 			if _, exists := eventRefsMap[automation.EventRef]; exists {
