@@ -167,6 +167,16 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 		}
 	}
 
+	eventRefsMap := map[string]any{}
+	if mdaihub.Spec.Automations != nil {
+		for _, automation := range mdaihub.Spec.Automations {
+			if _, exists := eventRefsMap[automation.EventRef]; exists {
+				return warnings, fmt.Errorf("hub %s, automationevent reference %s is duplicated", mdaihub.GetName(), automation.EventRef)
+			}
+			eventRefsMap[automation.EventRef] = struct{}{}
+		}
+	}
+
 	return v.validateObserversAndObserverResources(mdaihub, warnings)
 }
 
