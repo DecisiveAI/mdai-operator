@@ -214,7 +214,7 @@ func (c HubAdapter) ensurePrometheusAlertsSynchronized(ctx context.Context) (Ope
 				Name:      defaultPrometheusRuleName,
 				Namespace: c.mdaiCR.Namespace,
 				Labels: map[string]string{
-					"app.kubernetes.io/managed-by": "Helm",
+					"app.kubernetes.io/managed-by": "mdai-operator",
 					"app.kubernetes.io/part-of":    "kube-prometheus-stack",
 					"app.kubernetes.io/instance":   c.releaseName,
 				},
