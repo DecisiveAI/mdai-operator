@@ -481,8 +481,7 @@ func (c HubAdapter) applySetTransformation(variable mdaiv1.Variable, envMap map[
 func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (OperationResult, error) {
 	if c.mdaiCR.Spec.Automations == nil {
 		c.logger.Info("No automations defined in the MDAI CR", "name", c.mdaiCR.Name)
-		err := c.deleteEnvConfigMap(ctx, automationConfigMapNamePostfix, c.mdaiCR.Namespace)
-		if err != nil {
+		if err := c.deleteEnvConfigMap(ctx, automationConfigMapNamePostfix, c.mdaiCR.Namespace); err != nil {
 			c.logger.Error(err, "Failed to delete automations ConfigMap", "name", c.mdaiCR.Name)
 			return OperationResult{}, err
 		}
