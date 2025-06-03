@@ -923,7 +923,7 @@ func TestEnsureAutomationsSynchronized(t *testing.T) {
 	mdaiCR := newTestMdaiCR()
 	mdaiCR.Spec.Automations = []v1.Automation{
 		{
-			EventRef: "event1",
+			EventRef: "my-event",
 			Workflow: []v1.AutomationStep{{
 				HandlerRef: "",
 				Arguments:  map[string]string{"key": "value"},
@@ -951,7 +951,7 @@ func TestEnsureAutomationsSynchronized(t *testing.T) {
 
 	workflowJSON, _ := json.Marshal(mdaiCR.Spec.Automations[0].Workflow)
 	expectedData := string(workflowJSON)
-	actualData, exists := cm.Data["event1"]
+	actualData, exists := cm.Data["my-event"]
 	assert.True(t, exists)
 	assert.Equal(t, expectedData, actualData)
 
