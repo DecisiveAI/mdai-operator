@@ -28,7 +28,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-type MDAILogStream string
+type OtlpTlsConfig struct {
+	insecure bool
+}
+
+type OtlpExporterConfig struct {
+	Endpoint  string        `yaml:"endpoint"`
+	TlsConfig OtlpTlsConfig `yaml:"tls,omitempty"`
+}
 
 type S3ExporterConfig struct {
 	S3Uploader S3UploaderConfig `mapstructure:"s3uploader"`
@@ -47,18 +54,18 @@ const (
 	MdaiCollectorHubComponent     = "mdai-collector"
 	mdaiCollectorResourceNameBase = "mdai-collector"
 
-	AuditLogstream     MDAILogStream = "audit"
-	CollectorLogstream MDAILogStream = "collector"
-	HubLogstream       MDAILogStream = "hub"
-	OtherLogstream     MDAILogStream = "other"
-
 	S3PartitionFormat = "%Y/%m/%d/%H"
 )
 
 var (
 	//go:embed config/mdai_collector_base_config.yaml
 	baseMdaiCollectorYAML string
-	logstreams            = []MDAILogStream{AuditLogstream, CollectorLogstream, HubLogstream, OtherLogstream}
+	severityFilterMap     = map[mdaiv1.SeverityLevel]string{
+		mdaiv1.DebugSeverityLevel: "filter/severity_min_debug",
+		mdaiv1.InfoSeverityLevel:  "filter/severity_min_info",
+		mdaiv1.WarnSeverityLevel:  "filter/severity_min_warn",
+		mdaiv1.ErrorSeverityLevel: "filter/severity_min_error",
+	}
 )
 
 type MdaiCollectorAdapter struct {
@@ -243,22 +250,61 @@ func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *mdaiv1.LogsConf
 		return "", err
 	}
 
-	if logsConfig != nil && awsAccessKeySecret != nil {
-		s3Config := logsConfig.S3
-		if s3Config != nil {
-			exporters := mdaiCollectorConfig["exporters"].(map[string]any)
-			serviceBlock := mdaiCollectorConfig["service"].(map[string]any)
-			pipelines := serviceBlock["pipelines"].(map[string]any)
-			for _, logstream := range logstreams {
-				s3ExporterName, s3Exporter := getS3ExporterForLogstream(c.collectorCR.Name, logstream, *s3Config)
-				exporters[s3ExporterName] = s3Exporter
-				pipelineName := fmt.Sprintf("logs/%s", logstream)
-				pipeline := pipelines[pipelineName].(map[string]any)
-				pipelines[pipelineName] = getPipelineWithS3Exporter(pipeline, s3ExporterName)
+	if logsConfig != nil {
+		exporters := mdaiCollectorConfig["exporters"].(map[string]any)
+		serviceBlock := mdaiCollectorConfig["service"].(map[string]any)
+		pipelines := serviceBlock["pipelines"].(map[string]any)
+		otlpConfig := logsConfig.Otlp
+		if otlpConfig != nil && otlpConfig.Endpoint != nil && *otlpConfig.Endpoint != "" {
+			otlpExporterName, otlpExporterConfig := getOtlpExporterForLogstream(*otlpConfig)
+			exporters[otlpExporterName] = otlpExporterConfig
+
+			collectorLogstreamConfig := otlpConfig.CollectorLogs
+			if collectorLogstreamConfig != nil && *collectorLogstreamConfig.Disabled != false {
+				c.modifyConfigForOtlpLogstream(mdaiv1.CollectorLogstream, otlpExporterName, pipelines, collectorLogstreamConfig.MinSeverity)
+			}
+
+			auditLogstreamConfig := otlpConfig.AuditLogs
+			if auditLogstreamConfig != nil && *auditLogstreamConfig.Disabled != false {
+				c.modifyConfigForOtlpLogstream(mdaiv1.AuditLogstream, otlpExporterName, pipelines, auditLogstreamConfig.MinSeverity)
+			}
+
+			hubLogstreamConfig := otlpConfig.HubLogs
+			if hubLogstreamConfig != nil && *hubLogstreamConfig.Disabled != false {
+				c.modifyConfigForOtlpLogstream(mdaiv1.HubLogstream, otlpExporterName, pipelines, hubLogstreamConfig.MinSeverity)
+			}
+
+			otherLogstreamConfig := otlpConfig.OtherLogs
+			if otherLogstreamConfig != nil && *otherLogstreamConfig.Disabled != false {
+				c.modifyConfigForOtlpLogstream(mdaiv1.OtherLogstream, otlpExporterName, pipelines, otherLogstreamConfig.MinSeverity)
 			}
 		}
-	} else {
-		c.logger.Info("Skipped adding s3 components to mdai-collector due to missing s3 configuration", "logsConfig", logsConfig, "awsAccessKeySecret", awsAccessKeySecret)
+		if awsAccessKeySecret != nil {
+			s3Config := logsConfig.S3
+			if s3Config != nil {
+				collectorLogstreamConfig := s3Config.CollectorLogs
+				if collectorLogstreamConfig != nil && *collectorLogstreamConfig.Disabled != false {
+					c.modifyConfigForS3Logstream(mdaiv1.CollectorLogstream, s3Config, exporters, pipelines, collectorLogstreamConfig.MinSeverity)
+				}
+
+				auditLogstreamConfig := s3Config.AuditLogs
+				if auditLogstreamConfig != nil && *auditLogstreamConfig.Disabled != false {
+					c.modifyConfigForS3Logstream(mdaiv1.AuditLogstream, s3Config, exporters, pipelines, auditLogstreamConfig.MinSeverity)
+				}
+
+				hubLogstreamConfig := s3Config.HubLogs
+				if hubLogstreamConfig != nil && *hubLogstreamConfig.Disabled != false {
+					c.modifyConfigForS3Logstream(mdaiv1.HubLogstream, s3Config, exporters, pipelines, hubLogstreamConfig.MinSeverity)
+				}
+
+				otherLogstreamConfig := s3Config.OtherLogs
+				if otherLogstreamConfig != nil && *otherLogstreamConfig.Disabled != false {
+					c.modifyConfigForS3Logstream(mdaiv1.OtherLogstream, s3Config, exporters, pipelines, otherLogstreamConfig.MinSeverity)
+				}
+			}
+		} else {
+			c.logger.Info("Skipped adding s3 components to mdai-collector due to missing s3 configuration", "logsConfig", logsConfig, "awsAccessKeySecret", awsAccessKeySecret)
+		}
 	}
 
 	collectorConfigBytes, err := yaml.Marshal(mdaiCollectorConfig)
@@ -270,7 +316,31 @@ func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *mdaiv1.LogsConf
 	return collectorConfig, nil
 }
 
-func getS3ExporterForLogstream(hubName string, logstream MDAILogStream, s3LogsConfig mdaiv1.S3LogsConfig) (string, S3ExporterConfig) {
+func (c MdaiCollectorAdapter) modifyConfigForOtlpLogstream(logstream mdaiv1.MDAILogStream, otlpExporterName string, pipelines map[string]any, minSeverity *mdaiv1.SeverityLevel) {
+	pipelineName := fmt.Sprintf("logs/otlp_%s", logstream)
+	pipeline := pipelines[pipelineName].(map[string]any)
+	pipelines[pipelineName] = getPipelineWithExporterAndSeverityFilter(pipeline, otlpExporterName, minSeverity)
+}
+
+func getOtlpExporterForLogstream(otlpLogsConfig mdaiv1.OtlpLogsConfig) (string, OtlpExporterConfig) {
+	exporter := OtlpExporterConfig{
+		Endpoint: *otlpLogsConfig.Endpoint,
+		TlsConfig: OtlpTlsConfig{
+			insecure: true,
+		},
+	}
+	return "otlp", exporter
+}
+
+func (c MdaiCollectorAdapter) modifyConfigForS3Logstream(logstream mdaiv1.MDAILogStream, s3Config *mdaiv1.S3LogsConfig, exporters map[string]any, pipelines map[string]any, minSeverity *mdaiv1.SeverityLevel) {
+	s3ExporterName, s3Exporter := getS3ExporterForLogstream(c.collectorCR.Name, logstream, *s3Config)
+	exporters[s3ExporterName] = s3Exporter
+	pipelineName := fmt.Sprintf("logs/s3_%s", logstream)
+	pipeline := pipelines[pipelineName].(map[string]any)
+	pipelines[pipelineName] = getPipelineWithExporterAndSeverityFilter(pipeline, s3ExporterName, minSeverity)
+}
+
+func getS3ExporterForLogstream(hubName string, logstream mdaiv1.MDAILogStream, s3LogsConfig mdaiv1.S3LogsConfig) (string, S3ExporterConfig) {
 	s3Prefix := fmt.Sprintf("%s-%s-logs", hubName, logstream)
 	exporterKey := fmt.Sprintf("awss3/%s", logstream)
 	filePrefix := fmt.Sprintf("%s-", logstream)
@@ -287,11 +357,18 @@ func getS3ExporterForLogstream(hubName string, logstream MDAILogStream, s3LogsCo
 	return exporterKey, exporter
 }
 
-func getPipelineWithS3Exporter(pipeline map[string]any, exporterName string) map[string]any {
+func getPipelineWithExporterAndSeverityFilter(pipeline map[string]any, exporterName string, minSeverity *mdaiv1.SeverityLevel) map[string]any {
 	exporters := pipeline["exporters"].([]any)
+	processors := pipeline["processors"].([]any)
+	if minSeverity != nil {
+		severityFilter := severityFilterMap[*minSeverity]
+		if severityFilter != "" {
+			processors = append([]any{severityFilter}, processors...)
+		}
+	}
 	newPipeline := map[string]any{
 		"receivers":  pipeline["receivers"],
-		"processors": pipeline["processors"],
+		"processors": processors,
 		"exporters":  append(exporters, exporterName),
 	}
 	return newPipeline

@@ -136,7 +136,7 @@ func TestGetPipelineWithS3Exporter(t *testing.T) {
 
 	for idx, testCase := range testCases {
 		t.Run(fmt.Sprintf("Case %d %s", idx, testCase.exporterName), func(t *testing.T) {
-			assert.Equal(t, testCase.expected, getPipelineWithS3Exporter(testCase.pipeline, testCase.exporterName))
+			assert.Equal(t, testCase.expected, getPipelineWithExporterAndSeverityFilter(testCase.pipeline, testCase.exporterName))
 		})
 	}
 }

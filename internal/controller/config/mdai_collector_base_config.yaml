@@ -14,11 +14,28 @@ processors:
     send_batch_size: 1000
     send_batch_max_size: 10000
     timeout: 13s
-  filter/severity:
+
+  filter/severity_min_debug:
     error_mode: ignore
     logs:
       log_record:
-        - severity_number < ${env:LOG_SEVERITY} and attributes["mdai-logstream"] != "audit"
+        - severity_number < SEVERITY_NUMBER_DEBUG and attributes["mdai-logstream"] != "audit"
+  filter/severity_min_info:
+    error_mode: ignore
+    logs:
+      log_record:
+        - severity_number < SEVERITY_NUMBER_INFO and attributes["mdai-logstream"] != "audit"
+  filter/severity_min_warn:
+    error_mode: ignore
+    logs:
+      log_record:
+        - severity_number < SEVERITY_NUMBER_WARN and attributes["mdai-logstream"] != "audit"
+  filter/severity_min_error:
+    error_mode: ignore
+    logs:
+      log_record:
+        - severity_number < SEVERITY_NUMBER_ERROR and attributes["mdai-logstream"] != "audit"
+
   resource/k8slogstream:
     attributes:
       - key: mdai-logstream
@@ -67,7 +84,7 @@ service:
       exporters: [routing/logstream]
     logs/input:
       receivers: [otlp]
-      processors: [filter/severity, batch]
+      processors: []
       exporters: [routing/logstream]
 
     logs/audit:
@@ -84,5 +101,5 @@ service:
       exporters: [debug/collector]
     logs/other:
       receivers: [routing/logstream]
-      processors: [filter/severity, batch]
+      processors: [batch]
       exporters: [debug]
