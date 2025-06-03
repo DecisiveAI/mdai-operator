@@ -10,18 +10,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name || github.run_id }}
   cancel-in-progress: true
 
-env:
-  GOPRIVATE: github.com/decisiveai/opentelemetry-operator
-  TOKEN: ${{ secrets.TOKEN_OPERATOR }}
-
 jobs:
   lint:
     name: Lint on Ubuntu
     runs-on: ubuntu-latest
     steps:
-      - name: Configure git for private modules
-        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
-
       - name: Clone the code
         uses: actions/checkout@v4
 
@@ -42,9 +35,6 @@ jobs:
     outputs:
       go_files_changed: ${{ steps.check.outputs.go_files_changed }}
     steps:
-      - name: Configure git for private modules
-        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
-
       - name: Clone the code
         uses: actions/checkout@v4
         with:
@@ -98,9 +88,6 @@ jobs:
     needs: [ lint, check-go-file-changes ]
     if: needs.check-go-file-changes.outputs.go_files_changed == 'true'
     steps:
-      - name: Configure git for private modules
-        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
-
       - name: Clone the code
         uses: actions/checkout@v4
 
@@ -235,7 +222,7 @@ jobs:
 
       - name: Generate Go Coverage Badge
         id: generate-badge
-        uses: tj-actions/coverage-badge-go@v2
+        uses: tj-actions/coverage-badge-go@v3
         with:
           filename: coverage.out
 
@@ -268,7 +255,7 @@ jobs:
 
           # Commit and push changes
           git add README.md
-          git commit -m "chore: Updated coverage badge." || echo "No changes to commit"
+          git commit -m "chore: Updated coverage badge. [skip ci]" || echo "No changes to commit"
           git push origin main
 
 
@@ -278,9 +265,6 @@ jobs:
     needs: [test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - name: Configure git for private modules
-        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
-
       - name: Clone the code
         uses: actions/checkout@v4
 
@@ -343,9 +327,6 @@ jobs:
     if: needs.lint.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
-      - name: Configure git for private modules
-        run: git config --global url."https://user:${TOKEN}@github.com".insteadOf "https://github.com"
-
       - name: Clone the code
         uses: actions/checkout@v4
 
