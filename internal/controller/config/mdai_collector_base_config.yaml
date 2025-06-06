@@ -57,17 +57,18 @@ exporters:
 
 connectors:
   routing/logstream:
-    default_pipelines: [logs/other]
+    # If OTLP or S3 configuration are present, the following will be replaced!
+    default_pipelines: [logs/debug_other]
     table:
       - context: log
         condition: attributes["mdai-logstream"] == "audit"
-        pipelines: [logs/audit]
+        pipelines: [logs/debug_audit]
       - context: resource
         condition: attributes["mdai-logstream"] == "collector"
-        pipelines: [logs/collector]
+        pipelines: [logs/debug_collector]
       - context: resource
         condition: attributes["mdai-logstream"] == "hub"
-        pipelines: [logs/hub]
+        pipelines: [logs/debug_hub]
 
 extensions:
   cgroupruntime:
@@ -87,19 +88,19 @@ service:
       processors: []
       exporters: [routing/logstream]
 
-    logs/audit:
+    logs/debug_audit:
       receivers: [routing/logstream]
       processors: [resource/hub-to-audit, batch]
       exporters: [debug/audit]
-    logs/hub:
+    logs/debug_hub:
       receivers: [routing/logstream]
       processors: [batch]
       exporters: [debug/hub]
-    logs/collector:
+    logs/debug_collector:
       receivers: [routing/logstream]
       processors: [batch]
       exporters: [debug/collector]
-    logs/other:
+    logs/debug_other:
       receivers: [routing/logstream]
       processors: [batch]
       exporters: [debug]

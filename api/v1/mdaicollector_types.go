@@ -41,40 +41,58 @@ type AWSConfig struct {
 	AWSAccessKeySecret *string `json:"awsAccessKeySecret,omitempty" yaml:"awsAccessKeySecret,omitempty"`
 }
 
-type LogstreamConfig struct {
-	MinSeverity *SeverityLevel `json:"minSeverity,omitempty" yaml:"minSeverity,omitempty"`
-	Disabled    *bool          `json:"disabled,omitempty" yaml:"disabled,omitempty"`
+type AuditLogstreamConfig struct {
+	// +optional
+	Disabled bool `json:"disabled" yaml:"disabled"`
 }
 
-type LogstreamConfigs struct {
-	AuditLogs     *LogstreamConfig `json:"auditLogs,omitempty" yaml:"auditLogs,omitempty"`
-	CollectorLogs *LogstreamConfig `json:"collectorLogs,omitempty" yaml:"collectorLogs,omitempty"`
-	HubLogs       *LogstreamConfig `json:"hubLogs,omitempty" yaml:"hubLogs,omitempty"`
-	OtherLogs     *LogstreamConfig `json:"otherLogs,omitempty" yaml:"otherLogs,omitempty"`
+type LogstreamConfig struct {
+	// +optional
+	MinSeverity *SeverityLevel `json:"minSeverity,omitempty" yaml:"minSeverity,omitempty"`
+	// +optional
+	Disabled bool `json:"disabled" yaml:"disabled"`
 }
 
 type S3LogsConfig struct {
-	LogstreamConfigs
-	S3Region *string `json:"s3Region,omitempty" yaml:"s3Region,omitempty"`
-	S3Bucket *string `json:"s3Bucket,omitempty" yaml:"s3Bucket,omitempty"`
+	// +optional
+	AuditLogs *AuditLogstreamConfig `json:"auditLogs,omitempty" yaml:"auditLogs,omitempty"`
+	// +optional
+	CollectorLogs *LogstreamConfig `json:"collectorLogs,omitempty" yaml:"collectorLogs,omitempty"`
+	// +optional
+	HubLogs *LogstreamConfig `json:"hubLogs,omitempty" yaml:"hubLogs,omitempty"`
+	// +optional
+	OtherLogs *LogstreamConfig `json:"otherLogs,omitempty" yaml:"otherLogs,omitempty"`
+	S3Region  *string          `json:"s3Region,omitempty" yaml:"s3Region,omitempty"`
+	S3Bucket  *string          `json:"s3Bucket,omitempty" yaml:"s3Bucket,omitempty"`
 }
 
 type OtlpLogsConfig struct {
-	LogstreamConfigs
-	Endpoint *string `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
+	// +optional
+	AuditLogs *AuditLogstreamConfig `json:"auditLogs,omitempty" yaml:"auditLogs,omitempty"`
+	// +optional
+	CollectorLogs *LogstreamConfig `json:"collectorLogs,omitempty" yaml:"collectorLogs,omitempty"`
+	// +optional
+	HubLogs *LogstreamConfig `json:"hubLogs,omitempty" yaml:"hubLogs,omitempty"`
+	// +optional
+	OtherLogs *LogstreamConfig `json:"otherLogs,omitempty" yaml:"otherLogs,omitempty"`
+	Endpoint  *string          `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
 	// TODO: Support TLS. Need integration w/ cert manager
 	// TlsConfig *OtlpTlsConfig `json:"tls,omitempty" yaml:"tls,omitempty"`
 }
 
 type LogsConfig struct {
-	S3   *S3LogsConfig   `json:"s3,omitempty" yaml:"s3,omitempty"`
+	// +optional
+	S3 *S3LogsConfig `json:"s3,omitempty" yaml:"s3,omitempty"`
+	// +optional
 	Otlp *OtlpLogsConfig `json:"otlp,omitempty" yaml:"otlp,omitempty"`
 }
 
 // MdaiCollectorSpec defines the desired state of MdaiCollector.
 type MdaiCollectorSpec struct {
-	AWSConfig *AWSConfig  `json:"aws,omitempty" yaml:"aws,omitempty"`
-	Logs      *LogsConfig `json:"logs,omitempty" yaml:"logs,omitempty"`
+	// +optional
+	AWSConfig *AWSConfig `json:"aws,omitempty" yaml:"aws,omitempty"`
+	// +optional
+	Logs *LogsConfig `json:"logs,omitempty" yaml:"logs,omitempty"`
 }
 
 // MdaiCollectorStatus defines the observed state of MdaiCollector.
