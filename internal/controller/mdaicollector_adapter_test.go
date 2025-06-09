@@ -2,6 +2,8 @@ package controller
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/go-logr/logr"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -10,7 +12,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"testing"
 
 	v1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/stretchr/testify/assert"
