@@ -87,7 +87,7 @@ func NewMdaiCollectorAdapter(
 
 func (c MdaiCollectorAdapter) ensureMdaiCollectorFinalizerInitialized(ctx context.Context) (OperationResult, error) {
 	if !controllerutil.ContainsFinalizer(c.collectorCR, hubFinalizer) {
-		c.logger.Info("Adding Finalizer for Engine")
+		c.logger.Info("Adding Finalizer for MdaiHub")
 		if ok := controllerutil.AddFinalizer(c.collectorCR, hubFinalizer); !ok {
 			c.logger.Error(nil, "Failed to add finalizer into the custom resource")
 			return RequeueWithError(errors.New("failed to add finalizer " + hubFinalizer))
@@ -129,7 +129,7 @@ func (c MdaiCollectorAdapter) finalizeMdaiCollector(ctx context.Context) (Object
 			c.logger.Info("Cluster has been deleted, no need to finalize")
 			return ObjectModified, nil
 		}
-		c.logger.Error(err, "Failed to re-fetch Engine")
+		c.logger.Error(err, "Failed to re-fetch MdaiHub")
 		return ObjectUnchanged, err
 	}
 

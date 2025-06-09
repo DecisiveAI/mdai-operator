@@ -47,19 +47,15 @@ export GOPRIVATE=github.com/decisiveai/*
 - valkey is installed
 
 ### To Deploy on the local cluster
-**Create cluster**
+**Create cluster & Deploy Cert manager**
 ```shell
 kind create cluster -n mdai-operator-test
-```
-**Cert manager**
-```shell
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.1/cert-manager.yaml
 kubectl wait --for=condition=available --timeout=600s deployment --all -n cert-manager
 ```
 **Other prerequisites operator**   
 ```shell
 kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releases/latest/download/opentelemetry-operator.yaml
-kind load docker-image valkey-custom:1.0.0 --name mdai-operator-test
 helm install valkey oci://registry-1.docker.io/bitnamicharts/valkey --set auth.password=abc \
   --set image.registry="" \
   --set image.repository=public.ecr.aws/decisiveai/valkey \

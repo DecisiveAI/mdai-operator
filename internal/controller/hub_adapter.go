@@ -77,7 +77,7 @@ func NewHubAdapter(
 
 func (c HubAdapter) ensureFinalizerInitialized(ctx context.Context) (OperationResult, error) {
 	if !controllerutil.ContainsFinalizer(c.mdaiCR, hubFinalizer) {
-		c.logger.Info("Adding Finalizer for Engine")
+		c.logger.Info("Adding Finalizer for MdaiHub")
 		if ok := controllerutil.AddFinalizer(c.mdaiCR, hubFinalizer); !ok {
 			c.logger.Error(nil, "Failed to add finalizer into the custom resource")
 			return RequeueWithError(errors.New("failed to add finalizer " + hubFinalizer))
@@ -125,7 +125,7 @@ func (c HubAdapter) finalizeHub(ctx context.Context) (ObjectState, error) {
 			c.logger.Info("Cluster has been deleted, no need to finalize")
 			return ObjectModified, nil
 		}
-		c.logger.Error(err, "Failed to re-fetch Engine")
+		c.logger.Error(err, "Failed to re-fetch MdaiHub")
 		return ObjectUnchanged, err
 	}
 
@@ -605,7 +605,7 @@ func getConfigMapSHA(config v1.ConfigMap) (string, error) {
 func (c HubAdapter) ensureStatusSetToDone(ctx context.Context) (OperationResult, error) {
 	// Re-fetch the Custom Resource after update or create
 	if err := c.client.Get(ctx, types.NamespacedName{Name: c.mdaiCR.Name, Namespace: c.mdaiCR.Namespace}, c.mdaiCR); err != nil {
-		c.logger.Error(err, "Failed to re-fetch Engine")
+		c.logger.Error(err, "Failed to re-fetch MdaiHub")
 		return Requeue()
 	}
 	meta.SetStatusCondition(&c.mdaiCR.Status.Conditions, metav1.Condition{
