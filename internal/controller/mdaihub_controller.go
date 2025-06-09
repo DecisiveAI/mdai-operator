@@ -27,6 +27,7 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/go-logr/logr"
+	"go.uber.org/zap"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -60,6 +61,7 @@ const (
 // MdaiHubReconciler reconciles a MdaiHub object
 type MdaiHubReconciler struct {
 	client.Client
+	ZapLogger    *zap.Logger
 	Scheme       *runtime.Scheme
 	Recorder     record.EventRecorder
 	ValKeyClient valkey.Client
@@ -97,7 +99,7 @@ func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	_, err := r.ReconcileHandler(ctx, *NewHubAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme, r.ValKeyClient, r.ValkeyExpiry))
+	_, err := r.ReconcileHandler(ctx, *NewHubAdapter(fetchedCR, log, r.ZapLogger, r.Client, r.Recorder, r.Scheme, r.ValKeyClient, r.ValkeyExpiry))
 	if err != nil {
 		return ctrl.Result{}, err
 	}
