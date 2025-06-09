@@ -451,24 +451,28 @@ var _ = Describe("Manager", Ordered, func() {
 
 		It("can deploy the observer", func() {
 			verifyObserver := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "deployment", "mdaihub-sample-mdai-observer", "-n", namespace, "-o", "jsonpath={.status.readyReplicas}")
+				cmd := exec.Command("kubectl", "get", "deployment", "mdaihub-sample-mdai-observer",
+					"-n", namespace,
+					"-o", "jsonpath={.status.readyReplicas}")
 				out, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred(), "failed to get observer deployment status")
 				g.Expect(out).To(Equal("2"), "observer deployment should have 2 ready replicas")
 			}
 			Eventually(verifyObserver, "1m", "5s").Should(Succeed())
 			verifyObserverPods := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l", "app=mdaihub-sample-mdai-observer", "-o", "jsonpath={range .items[*]}{.metadata.name}:{.status.phase}{\"\\n\"}{end}")
+				cmd := exec.Command("kubectl", "get", "pods",
+					"-n", namespace,
+					"-l", "app=mdaihub-sample-mdai-observer",
+					"-o", "jsonpath={range .items[*]}{.metadata.name}:{.status.phase}{\"\\n\"}{end}")
 				out, err := utils.Run(cmd)
 
 				g.Expect(err).NotTo(HaveOccurred(), "failed to get observer pods")
 				lines := strings.Split(strings.TrimSpace(out), "\n")
 
-				// Expect exactly 2 pods and all in Running phase
-				g.Expect(len(lines)).To(Equal(2), "expected 2 observer pods")
+				g.Expect(lines).To(HaveLen(2), "expected 2 observer pods")
 				for _, line := range lines {
 					parts := strings.Split(line, ":")
-					g.Expect(len(parts)).To(Equal(2), "unexpected pod output format")
+					g.Expect(parts).To(HaveLen(2), "unexpected pod output format")
 					g.Expect(parts[1]).To(Equal("Running"), "expected pod to be in Running state")
 				}
 			}
@@ -760,7 +764,10 @@ var _ = Describe("Manager", Ordered, func() {
 			By("validating observer deleted")
 
 			verifyObserverDeleted := func() error {
-				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l", "app=mdaihub-sample-mdai-observer", "-o", "json")
+				cmd := exec.Command("kubectl", "get", "pods",
+					"-n", namespace,
+					"-l", "app=mdaihub-sample-mdai-observer",
+					"-o", "json")
 				out, err := utils.Run(cmd)
 				if err != nil {
 					return err
