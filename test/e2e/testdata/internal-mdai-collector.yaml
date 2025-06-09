@@ -10,6 +10,16 @@ spec:
   aws:
     awsAccessKeySecret: awsy-awsface
   logs:
+    otlp:
+      endpoint: "http://foobar:4318"
+      collectorLogs:
+        minSeverity: "warn"
+      otherLogs:
+        disabled: true
     s3:
       s3Region: "us-east-1"
       s3Bucket: "internal-mdai-collector-logs"
+      hubLogs:
+        minSeverity: "info"
+      collectorLogs:
+        minSeverity: "warn"

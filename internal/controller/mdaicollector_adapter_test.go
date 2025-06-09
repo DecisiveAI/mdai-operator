@@ -2,12 +2,37 @@ package controller
 
 import (
 	"fmt"
+	"github.com/go-logr/logr"
+	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	v1core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"testing"
 
 	v1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/utils/ptr"
 )
+
+func newFakeClientForCollectorCR(cr *v1.MdaiCollector, scheme *runtime.Scheme) client.Client {
+	return fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cr).
+		WithStatusSubresource(cr).
+		Build()
+}
+
+func createTestSchemeForMdaiCollector() *runtime.Scheme {
+	scheme := runtime.NewScheme()
+	_ = v1core.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = prometheusv1.AddToScheme(scheme)
+	_ = v1.AddToScheme(scheme)
+	return scheme
+}
 
 func TestGetS3ExporterForLogstream(t *testing.T) {
 	testCases := []struct {
@@ -100,43 +125,43 @@ func TestGetS3ExporterForLogstream(t *testing.T) {
 	}
 }
 
-//func TestGetPipelineWithS3Exporter(t *testing.T) {
-//	testCases := []struct {
-//		pipeline     map[string]any
-//		exporterName string
-//		expected     map[string]any
-//	}{
-//		{
-//			pipeline: map[string]any{
-//				"receivers":  []any{"otlp"},
-//				"processors": []any{"batch"},
-//				"exporters":  []any{"debug"},
-//			},
-//			exporterName: "awss3/collector",
-//			expected: map[string]any{
-//				"receivers":  []any{"otlp"},
-//				"processors": []any{"batch"},
-//				"exporters":  []any{"debug", "awss3/collector"},
-//			},
-//		},
-//		{
-//			pipeline: map[string]any{
-//				"receivers":  []any{"otlp", "qwer", "iouoip/ioeuwr"},
-//				"processors": []any{"batch", "lsikdjflks", "klsjdlfjslr", "ewroije"},
-//				"exporters":  []any{"debug", "slkdjflskdrn/selirjselkr", "zmcsdfkjls/slkdr/skjdlrjl"},
-//			},
-//			exporterName: "awss3/hub",
-//			expected: map[string]any{
-//				"receivers":  []any{"otlp", "qwer", "iouoip/ioeuwr"},
-//				"processors": []any{"batch", "lsikdjflks", "klsjdlfjslr", "ewroije"},
-//				"exporters":  []any{"debug", "slkdjflskdrn/selirjselkr", "zmcsdfkjls/slkdr/skjdlrjl", "awss3/hub"},
-//			},
-//		},
-//	}
-//
-//	for idx, testCase := range testCases {
-//		t.Run(fmt.Sprintf("Case %d %s", idx, testCase.exporterName), func(t *testing.T) {
-//			assert.Equal(t, testCase.expected, c.getPipelineWithExporterAndSeverityFilter(testCase.pipeline, testCase.exporterName, v1.InfoSeverityLevel))
-//		})
-//	}
-//}
+func TestGetPipelineWithS3Exporter(t *testing.T) {
+	cr := &v1.MdaiCollector{}
+	recorder := record.NewFakeRecorder(10)
+	scheme := createTestSchemeForMdaiCollector()
+	adapter := NewMdaiCollectorAdapter(cr, logr.Discard(), newFakeClientForCollectorCR(cr, scheme), recorder, scheme)
+
+	testCases := []struct {
+		receiverName  string
+		severityLevel v1.SeverityLevel
+		exporterName  string
+		expected      map[string]any
+	}{
+		{
+			receiverName:  "routing/logstream",
+			severityLevel: v1.WarnSeverityLevel,
+			exporterName:  "awss3/collector",
+			expected: map[string]any{
+				"receivers":  []any{"routing/logstream"},
+				"processors": []any{severityFilterMap[v1.WarnSeverityLevel]},
+				"exporters":  []any{"awss3/collector"},
+			},
+		},
+		{
+			receiverName:  "foobaz",
+			severityLevel: v1.InfoSeverityLevel,
+			exporterName:  "awss3/hub",
+			expected: map[string]any{
+				"receivers":  []any{"foobaz"},
+				"processors": []any{severityFilterMap[v1.InfoSeverityLevel]},
+				"exporters":  []any{"awss3/hub"},
+			},
+		},
+	}
+
+	for idx, testCase := range testCases {
+		t.Run(fmt.Sprintf("Case %d %s", idx, testCase.exporterName), func(t *testing.T) {
+			assert.Equal(t, testCase.expected, adapter.getPipelineWithExporterAndSeverityFilter(testCase.receiverName, testCase.exporterName, ptr.To(testCase.severityLevel)))
+		})
+	}
+}
