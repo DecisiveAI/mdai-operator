@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"slices"
 	"strings"
 	"time"
@@ -153,7 +154,7 @@ func (c HubAdapter) finalizeHub(ctx context.Context) (ObjectState, error) {
 
 	prefix := VariableKeyPrefix + c.mdaiCR.Name + "/"
 	c.logger.Info("Cleaning up old variables from Valkey with prefix", "prefix", prefix)
-	if err := datacore.NewValkeyAdapter(c.valKeyClient, c.logger).DeleteKeysWithPrefixUsingScan(ctx, map[string]struct{}{}, c.mdaiCR.Name); err != nil {
+	if err := datacore.NewValkeyAdapter(c.valKeyClient, zap.NewRaw()).DeleteKeysWithPrefixUsingScan(ctx, map[string]struct{}{}, c.mdaiCR.Name); err != nil {
 		return ObjectUnchanged, err
 	}
 
@@ -418,7 +419,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 			namespaceToRestart[namespace] = struct{}{}
 		}
 	}
-	auditAdapter := audit.NewAuditAdapter(c.logger, c.valKeyClient, c.valkeyAuditStreamExpiry)
+	auditAdapter := audit.NewAuditAdapter(zap.NewRaw(), c.valKeyClient, c.valkeyAuditStreamExpiry)
 
 	for _, collector := range collectors {
 		if _, shouldRestart := namespaceToRestart[collector.Namespace]; shouldRestart {
