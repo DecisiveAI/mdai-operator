@@ -272,11 +272,11 @@ func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *mdaiv1.LogsConf
 		pipelines := serviceBlock["pipelines"].(map[string]any)
 		connectors := mdaiCollectorConfig["connectors"].(map[string]any)
 		routingTableMap := make(map[mdaiv1.MDAILogStream]RoutingConnectorTableEntry)
-		defaultRoutingPipelines := make([]string, 0)
+		otherLogstreamPipelines := make([]string, 0)
 
-		defaultRoutingPipelines = c.augmentConfigForOtlpConfig(logsConfig, exporters, pipelines, routingTableMap, defaultRoutingPipelines)
+		otherLogstreamPipelines = c.augmentConfigForOtlpConfigAndGetOtherLogstreamPipelines(logsConfig, exporters, pipelines, routingTableMap, otherLogstreamPipelines)
 
-		defaultRoutingPipelines = c.augmentPipelinesForS3Config(logsConfig, awsAccessKeySecret, exporters, pipelines, routingTableMap, defaultRoutingPipelines)
+		otherLogstreamPipelines = c.augmentPipelinesForS3ConfigAndGetOtherLogstreamPipelines(logsConfig, awsAccessKeySecret, exporters, pipelines, routingTableMap, otherLogstreamPipelines)
 
 		logstreamRouter := connectors["routing/logstream"].(map[string]any)
 		newRoutingTable := make([]RoutingConnectorTableEntry, 0)
@@ -284,8 +284,8 @@ func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *mdaiv1.LogsConf
 			newRoutingTable = append(newRoutingTable, entry)
 		}
 		logstreamRouter["table"] = newRoutingTable
-		if len(defaultRoutingPipelines) > 0 {
-			logstreamRouter["default_pipelines"] = defaultRoutingPipelines
+		if len(otherLogstreamPipelines) > 0 {
+			logstreamRouter["default_pipelines"] = otherLogstreamPipelines
 		}
 	}
 
@@ -298,7 +298,14 @@ func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *mdaiv1.LogsConf
 	return collectorConfig, nil
 }
 
-func (c MdaiCollectorAdapter) augmentPipelinesForS3Config(logsConfig *mdaiv1.LogsConfig, awsAccessKeySecret *string, exporters map[string]any, pipelines map[string]any, routingTableMap map[mdaiv1.MDAILogStream]RoutingConnectorTableEntry, defaultRoutingPipelines []string) []string {
+func (c MdaiCollectorAdapter) augmentPipelinesForS3ConfigAndGetOtherLogstreamPipelines(
+	logsConfig *mdaiv1.LogsConfig,
+	awsAccessKeySecret *string,
+	exporters map[string]any,
+	pipelines map[string]any,
+	routingTableMap map[mdaiv1.MDAILogStream]RoutingConnectorTableEntry,
+	defaultRoutingPipelines []string,
+) []string {
 	if awsAccessKeySecret != nil {
 		s3Config := logsConfig.S3
 		if s3Config != nil {
@@ -348,7 +355,13 @@ func (c MdaiCollectorAdapter) augmentPipelinesForS3Config(logsConfig *mdaiv1.Log
 	return defaultRoutingPipelines
 }
 
-func (c MdaiCollectorAdapter) augmentConfigForOtlpConfig(logsConfig *mdaiv1.LogsConfig, exporters map[string]any, pipelines map[string]any, routingTableMap map[mdaiv1.MDAILogStream]RoutingConnectorTableEntry, defaultRoutingPipelines []string) []string {
+func (c MdaiCollectorAdapter) augmentConfigForOtlpConfigAndGetOtherLogstreamPipelines(
+	logsConfig *mdaiv1.LogsConfig,
+	exporters map[string]any,
+	pipelines map[string]any,
+	routingTableMap map[mdaiv1.MDAILogStream]RoutingConnectorTableEntry,
+	defaultRoutingPipelines []string,
+) []string {
 	otlpConfig := logsConfig.Otlp
 	if otlpConfig != nil && otlpConfig.Endpoint != nil && *otlpConfig.Endpoint != "" {
 		c.logger.Info(fmt.Sprintf("Adding OTLP components to mdai-collector config for %s", c.collectorCR.Name))
@@ -386,7 +399,14 @@ func (c MdaiCollectorAdapter) augmentConfigForOtlpConfig(logsConfig *mdaiv1.Logs
 	return defaultRoutingPipelines
 }
 
-func (c MdaiCollectorAdapter) addS3ComponentsAndPipeline(logstream mdaiv1.MDAILogStream, s3Config *mdaiv1.S3LogsConfig, exporters map[string]any, minSeverity *mdaiv1.SeverityLevel, pipelines map[string]any, routingTableMap map[mdaiv1.MDAILogStream]RoutingConnectorTableEntry) string {
+func (c MdaiCollectorAdapter) addS3ComponentsAndPipeline(
+	logstream mdaiv1.MDAILogStream,
+	s3Config *mdaiv1.S3LogsConfig,
+	exporters map[string]any,
+	minSeverity *mdaiv1.SeverityLevel,
+	pipelines map[string]any,
+	routingTableMap map[mdaiv1.MDAILogStream]RoutingConnectorTableEntry,
+) string {
 	s3ExporterName, s3Exporter := getS3ExporterForLogstream(c.collectorCR.Name, logstream, *s3Config)
 	exporters[s3ExporterName] = s3Exporter
 	pipelineName := fmt.Sprintf("logs/s3_%s", logstream)
@@ -396,7 +416,13 @@ func (c MdaiCollectorAdapter) addS3ComponentsAndPipeline(logstream mdaiv1.MDAILo
 	return pipelineName
 }
 
-func (c MdaiCollectorAdapter) addPipelineForLogstream(logstreamConfig *mdaiv1.LogstreamConfig, logstream mdaiv1.MDAILogStream, otlpExporterName string, pipelines map[string]any, routingTableMap *map[mdaiv1.MDAILogStream]RoutingConnectorTableEntry) string {
+func (c MdaiCollectorAdapter) addPipelineForLogstream(
+	logstreamConfig *mdaiv1.LogstreamConfig,
+	logstream mdaiv1.MDAILogStream,
+	otlpExporterName string,
+	pipelines map[string]any,
+	routingTableMap *map[mdaiv1.MDAILogStream]RoutingConnectorTableEntry,
+) string {
 	var minSeverity *mdaiv1.SeverityLevel
 	if logstreamConfig != nil && logstreamConfig.MinSeverity != nil {
 		minSeverity = logstreamConfig.MinSeverity
@@ -408,7 +434,11 @@ func (c MdaiCollectorAdapter) addPipelineForLogstream(logstreamConfig *mdaiv1.Lo
 	return pipelineName
 }
 
-func (c MdaiCollectorAdapter) addOrCreateRoutingTableEntryWithPipeline(logstream mdaiv1.MDAILogStream, routingTableMap *map[mdaiv1.MDAILogStream]RoutingConnectorTableEntry, pipelineName string) {
+func (c MdaiCollectorAdapter) addOrCreateRoutingTableEntryWithPipeline(
+	logstream mdaiv1.MDAILogStream,
+	routingTableMap *map[mdaiv1.MDAILogStream]RoutingConnectorTableEntry,
+	pipelineName string,
+) {
 	if logstream != mdaiv1.OtherLogstream {
 		if _, ok := (*routingTableMap)[logstream]; !ok {
 			(*routingTableMap)[logstream] = RoutingConnectorTableEntry{
