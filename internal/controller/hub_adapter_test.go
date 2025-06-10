@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
-	"k8s.io/utils/ptr"
 
 	v1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
@@ -308,31 +307,6 @@ func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
 	}
 	if cm.Data["VAR"] != "string" {
 		t.Errorf("Expected env var value %q, got %q", "value", cm.Data["VAR"])
-	}
-}
-
-func TestBuildCollectorConfig(t *testing.T) {
-	mdaiCR := newTestMdaiCR()
-	observers := []v1.Observer{
-		{
-			Name:                    "obs1",
-			LabelResourceAttributes: []string{"label1", "label2"},
-		},
-	}
-	mdaiCR.Spec.Observers = observers
-	observerResource := v1.ObserverResource{}
-
-	scheme := createTestScheme()
-	fakeClient := newFakeClientForCR(mdaiCR, scheme)
-	recorder := record.NewFakeRecorder(10)
-
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
-	config, err := adapter.getObserverCollectorConfig(observers, observerResource)
-	if err != nil {
-		t.Fatalf("getObserverCollectorConfig returned error: %v", err)
-	}
-	if !strings.Contains(config, "obs1") {
-		t.Errorf("Expected collector config to contain observer name %q, got: %s", "obs1", config)
 	}
 }
 
@@ -792,93 +766,6 @@ func TestEnsureHubDeletionProcessed_WithDeletion(t *testing.T) {
 			t.Logf("CR not found after finalization, which is acceptable")
 		} else {
 			t.Fatalf("failed to get updated CR: %v", err)
-		}
-	}
-}
-
-func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
-	ctx := context.TODO()
-	scheme := createTestScheme()
-
-	observer := v1.Observer{
-		Name:                    "observer4",
-		ResourceRef:             "observer-collector",
-		LabelResourceAttributes: []string{"service.name", "team", "region"},
-		CountMetricName:         ptr.To("mdai_observer_four_count_total"),
-		BytesMetricName:         ptr.To("mdai_observer_four_bytes_total"),
-		Filter: &v1.ObserverFilter{
-			ErrorMode: ptr.To("ignore"),
-			Logs: &v1.ObserverLogsFilter{
-				LogRecord: []string{`attributes["log_level"] == "INFO"`},
-			},
-		},
-	}
-	observers := []v1.Observer{observer}
-	observerResource := v1.ObserverResource{
-		Name:  "observer-collector",
-		Image: ptr.To("public.ecr.aws/p3k6k6h3/observer-observer"),
-	}
-	observerResources := []v1.ObserverResource{observerResource}
-
-	mdaiCR := &v1.MdaiHub{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-hub",
-			Namespace: "default",
-		},
-		Spec: v1.MdaiHubSpec{
-			Observers:         observers,
-			ObserverResources: observerResources,
-		},
-		Status: v1.MdaiHubStatus{},
-	}
-
-	fakeClient := newFakeClientForCR(mdaiCR, scheme)
-	recorder := record.NewFakeRecorder(10)
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
-
-	// Call ensureObserversSynchronized.
-	opResult, err := adapter.ensureObserversSynchronized(ctx)
-	if err != nil {
-		t.Fatalf("ensureObserversSynchronized returned error: %v", err)
-	}
-	if opResult != ContinueOperationResult() {
-		t.Errorf("expected ContinueOperationResult, got: %v", opResult)
-	}
-
-	configMapName := adapter.getScopedObserverResourceName(observerResource, "config")
-	cm := &v1core.ConfigMap{}
-	if err := fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: mdaiCR.Namespace}, cm); err != nil {
-		t.Fatalf("failed to get ConfigMap %q: %v", configMapName, err)
-	}
-	if _, ok := cm.Data["collector.yaml"]; !ok {
-		t.Errorf("expected collector.yaml key in ConfigMap data, got: %v", cm.Data)
-	}
-
-	deploymentName := mdaiCR.Name + "-observer-collector"
-	deploy := &appsv1.Deployment{}
-	if err := fakeClient.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: mdaiCR.Namespace}, deploy); err != nil {
-		t.Fatalf("failed to get Deployment %q: %v", deploymentName, err)
-	}
-	hash, ok := deploy.Spec.Template.Annotations["mdai-collector-config/sha256"]
-	if !ok || hash == "" {
-		t.Errorf("expected mdai-collector-config/sha256 annotation to be set in Deployment, got: %v", deploy.Spec.Template.Annotations)
-	}
-
-	serviceName := mdaiCR.Name + "-observer-collector-service"
-	svc := &v1core.Service{}
-	if err := fakeClient.Get(ctx, types.NamespacedName{Name: serviceName, Namespace: mdaiCR.Namespace}, svc); err != nil {
-		t.Fatalf("failed to get Service %q: %v", serviceName, err)
-	}
-	expectedAppLabel := mdaiCR.Name + "-observer-collector"
-	if svc.Spec.Selector["app"] != expectedAppLabel {
-		t.Errorf("expected service selector app to be %q, got: %q", expectedAppLabel, svc.Spec.Selector["app"])
-	}
-	if len(svc.Spec.Ports) != 2 {
-		t.Errorf("expected service to have two ports, got %d", len(svc.Spec.Ports))
-	} else {
-		port := svc.Spec.Ports[0]
-		if port.Name != "otlp-grpc" || port.Port != 4317 || port.TargetPort.String() != "otlp-grpc" {
-			t.Errorf("unexpected service port configuration: %+v", port)
 		}
 	}
 }

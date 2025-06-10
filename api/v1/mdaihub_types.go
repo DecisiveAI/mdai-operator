@@ -18,7 +18,6 @@ package v1
 
 import (
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -97,51 +96,6 @@ type PrometheusAlert struct {
 	Severity string `json:"severity" yaml:"severity"`
 }
 
-type ObserverLogsFilter struct {
-	// +kubebuilder:validation:Required
-	LogRecord []string `json:"log_record" yaml:"log_record"`
-}
-
-type ObserverFilter struct {
-	// +kubebuilder:validation:Optional
-	ErrorMode *string `json:"error_mode" yaml:"error_mode"`
-	// +kubebuilder:validation:Optional
-	Logs *ObserverLogsFilter `json:"logs" yaml:"logs"`
-}
-
-// TODO: Add metrics and trace filters
-
-type Observer struct {
-	// +kubebuilder:validation:Required
-	Name string `json:"name" yaml:"name"`
-	// +kubebuilder:validation:Required
-	ResourceRef string `json:"resourceRef" yaml:"resourceRef"`
-	// +kubebuilder:validation:Required
-	LabelResourceAttributes []string `json:"labelResourceAttributes" yaml:"labelResourceAttributes"`
-	// +kubebuilder:validation:Optional
-	CountMetricName *string `json:"countMetricName,omitempty" yaml:"countMetricName,omitempty"`
-	// +kubebuilder:validation:Optional
-	BytesMetricName *string `json:"bytesMetricName,omitempty" yaml:"bytesMetricName,omitempty"`
-	// +kubebuilder:validation:Optional
-	Filter *ObserverFilter `json:"filter,omitempty" yaml:"filter,omitempty"`
-}
-
-type ObserverResource struct {
-	// +kubebuilder:validation:Required
-	Name string `json:"name" yaml:"name"`
-	// +kubebuilder:validation:Optional
-	Image *string `json:"image,omitempty" yaml:"image,omitempty"`
-	// +kubebuilder:validation:Optional
-	Replicas *int32 `json:"replicas,omitempty" yaml:"replicas,omitempty"`
-	// +kubebuilder:validation:Optional
-	Resources *v1.ResourceRequirements `json:"resources,omitempty" yaml:"resources,omitempty"`
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Minimum=1
-	GrpcReceiverMaxMsgSize *uint64 `json:"grpcReceiverMaxMsgSize,omitempty" yaml:"grpcReceiverMaxMsgSize,omitempty"`
-	// +kubebuilder:validation:Optional
-	OwnLogsOtlpEndpoint *string `json:"ownLogsOtlpEndpoint,omitempty" yaml:"ownLogsOtlpEndpoint,omitempty"`
-}
-
 type Config struct {
 	// EvaluationInterval Specify the interval at which all evaluations within this hub are assessed in the Prometheus infrastructure.
 	// +kubebuilder:validation:Optional
@@ -166,10 +120,6 @@ type AutomationStep struct {
 type MdaiHubSpec struct {
 	// +optional
 	Config *Config `json:"config,omitempty" yaml:"config,omitempty"`
-	// +optional
-	Observers []Observer `json:"observers,omitempty" yaml:"observers,omitempty"`
-	// +optional
-	ObserverResources []ObserverResource `json:"observerResources,omitempty" yaml:"observerResources,omitempty"`
 	// +optional
 	Variables []Variable `json:"variables,omitempty"`
 	// +optional

@@ -89,6 +89,7 @@ rules:
   resources:
   - mdaicollectors
   - mdaihubs
+  - mdaiobservers
   verbs:
   - create
   - delete
@@ -102,6 +103,7 @@ rules:
   resources:
   - mdaicollectors/finalizers
   - mdaihubs/finalizers
+  - mdaiobservers/finalizers
   verbs:
   - update
 - apiGroups:
@@ -109,6 +111,7 @@ rules:
   resources:
   - mdaicollectors/status
   - mdaihubs/status
+  - mdaiobservers/status
   verbs:
   - get
   - patch

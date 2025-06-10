@@ -60,24 +60,6 @@ spec:
         - severity_filters_by_level
       serializeAs:
         - name: "SERVICE_HASH_SET"
-  observers:
-    - name: service-bytes-watcher
-      resourceRef: watcher-collector
-      labelResourceAttributes:
-      - service.name
-      - team
-      - region
-      countMetricName: mdai_watcher_four_count_total
-      bytesMetricName: mdai_watcher_four_bytes_total
-      filter:
-        error_mode: ignore
-        logs:
-          log_record:
-            - 'attributes["log_level"] == "INFO"'
-
-  observerResources:
-    - name: watcher-collector
-      image: public.ecr.aws/decisiveai/observer-collector:0.1
 
   prometheusAlert:
     - name: logBytesOutTooHighBySvc

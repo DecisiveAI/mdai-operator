@@ -5,5 +5,5 @@ metadata:
   labels:
     app.kubernetes.io/name: mdai-operator
     app.kubernetes.io/managed-by: kustomize
-  name: mdaicollector-sample
+  name: mdaicollector-empty
 spec: {}
