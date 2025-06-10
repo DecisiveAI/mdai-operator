@@ -1,7 +1,5 @@
-[![E2E Tests](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test-e2e.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test-e2e.yml)
 ![Coverage](https://img.shields.io/badge/Coverage-1-red)
-[![Tests](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/test.yml)
-[![Lint](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/lint.yml)
+[![Chores](https://github.com/DecisiveAI/mdai-operator/actions/workflows/chores.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/chores.yml)
 # MDAI K8s Operator
 manages MDAI Hubs
 ## Description

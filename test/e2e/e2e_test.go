@@ -400,7 +400,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("verifying the config map content for variables defaults")
 			verifyConfigMap := func(g Gomega) {
-				data := getVariablesFromMap(g, "mdaihub-sample-variables")
+				data := getDataFromMap(g, "mdaihub-sample-variables", otelNamespace)
 				g.Expect(data).To(HaveLen(8))
 				g.Expect(data["ATTRIBUTES"]).To(Equal("{}\n"))
 				g.Expect(data["SEVERITY_FILTERS_BY_LEVEL"]).To(Equal("{}\n"))
@@ -415,10 +415,21 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("verifying the config map content for manual variables")
 			verifyConfigMapManual := func(g Gomega) {
-				data := getVariablesFromMap(g, "mdaihub-sample-manual-variables")
+				data := getDataFromMap(g, "mdaihub-sample-manual-variables", otelNamespace)
 				g.Expect(data).To(HaveLen(2))
 				g.Expect(data["manual_filter"]).To(Equal("string"))
 				g.Expect(data["service_list_manual"]).To(Equal("set"))
+			}
+			Eventually(verifyConfigMapManual).Should(Succeed())
+		})
+
+		It("can create the config map for automation", func() {
+			verifyConfigMapManual := func(g Gomega) {
+				data := getDataFromMap(g, "mdaihub-sample-automation", "mdai")
+				g.Expect(data).To(HaveLen(1))
+				g.Expect(data["logBytesOutTooHighBySvc"]).
+					To(Equal("[{\"handlerRef\":\"setVariable\",\"args\":{\"default\":\"default_service\",\"key\":\"service_name\"}}," +
+						"{\"handlerRef\":\"publishMetrics\"},{\"handlerRef\":\"notifySlack\",\"args\":{\"channel\":\"infra-alerts\"}}]"))
 			}
 			Eventually(verifyConfigMapManual).Should(Succeed())
 		})
@@ -635,7 +646,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("validating that the config map has the updated variable value")
 			verifyConfigMap := func(g Gomega) {
-				data := getVariablesFromMap(g, "mdaihub-sample-variables")
+				data := getDataFromMap(g, "mdaihub-sample-variables", otelNamespace)
 				g.Expect(data).To(HaveLen(14))
 				g.Expect(data["ATTRIBUTES"]).To(Equal("send_batch_size: 100\ntimeout: 15s\n"))
 				g.Expect(data["SERVICE_ALERTED"]).To(Equal("true"))
@@ -729,9 +740,9 @@ var _ = Describe("Manager", Ordered, func() {
 	})
 })
 
-func getVariablesFromMap(g Gomega, cmName string) map[string]any {
+func getDataFromMap(g Gomega, cmName string, namespace string) map[string]any {
 	cmd := exec.Command("kubectl", "get", "configmap", cmName,
-		"-n", otelNamespace, "-o", "json")
+		"-n", namespace, "-o", "json")
 	out, err := utils.Run(cmd)
 	g.Expect(err).NotTo(HaveOccurred())
 

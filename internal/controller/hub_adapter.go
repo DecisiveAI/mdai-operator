@@ -7,9 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/decisiveai/mdai-data-core/audit"
 
@@ -50,11 +53,14 @@ type HubAdapter struct {
 	scheme                  *runtime.Scheme
 	valKeyClient            valkey.Client
 	valkeyAuditStreamExpiry time.Duration
+	releaseName             string
+	zapLogger               *zap.Logger
 }
 
 func NewHubAdapter(
 	cr *mdaiv1.MdaiHub,
 	log logr.Logger,
+	zapLogger *zap.Logger,
 	client client.Client,
 	recorder record.EventRecorder,
 	scheme *runtime.Scheme,
@@ -69,6 +75,8 @@ func NewHubAdapter(
 		scheme:                  scheme,
 		valKeyClient:            valkeyClient,
 		valkeyAuditStreamExpiry: valkeyAuditStreamExpiry,
+		releaseName:             os.Getenv("RELEASE_NAME"),
+		zapLogger:               zapLogger,
 	}
 }
 
@@ -150,7 +158,7 @@ func (c HubAdapter) finalizeHub(ctx context.Context) (ObjectState, error) {
 
 	prefix := VariableKeyPrefix + c.mdaiCR.Name + "/"
 	c.logger.Info("Cleaning up old variables from Valkey with prefix", "prefix", prefix)
-	if err := datacore.NewValkeyAdapter(c.valKeyClient, c.logger).DeleteKeysWithPrefixUsingScan(ctx, map[string]struct{}{}, c.mdaiCR.Name); err != nil {
+	if err := datacore.NewValkeyAdapter(c.valKeyClient, c.zapLogger).DeleteKeysWithPrefixUsingScan(ctx, map[string]struct{}{}, c.mdaiCR.Name); err != nil {
 		return ObjectUnchanged, err
 	}
 
@@ -210,6 +218,11 @@ func (c HubAdapter) ensurePrometheusAlertsSynchronized(ctx context.Context) (Ope
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      defaultPrometheusRuleName,
 				Namespace: c.mdaiCR.Namespace,
+				Labels: map[string]string{
+					"app.kubernetes.io/managed-by": "mdai-operator",
+					"app.kubernetes.io/part-of":    "kube-prometheus-stack",
+					"app.kubernetes.io/instance":   c.releaseName,
+				},
 			},
 			Spec: prometheusv1.PrometheusRuleSpec{
 				Groups: []prometheusv1.RuleGroup{
@@ -303,7 +316,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 
 	envMap := make(map[string]string)
 	manualEnvMap := make(map[string]string)
-	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.logger)
+	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.zapLogger)
 	valkeyKeysToKeep := map[string]struct{}{}
 	for _, variable := range variables {
 		c.logger.Info(fmt.Sprintf("Processing variable: %s", variable.Key))
@@ -410,7 +423,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 			namespaceToRestart[namespace] = struct{}{}
 		}
 	}
-	auditAdapter := audit.NewAuditAdapter(c.logger, c.valKeyClient, c.valkeyAuditStreamExpiry)
+	auditAdapter := audit.NewAuditAdapter(c.zapLogger, c.valKeyClient, c.valkeyAuditStreamExpiry)
 
 	for _, collector := range collectors {
 		if _, shouldRestart := namespaceToRestart[collector.Namespace]; shouldRestart {
@@ -480,6 +493,11 @@ func (c HubAdapter) applySetTransformation(variable mdaiv1.Variable, envMap map[
 
 func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (OperationResult, error) {
 	if c.mdaiCR.Spec.Automations == nil {
+		c.logger.Info("No automations defined in the MDAI CR", "name", c.mdaiCR.Name)
+		if err := c.deleteEnvConfigMap(ctx, automationConfigMapNamePostfix, c.mdaiCR.Namespace); err != nil {
+			c.logger.Error(err, "Failed to delete automations ConfigMap", "name", c.mdaiCR.Name)
+			return OperationResult{}, err
+		}
 		return ContinueProcessing()
 	}
 	c.logger.Info("Creating or updating ConfigMap for automations", "name", c.mdaiCR.Name)
@@ -498,6 +516,27 @@ func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (Operatio
 		return OperationResult{}, err
 	}
 	return ContinueProcessing()
+}
+
+func (c HubAdapter) deleteEnvConfigMap(ctx context.Context, postfix string, namespace string) error {
+	configMapName := c.mdaiCR.Name + postfix
+	c.logger.Info("Deleting ConfigMap", "name", configMapName, "namespace", namespace)
+	configMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: namespace,
+		},
+	}
+
+	if err := c.client.Delete(ctx, configMap); err != nil {
+		if apierrors.IsNotFound(err) {
+			c.logger.Info("ConfigMap not found, skipping deletion", "name", configMapName, "namespace", namespace)
+			return nil
+		}
+		c.logger.Error(err, "Failed to delete ConfigMap", "name", configMapName, "namespace", namespace)
+		return fmt.Errorf("failed to delete ConfigMap: %w", err)
+	}
+	return nil
 }
 
 func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, configMapPostfix string, namespace string) (controllerutil.OperationResult, error) {
