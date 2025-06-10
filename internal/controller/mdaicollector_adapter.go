@@ -28,6 +28,34 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+type OtlpTlsConfig struct {
+	Insecure bool `yaml:"insecure" json:"insecure"`
+}
+
+type OtlpExporterConfig struct {
+	Endpoint  string        `yaml:"endpoint" json:"endpoint"`
+	TlsConfig OtlpTlsConfig `yaml:"tls" json:"tls"`
+}
+
+type S3ExporterConfig struct {
+	S3Uploader S3UploaderConfig `yaml:"s3uploader" json:"s3uploader"`
+}
+
+type S3UploaderConfig struct {
+	Region            string `yaml:"region" json:"region"`
+	S3Bucket          string `yaml:"s3_bucket" json:"s3_bucket"`
+	S3Prefix          string `yaml:"s3_prefix" json:"s3_prefix"`
+	S3PartitionFormat string `yaml:"s3_partition_format" json:"s3_partition_format"`
+	FilePrefix        string `yaml:"file_prefix" json:"file_prefix"`
+	DisableSSL        bool   `yaml:"disable_ssl" json:"disable_ssl"`
+}
+
+type RoutingConnectorTableEntry struct {
+	Context   string   `yaml:"context" json:"context"`
+	Condition string   `yaml:"condition" json:"condition"`
+	Pipelines []string `yaml:"pipelines" json:"pipelines"`
+}
+
 const (
 	MdaiCollectorHubComponent     = "mdai-collector"
 	mdaiCollectorResourceNameBase = "mdai-collector"
@@ -401,7 +429,7 @@ func (c MdaiCollectorAdapter) addOrCreateRoutingTableEntryWithPipeline(logstream
 func getOtlpExporterForLogstream(otlpLogsConfig mdaiv1.OtlpLogsConfig) (string, OtlpExporterConfig) {
 	exporter := OtlpExporterConfig{
 		Endpoint: *otlpLogsConfig.Endpoint,
-		TlsConfig: &OtlpTlsConfig{
+		TlsConfig: OtlpTlsConfig{
 			Insecure: true,
 		},
 	}
@@ -413,7 +441,7 @@ func getS3ExporterForLogstream(hubName string, logstream mdaiv1.MDAILogStream, s
 	exporterKey := fmt.Sprintf("awss3/%s", logstream)
 	filePrefix := fmt.Sprintf("%s-", logstream)
 	exporter := S3ExporterConfig{
-		s3uploader: &S3UploaderConfig{
+		S3Uploader: S3UploaderConfig{
 			Region:            *s3LogsConfig.S3Region,
 			S3Bucket:          *s3LogsConfig.S3Bucket,
 			S3Prefix:          s3Prefix,

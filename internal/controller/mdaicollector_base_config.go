@@ -120,13 +120,32 @@ var BaseCGroupRuntimeExtensionConfigName, BaseCGroupRuntimeExtensionConfig = "cg
 }
 
 var OtlpInputPipelineName, OtlpInputPipeline = "logs/input", PipelineConfig{
-	Receivers:  []string{BaseOtlpReceiverName},
+	Receivers:  []string{LogstreamRoutingConnectorConfigName},
 	Processors: []string{},
 	Exporters:  []string{LogstreamRoutingConnectorConfigName},
 }
-
 var BaseK8sEventsPipelineName, BaseK8sEventsPipeline = "logs/k8s_events", PipelineConfig{
 	Receivers:  []string{BaseK8sEventsReceiverName},
 	Processors: []string{K8sLogstreamResourceProcessorName},
+	Exporters:  []string{LogstreamRoutingConnectorConfigName},
+}
+var DebugAuditPipelineName, DebugAuditPipeline = "logs/input", PipelineConfig{
+	Receivers:  []string{LogstreamRoutingConnectorConfigName},
+	Processors: []string{BaseBatchProcessorName},
+	Exporters:  []string{LogstreamRoutingConnectorConfigName},
+}
+var DebugHubPipelineName, DebugHubPipeline = "logs/input", PipelineConfig{
+	Receivers:  []string{LogstreamRoutingConnectorConfigName},
+	Processors: []string{BaseBatchProcessorName},
+	Exporters:  []string{LogstreamRoutingConnectorConfigName},
+}
+var DebugCollectorPipelineName, DebugCollectorPipeline = "logs/input", PipelineConfig{
+	Receivers:  []string{LogstreamRoutingConnectorConfigName},
+	Processors: []string{BaseBatchProcessorName},
+	Exporters:  []string{LogstreamRoutingConnectorConfigName},
+}
+var DebugOtherPipelineName, DebugOtherPipeline = "logs/input", PipelineConfig{
+	Receivers:  []string{LogstreamRoutingConnectorConfigName},
+	Processors: []string{BaseBatchProcessorName},
 	Exporters:  []string{LogstreamRoutingConnectorConfigName},
 }
