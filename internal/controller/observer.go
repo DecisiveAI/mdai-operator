@@ -5,8 +5,6 @@ import (
 	_ "embed"
 	"fmt"
 
-	"go.uber.org/multierr"
-
 	v1 "github.com/decisiveai/mdai-operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -14,83 +12,58 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 )
 
 const (
-	observerDefaultImage     = "public.ecr.aws/decisiveai/observer-collector:0.1"
-	observerResourceLabel    = "mdai_observer_resource"
-	mdaiObserverHubComponent = "mdai-observer"
+	observerDefaultImage         = "public.ecr.aws/decisiveai/observer-collector:0.1"
+	mdaiObserverHubComponent     = "mdai-observer"
+	mdaiObserverResourceBaseName = "mdai-observer"
 )
 
 //go:embed config/observer_base_collector_config.yaml
 var baseObserverCollectorYAML string
 
-func (c HubAdapter) ensureObserversSynchronized(ctx context.Context) (OperationResult, error) {
-	observers := c.mdaiCR.Spec.Observers
-	observerResources := c.mdaiCR.Spec.ObserverResources
+func (c ObserverAdapter) ensureObserversSynchronized(ctx context.Context) (OperationResult, error) {
+	observers := c.observerCR.Spec.Observers
+	observerResource := c.observerCR.Spec.ObserverResource
 
-	if observerResources == nil {
-		c.logger.Info("No observerResources found in the CR, skipping observer synchronization")
-		return ContinueProcessing()
-	}
-	if observers == nil {
+	if len(observers) == 0 {
 		c.logger.Info("No observers found in the CR, skipping observer synchronization")
 		return ContinueProcessing()
 	}
 
-	configObserverResources := make([]string, 0)
-	for _, observerResource := range observerResources {
-		configObserverResources = append(configObserverResources, observerResource.Name)
-		observersForResource := make([]v1.Observer, 0)
-		for _, observer := range observers {
-			if observer.ResourceRef == observerResource.Name {
-				observersForResource = append(observersForResource, observer)
-			}
-		}
-
-		if len(observersForResource) == 0 {
-			c.logger.Info("No observers configured using observerResource, skipping this observerResource", "observerResource", observerResource.Name)
-			continue
-		}
-
-		hash, err := c.createOrUpdateObserverResourceConfigMap(ctx, observerResource, observersForResource)
-		if err != nil {
-			return OperationResult{}, err
-		}
-
-		if err := c.createOrUpdateObserverResourceDeployment(ctx, c.mdaiCR.Namespace, hash, observerResource); err != nil {
-			if errors.ReasonForError(err) == metav1.StatusReasonConflict {
-				c.logger.Info("re-queuing due to resource conflict")
-				return Requeue()
-			}
-			return OperationResult{}, err
-		}
-
-		if err := c.createOrUpdateObserverResourceService(ctx, c.mdaiCR.Namespace, observerResource); err != nil {
-			return OperationResult{}, err
-		}
+	hash, err := c.createOrUpdateObserverResourceConfigMap(ctx, observerResource, observers)
+	if err != nil {
+		return OperationResult{}, err
 	}
 
-	if err := c.cleanupOrphanedObserverResources(ctx, configObserverResources); err != nil {
+	if err := c.createOrUpdateObserverResourceDeployment(ctx, c.observerCR.Namespace, hash, observerResource); err != nil {
+		if errors.ReasonForError(err) == metav1.StatusReasonConflict {
+			c.logger.Info("re-queuing due to resource conflict")
+			return Requeue()
+		}
+		return OperationResult{}, err
+	}
+
+	if err := c.createOrUpdateObserverResourceService(ctx, c.observerCR.Namespace); err != nil {
 		return OperationResult{}, err
 	}
 
 	return ContinueProcessing()
 }
 
-func (c HubAdapter) getScopedObserverResourceName(observerResource v1.ObserverResource, postfix string) string {
+func (c ObserverAdapter) getScopedObserverResourceName(postfix string) string {
 	if postfix != "" {
-		return fmt.Sprintf("%s-%s-%s", c.mdaiCR.Name, observerResource.Name, postfix)
+		return fmt.Sprintf("%s-%s-%s", c.observerCR.Name, mdaiObserverResourceBaseName, postfix)
 	}
-	return fmt.Sprintf("%s-%s", c.mdaiCR.Name, observerResource.Name)
+	return fmt.Sprintf("%s-%s", c.observerCR.Name, mdaiObserverResourceBaseName)
 }
 
-func (c HubAdapter) createOrUpdateObserverResourceService(ctx context.Context, namespace string, observerResource v1.ObserverResource) error {
-	name := c.getScopedObserverResourceName(observerResource, "service")
-	appLabel := c.getScopedObserverResourceName(observerResource, "")
+func (c ObserverAdapter) createOrUpdateObserverResourceService(ctx context.Context, namespace string) error {
+	name := c.getScopedObserverResourceName("service")
+	appLabel := c.getScopedObserverResourceName("")
 
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -99,7 +72,7 @@ func (c HubAdapter) createOrUpdateObserverResourceService(ctx context.Context, n
 		},
 	}
 
-	if err := controllerutil.SetControllerReference(c.mdaiCR, service, c.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(c.observerCR, service, c.scheme); err != nil {
 		c.logger.Error(err, "Failed to set owner reference on Service", "service", name)
 		return err
 	}
@@ -107,10 +80,9 @@ func (c HubAdapter) createOrUpdateObserverResourceService(ctx context.Context, n
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, service, func() error {
 		if service.Labels == nil {
 			service.Labels = map[string]string{
-				"app":                 appLabel,
-				hubNameLabel:          c.mdaiCR.Name,
-				observerResourceLabel: observerResource.Name,
-				HubComponentLabel:     mdaiObserverHubComponent,
+				"app":             appLabel,
+				hubNameLabel:      c.observerCR.Name,
+				HubComponentLabel: mdaiObserverHubComponent,
 			}
 		}
 
@@ -144,9 +116,9 @@ func (c HubAdapter) createOrUpdateObserverResourceService(ctx context.Context, n
 	return nil
 }
 
-func (c HubAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Context, observerResource v1.ObserverResource, observers []v1.Observer) (string, error) {
-	namespace := c.mdaiCR.Namespace
-	configMapName := c.getScopedObserverResourceName(observerResource, "config")
+func (c ObserverAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Context, observerResource v1.ObserverResource, observers []v1.Observer) (string, error) {
+	namespace := c.observerCR.Namespace
+	configMapName := c.getScopedObserverResourceName("config")
 
 	collectorYAML, err := c.getObserverCollectorConfig(observers, observerResource)
 	if err != nil {
@@ -158,17 +130,16 @@ func (c HubAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Context,
 			Name:      configMapName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				"app":                 c.getScopedObserverResourceName(observerResource, ""),
-				HubComponentLabel:     mdaiObserverHubComponent,
-				hubNameLabel:          c.mdaiCR.Name,
-				observerResourceLabel: observerResource.Name,
+				"app":             c.getScopedObserverResourceName(""),
+				HubComponentLabel: mdaiObserverHubComponent,
+				hubNameLabel:      c.observerCR.Name,
 			},
 		},
 		Data: map[string]string{
 			"collector.yaml": collectorYAML,
 		},
 	}
-	if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
+	if err := controllerutil.SetControllerReference(c.observerCR, desiredConfigMap, c.scheme); err != nil {
 		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", configMapName)
 		return "", err
 	}
@@ -186,8 +157,8 @@ func (c HubAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Context,
 	return getConfigMapSHA(*desiredConfigMap)
 }
 
-func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context, namespace string, hash string, observerResource v1.ObserverResource) error {
-	name := c.getScopedObserverResourceName(observerResource, "")
+func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context, namespace string, hash string, observerResource v1.ObserverResource) error {
+	name := c.getScopedObserverResourceName("")
 
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -197,17 +168,16 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 	}
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, deployment, func() error {
-		if err := controllerutil.SetControllerReference(c.mdaiCR, deployment, c.scheme); err != nil {
+		if err := controllerutil.SetControllerReference(c.observerCR, deployment, c.scheme); err != nil {
 			c.logger.Error(err, "Failed to set owner reference on Deployment", "deployment", deployment.Name)
 			return err
 		}
 
 		if deployment.Labels == nil {
 			deployment.Labels = map[string]string{
-				"app":                 name,
-				HubComponentLabel:     mdaiObserverHubComponent,
-				hubNameLabel:          c.mdaiCR.Name,
-				observerResourceLabel: observerResource.Name,
+				"app":             name,
+				HubComponentLabel: mdaiObserverHubComponent,
+				hubNameLabel:      c.observerCR.Name,
 			}
 		}
 
@@ -290,7 +260,7 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: c.getScopedObserverResourceName(observerResource, "config"),
+							Name: c.getScopedObserverResourceName("config"),
 						},
 					},
 				},
@@ -307,7 +277,7 @@ func (c HubAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context
 	return nil
 }
 
-func (c HubAdapter) getObserverCollectorConfig(observers []v1.Observer, observerResource v1.ObserverResource) (string, error) {
+func (c ObserverAdapter) getObserverCollectorConfig(observers []v1.Observer, observerResource v1.ObserverResource) (string, error) {
 	var config map[string]any
 	if err := yaml.Unmarshal([]byte(baseObserverCollectorYAML), &config); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base collector config")
@@ -392,66 +362,6 @@ func (c HubAdapter) getObserverCollectorConfig(observers []v1.Observer, observer
 	}
 
 	return string(raw), nil
-}
-
-func (c HubAdapter) cleanupOrphanedObserverResources(ctx context.Context, resources []string) error {
-	labelSelector := &metav1.LabelSelector{
-		MatchLabels: map[string]string{
-			hubNameLabel:      c.mdaiCR.Name,
-			HubComponentLabel: mdaiObserverHubComponent,
-		},
-		MatchExpressions: []metav1.LabelSelectorRequirement{
-			{
-				Key:      observerResourceLabel,
-				Operator: metav1.LabelSelectorOpNotIn,
-				Values:   resources,
-			},
-		},
-	}
-	selector, err := metav1.LabelSelectorAsSelector(labelSelector)
-	if err != nil {
-		c.logger.Error(err, "could not build selector to delete orphaned hub observer resources")
-		return err
-	}
-
-	var orphanedResourceRemovalErrors error
-	serviceList := corev1.ServiceList{}
-	if err := c.client.List(ctx, &serviceList, client.MatchingLabelsSelector{Selector: selector}); err != nil {
-		orphanedResourceRemovalErrors = multierr.Append(orphanedResourceRemovalErrors, err)
-	}
-
-	deploymentList := appsv1.DeploymentList{}
-	if err := c.client.List(ctx, &deploymentList, client.MatchingLabelsSelector{Selector: selector}); err != nil {
-		orphanedResourceRemovalErrors = multierr.Append(orphanedResourceRemovalErrors, err)
-	}
-
-	configMapList := corev1.ConfigMapList{}
-	if err := c.client.List(ctx, &configMapList, client.MatchingLabelsSelector{Selector: selector}); err != nil {
-		orphanedResourceRemovalErrors = multierr.Append(orphanedResourceRemovalErrors, err)
-	}
-
-	for _, service := range serviceList.Items {
-		c.logger.Info("Deleting orphaned observer resource service", "service", service.Name)
-		if err := c.client.Delete(ctx, &service); err != nil {
-			orphanedResourceRemovalErrors = multierr.Append(orphanedResourceRemovalErrors, err)
-		}
-	}
-
-	for _, deployment := range deploymentList.Items {
-		c.logger.Info("Deleting orphaned observer resource deployment", "deployment", deployment.Name)
-		if err := c.client.Delete(ctx, &deployment); err != nil {
-			orphanedResourceRemovalErrors = multierr.Append(orphanedResourceRemovalErrors, err)
-		}
-	}
-
-	for _, configMap := range configMapList.Items {
-		c.logger.Info("Deleting orphaned observer resource configMap", "configMap", configMap.Name)
-		if err := c.client.Delete(ctx, &configMap); err != nil {
-			orphanedResourceRemovalErrors = multierr.Append(orphanedResourceRemovalErrors, err)
-		}
-	}
-
-	return orphanedResourceRemovalErrors
 }
 
 func getObserverFilterProcessorConfig(filter *v1.ObserverFilter) map[string]any {
