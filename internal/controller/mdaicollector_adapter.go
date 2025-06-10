@@ -274,9 +274,11 @@ func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *mdaiv1.LogsConf
 		routingTableMap := make(map[mdaiv1.MDAILogStream]RoutingConnectorTableEntry)
 		otherLogstreamPipelines := make([]string, 0)
 
-		otherLogstreamPipelines = c.augmentConfigForOtlpConfigAndGetOtherLogstreamPipelines(logsConfig, exporters, pipelines, routingTableMap, otherLogstreamPipelines)
+		otlpOtherLogstreamPipelines := c.augmentConfigForOtlpConfigAndGetOtherLogstreamPipelines(logsConfig, exporters, pipelines, routingTableMap)
+		otherLogstreamPipelines = append(otherLogstreamPipelines, otlpOtherLogstreamPipelines...)
 
-		otherLogstreamPipelines = c.augmentPipelinesForS3ConfigAndGetOtherLogstreamPipelines(logsConfig, awsAccessKeySecret, exporters, pipelines, routingTableMap, otherLogstreamPipelines)
+		s3OtherLogstreamPipelines := c.augmentPipelinesForS3ConfigAndGetOtherLogstreamPipelines(logsConfig, awsAccessKeySecret, exporters, pipelines, routingTableMap)
+		otherLogstreamPipelines = append(otherLogstreamPipelines, s3OtherLogstreamPipelines...)
 
 		logstreamRouter := connectors["routing/logstream"].(map[string]any)
 		newRoutingTable := make([]RoutingConnectorTableEntry, 0)
@@ -304,8 +306,8 @@ func (c MdaiCollectorAdapter) augmentPipelinesForS3ConfigAndGetOtherLogstreamPip
 	exporters map[string]any,
 	pipelines map[string]any,
 	routingTableMap map[mdaiv1.MDAILogStream]RoutingConnectorTableEntry,
-	defaultRoutingPipelines []string,
 ) []string {
+	defaultRoutingPipelines := make([]string, 0)
 	if awsAccessKeySecret != nil {
 		s3Config := logsConfig.S3
 		if s3Config != nil {
@@ -360,8 +362,8 @@ func (c MdaiCollectorAdapter) augmentConfigForOtlpConfigAndGetOtherLogstreamPipe
 	exporters map[string]any,
 	pipelines map[string]any,
 	routingTableMap map[mdaiv1.MDAILogStream]RoutingConnectorTableEntry,
-	defaultRoutingPipelines []string,
 ) []string {
+	defaultRoutingPipelines := make([]string, 0)
 	otlpConfig := logsConfig.Otlp
 	if otlpConfig != nil && otlpConfig.Endpoint != nil && *otlpConfig.Endpoint != "" {
 		c.logger.Info(fmt.Sprintf("Adding OTLP components to mdai-collector config for %s", c.collectorCR.Name))
