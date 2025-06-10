@@ -55,8 +55,8 @@ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/decisiveai/mdai-data-core v0.1.4-0.20250522133232-4aa0a4c57198 h1:eJPBIDrN1D8Lpkd6P0dTQ3NsGLrKLjym94gU8S9Nbs4=
-github.com/decisiveai/mdai-data-core v0.1.4-0.20250522133232-4aa0a4c57198/go.mod h1:p0SddsX91XArs/2w1fVcF8C/zNSoJpaNaYmnAfFiZDw=
+github.com/decisiveai/mdai-data-core v0.1.7 h1:e0rdqufNAzVAtoqEKw7yLyCaa2CfiG+Eh0ThIYMOTX8=
+github.com/decisiveai/mdai-data-core v0.1.7/go.mod h1:dTRzTEL2nUzgC+tw0UqJhHnhPqG9/QD3Ry6lUaiLF7g=
 github.com/decisiveai/opentelemetry-operator v0.113.0 h1:IWW4WmXR1QR2FAs2GIz8h3WPzh2hqoVQqsbKsVz/1nc=
 github.com/decisiveai/opentelemetry-operator v0.113.0/go.mod h1:fzTghQy29Mahmh/nqD2ORMHfJ57nqsvuxmxpdDfkQ90=
 github.com/dennwc/varint v1.0.0 h1:kGNFFSSw8ToIy3obO/kKr8U9GZYUAxQEVuix4zfDWzE=
@@ -297,10 +297,10 @@ github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO
 github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
 github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
-github.com/valkey-io/valkey-go v1.0.54 h1:pmFRGcMRJW8mHvsWLd/2MSgY6i3WNygpUl904KUaxao=
-github.com/valkey-io/valkey-go v1.0.54/go.mod h1:NE+C8cjb3+XvLazNhiorcLJGhJa9MBAkFNoAW/48/fk=
-github.com/valkey-io/valkey-go/mock v1.0.54 h1:qYZBT1F5g3i+537nCTgkHPM4S+BQeAmZG6DmLvdu990=
-github.com/valkey-io/valkey-go/mock v1.0.54/go.mod h1:6l1WZK0gFzCrzcrCqpqpNAh94EZeRWaD42EvGBg/ris=
+github.com/valkey-io/valkey-go v1.0.57 h1:rMpREZ7kvWwv9vHkB1WTpI9rX4dQHsvPHimSWenScvI=
+github.com/valkey-io/valkey-go v1.0.57/go.mod h1:sxpCChk8i3oTG+A/lUi9Lj8C/7WI+yhnQCvDJlPVKNM=
+github.com/valkey-io/valkey-go/mock v1.0.57 h1:ft06MuqCCKlob/R5dzUv4zNnNu+GaqElalApOFS5Fc4=
+github.com/valkey-io/valkey-go/mock v1.0.57/go.mod h1:VDiXrmHdRCz/UT4xzMkfQEc5iHa7naDpqsZ+lotmJE8=
 github.com/vultr/govultr/v2 v2.17.2 h1:gej/rwr91Puc/tgh+j33p/BLR16UrIPnSr+AIwYWZQs=
 github.com/vultr/govultr/v2 v2.17.2/go.mod h1:ZFOKGWmgjytfyjeyAdhQlSWwTjh2ig+X49cAp50dzXI=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=

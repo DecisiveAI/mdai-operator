@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-logr/zapr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
@@ -137,7 +138,8 @@ func main() {
 	zapOpts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	logger := ctrlzap.New(ctrlzap.UseFlagOptions(&zapOpts))
+	zapLogger := ctrlzap.NewRaw(ctrlzap.UseFlagOptions(&zapOpts))
+	logger := zapr.NewLogger(zapLogger)
 	if !otelSdkEnabled {
 		logger.Info("OTEL SDK has been disabled with " + otelSdkDisabledEnvVar + " environment variable")
 	}
@@ -263,8 +265,9 @@ func main() {
 	}
 
 	if err = (&controller.MdaiHubReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		ZapLogger: zapLogger,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MdaiHub")
 		gracefullyShutdownWithCode(1)

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/decisiveai/mdai-data-core/audit"
 
 	datacore "github.com/decisiveai/mdai-data-core/variables"
@@ -52,11 +54,13 @@ type HubAdapter struct {
 	valKeyClient            valkey.Client
 	valkeyAuditStreamExpiry time.Duration
 	releaseName             string
+	zapLogger               *zap.Logger
 }
 
 func NewHubAdapter(
 	cr *mdaiv1.MdaiHub,
 	log logr.Logger,
+	zapLogger *zap.Logger,
 	client client.Client,
 	recorder record.EventRecorder,
 	scheme *runtime.Scheme,
@@ -72,6 +76,7 @@ func NewHubAdapter(
 		valKeyClient:            valkeyClient,
 		valkeyAuditStreamExpiry: valkeyAuditStreamExpiry,
 		releaseName:             os.Getenv("RELEASE_NAME"),
+		zapLogger:               zapLogger,
 	}
 }
 
@@ -153,7 +158,7 @@ func (c HubAdapter) finalizeHub(ctx context.Context) (ObjectState, error) {
 
 	prefix := VariableKeyPrefix + c.mdaiCR.Name + "/"
 	c.logger.Info("Cleaning up old variables from Valkey with prefix", "prefix", prefix)
-	if err := datacore.NewValkeyAdapter(c.valKeyClient, c.logger).DeleteKeysWithPrefixUsingScan(ctx, map[string]struct{}{}, c.mdaiCR.Name); err != nil {
+	if err := datacore.NewValkeyAdapter(c.valKeyClient, c.zapLogger).DeleteKeysWithPrefixUsingScan(ctx, map[string]struct{}{}, c.mdaiCR.Name); err != nil {
 		return ObjectUnchanged, err
 	}
 
@@ -311,7 +316,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 
 	envMap := make(map[string]string)
 	manualEnvMap := make(map[string]string)
-	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.logger)
+	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.zapLogger)
 	valkeyKeysToKeep := map[string]struct{}{}
 	for _, variable := range variables {
 		c.logger.Info(fmt.Sprintf("Processing variable: %s", variable.Key))
@@ -418,7 +423,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 			namespaceToRestart[namespace] = struct{}{}
 		}
 	}
-	auditAdapter := audit.NewAuditAdapter(c.logger, c.valKeyClient, c.valkeyAuditStreamExpiry)
+	auditAdapter := audit.NewAuditAdapter(c.zapLogger, c.valKeyClient, c.valkeyAuditStreamExpiry)
 
 	for _, collector := range collectors {
 		if _, shouldRestart := namespaceToRestart[collector.Namespace]; shouldRestart {
