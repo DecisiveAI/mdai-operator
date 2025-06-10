@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
-	"k8s.io/utils/ptr"
 
 	v1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
