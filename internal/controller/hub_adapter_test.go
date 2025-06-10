@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/valkey-io/valkey-go"
+	"go.uber.org/zap"
 	"k8s.io/utils/ptr"
 
 	v1 "github.com/decisiveai/mdai-operator/api/v1"
@@ -95,7 +96,7 @@ func TestFinalizeHub_Success(t *testing.T) {
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key(VariableKeyPrefix+mdaiCR.Name+"/"+"key").Build()).
 		Return(mock.Result(mock.ValkeyInt64(1)))
 
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
 
 	state, err := adapter.finalizeHub(ctx)
 	if err != nil {
@@ -140,7 +141,7 @@ func TestEnsureFinalizerInitialized_AddsFinalizer(t *testing.T) {
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
 
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	_, err := adapter.ensureFinalizerInitialized(ctx)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
@@ -172,7 +173,7 @@ func TestEnsureFinalizerInitialized_AlreadyPresent(t *testing.T) {
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
 
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	_, err := adapter.ensureFinalizerInitialized(ctx)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
@@ -195,7 +196,7 @@ func TestEnsureStatusInitialized_SetsInitialStatus(t *testing.T) {
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
 
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	_, err := adapter.ensureStatusInitialized(ctx)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
@@ -251,7 +252,7 @@ func TestDeleteFinalizer(t *testing.T) {
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
 
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	if err := adapter.deleteFinalizer(ctx, mdaiCR, hubFinalizer); err != nil {
 		t.Fatalf("deleteFinalizer returned error: %v", err)
 	}
@@ -271,7 +272,7 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
 
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	envMap := map[string]string{"VAR": "value"}
 	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, envConfigMapNamePostfix, "default"); err != nil {
 		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
@@ -294,7 +295,7 @@ func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
 
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	envMap := map[string]string{"VAR": "string"}
 	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, manualEnvConfigMapNamePostfix, "default"); err != nil {
 		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
@@ -325,7 +326,7 @@ func TestBuildCollectorConfig(t *testing.T) {
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
 
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	config, err := adapter.getObserverCollectorConfig(observers, observerResource)
 	if err != nil {
 		t.Fatalf("getObserverCollectorConfig returned error: %v", err)
@@ -498,7 +499,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key(VariableKeyPrefix+mdaiCR.Name+"/"+"key").Build()).
 		Return(mock.Result(mock.ValkeyInt64(1)))
 
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
 
 	opResult, err := adapter.ensureVariableSynced(ctx)
 	if err != nil {
@@ -584,7 +585,7 @@ func TestEnsureManualAndComputedVariableSynced(t *testing.T) {
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key(VariableKeyPrefix+mdaiCR.Name+"/"+"key").Build()).
 		Return(mock.Result(mock.ValkeyInt64(1)))
 
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
 
 	opResult, err := adapter.ensureVariableSynced(ctx)
 	if err != nil {
@@ -670,7 +671,7 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 
 	opResult, err := adapter.ensurePrometheusAlertsSynchronized(ctx)
 	if err != nil {
@@ -729,7 +730,7 @@ func TestEnsureEvaluationsSynchronized_NoEvaluations(t *testing.T) {
 
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 
 	opResult, err := adapter.ensurePrometheusAlertsSynchronized(ctx)
 	if err != nil {
@@ -773,7 +774,7 @@ func TestEnsureHubDeletionProcessed_WithDeletion(t *testing.T) {
 	fakeValkey.EXPECT().Do(ctx, fakeValkey.B().Del().Key(VariableKeyPrefix+mdaiCR.Name+"/"+"key").Build()).
 		Return(mock.Result(mock.ValkeyInt64(1)))
 
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
 
 	opResult, err := adapter.ensureHubDeletionProcessed(ctx)
 	if err != nil {
@@ -833,7 +834,7 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 
 	// Call ensureObserversSynchronized.
 	opResult, err := adapter.ensureObserversSynchronized(ctx)
@@ -889,7 +890,7 @@ func TestEnsureStatusSetToDone(t *testing.T) {
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
 
-	adapter := NewHubAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, nil, time.Duration(30))
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 
 	opResult, err := adapter.ensureStatusSetToDone(ctx)
 	if err != nil {
