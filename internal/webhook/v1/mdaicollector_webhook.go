@@ -19,13 +19,14 @@ package v1
 import (
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/runtime"
 	"regexp"
+	"slices"
+
+	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	"slices"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
@@ -127,19 +128,37 @@ func (v *MdaiCollectorCustomValidator) Validate(mdaiCollector *mdaiv1.MdaiCollec
 	logsConfigPtr := spec.Logs
 	awsConfigPtr := spec.AWSConfig
 
-	if logsConfigPtr == nil {
+	if logsConfigPtr != nil {
+		var (
+			s3LogsConfigPtr *mdaiv1.S3LogsConfig
+			accessKeySecret *string
+		)
+		s3Warnings, err := v.validateS3LogsConfig(s3LogsConfigPtr, warnings, awsConfigPtr, accessKeySecret)
+		warnings = append(warnings, s3Warnings...)
+		if err != nil {
+			return warnings, err
+		}
+
+		otlpWarnings, err := v.validateOtlpLogsConfig(logsConfigPtr, warnings)
+		warnings = append(warnings, otlpWarnings...)
+		if err != nil {
+			return warnings, err
+		}
+	} else {
 		warnings = append(warnings, "logs configuration not present in MDAI Collector spec")
 	}
 
-	var (
-		s3LogsConfigPtr *mdaiv1.S3LogsConfig
-		s3LogsConfig    mdaiv1.S3LogsConfig
-		accessKeySecret *string
-	)
+	return warnings, nil
+}
 
-	s3LogsConfigPtr = logsConfigPtr.S3
+func (v *MdaiCollectorCustomValidator) validateS3LogsConfig(
+	s3LogsConfigPtr *mdaiv1.S3LogsConfig,
+	warnings admission.Warnings,
+	awsConfigPtr *mdaiv1.AWSConfig,
+	accessKeySecret *string,
+) (admission.Warnings, error) {
 	if s3LogsConfigPtr != nil {
-		s3LogsConfig = *s3LogsConfigPtr
+		s3LogsConfig := *s3LogsConfigPtr
 		if s3LogsConfig.S3Bucket == nil {
 			return warnings, fmt.Errorf("s3 logs configuration given but s3Bucket not specified; cannot write logs to s3")
 		}
@@ -171,7 +190,10 @@ func (v *MdaiCollectorCustomValidator) Validate(mdaiCollector *mdaiv1.MdaiCollec
 	if accessKeySecret == nil && s3LogsConfigPtr != nil {
 		return warnings, fmt.Errorf("got s3 logs configuration, but awsConfig.accessKeySecret not specified; cannot write logs to s3 without access secret")
 	}
+	return warnings, nil
+}
 
+func (v *MdaiCollectorCustomValidator) validateOtlpLogsConfig(logsConfigPtr *mdaiv1.LogsConfig, warnings admission.Warnings) (admission.Warnings, error) {
 	if logsConfigPtr.Otlp != nil {
 		otlpConfig := *logsConfigPtr.Otlp
 		if otlpConfig.Endpoint == nil || (otlpConfig.Endpoint != nil && *otlpConfig.Endpoint == "") {
@@ -190,6 +212,5 @@ func (v *MdaiCollectorCustomValidator) Validate(mdaiCollector *mdaiv1.MdaiCollec
 			return warnings, fmt.Errorf("OTLP logs configuration for other logs logstream has an invalid minSeverity: %s. Valid options are: %s", *otlpConfig.OtherLogs.MinSeverity, validSeverityLevels)
 		}
 	}
-
 	return warnings, nil
 }
