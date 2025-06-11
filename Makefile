@@ -1,5 +1,3 @@
-
-
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -19,9 +17,15 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 # Update this version to match new release tag and run helm targets
-VERSION = 0.1.20
+VERSION ?= 0.1.20
+
 # Image URL to use all building/pushing image targets
 IMG ?= public.ecr.aws/p3k6k6h3/mdai-operator:${VERSION}
+
+CHART_PATH := deployment
+
+IS_CI ?= $(if $(CI),1,0)
+vecho = $(if $(filter 0,$(IS_CI)),@echo $(1),@:)
 
 .PHONY: all
 all: build
@@ -177,9 +181,10 @@ KUBECTL ?= kubectl
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
-GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 HELMIFY ?= $(LOCALBIN)/helmify
 HELM_DOCS = $(LOCALBIN)/helm-docs
+YQ ?= $(LOCALBIN)/yq
 UNAME := $(shell uname -s)
 
 ## Tool Versions
@@ -192,6 +197,9 @@ ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -
 GOLANGCI_LINT_VERSION ?= v2.1.6
 HELMIFY_VERSION ?= v0.4.17
 HELM_DOCS_VERSION ?= v1.14.2
+YQ_VERSION ?= v4.45.4
+
+YQ_VERSIONED := $(YQ)-$(YQ_VERSION)
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -239,6 +247,17 @@ ifeq ($(PLUGIN_HELM_VALUES_SCHEMA_FOUND), 0)
 	helm plugin install https://github.com/losisin/helm-values-schema-json.git > /dev/null 2>&1
 endif
 
+.PHONY: yq
+yq:
+	@if [ ! -f "$(YQ_VERSIONED)" ]; then \
+		OS=$$(uname | tr '[:upper:]' '[:lower:]') && \
+		ARCH=$$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
+		URL=$$(printf "https://github.com/mikefarah/yq/releases/download/$(YQ_VERSION)/yq_%s_%s" $$OS $$ARCH) && \
+		curl -sSLf "$$URL" -o "$(YQ_VERSIONED)" && \
+		chmod +x "$(YQ_VERSIONED)"; \
+	fi
+	@ln -sf $(YQ_VERSIONED) $(YQ)
+
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary
 # $2 - package url which can be installed
@@ -254,14 +273,6 @@ mv $(1) $(1)-$(3) ;\
 } ;\
 ln -sf $(1)-$(3) $(1)
 endef
-
-.PHONY: helm-update
-helm-update: manifests kustomize helmify helm-docs  helm-values-schema-json-plugin
-	@pushd config/manager && $(KUSTOMIZE) edit set image controller=public.ecr.aws/p3k6k6h3/mdai-operator:${VERSION} && popd
-	@$(KUSTOMIZE) build config/default | $(HELMIFY) deployment
-	@m4 -D__VERSION__="${VERSION}" deployment/Chart.yaml.m4 > deployment/Chart.yaml
-	@$(HELM_DOCS) --skip-version-footer deployment -f values.yaml -l warning
-	@helm schema -input deployment/values.yaml -output deployment/values.schema.json > /dev/null 2>&1
 
 .PHONY: local-deploy
 local-deploy: manifests install
@@ -290,34 +301,50 @@ REPO_DIR := $(shell pwd)
 helm:
 	@echo "Usage: make helm-<command>"
 	@echo "Available commands:"
+	@echo "  helm-update    Update the Helm chart (versions, images, etc)"
 	@echo "  helm-package   Package the Helm chart"
 	@echo "  helm-publish   Publish the Helm chart"
 
+.PHONY: helm-update
+helm-update: manifests kustomize helmify helm-docs helm-values-schema-json-plugin yq
+	$(call vecho,"🐳 Updating image to $(IMG)...")
+	@pushd config/manager > /dev/null && $(KUSTOMIZE) edit set image controller=$(IMG) && popd > /dev/null
+	$(call vecho,"🛠️ Kustomizing and Helmifying...")
+	@$(KUSTOMIZE) build config/default | $(HELMIFY) $(CHART_PATH) > /dev/null 2>&1
+	$(call vecho,"📈 Updating Helm chart version to $(VERSION)...")
+	@$(YQ) -i '.version = "$(VERSION)"' $(CHART_PATH)/Chart.yaml
+	$(call vecho,"🧩 Updating Helm chart appVersion to $(VERSION)...")
+	@$(YQ) -i '.appVersion = "$(VERSION)"' $(CHART_PATH)/Chart.yaml
+	$(call vecho,"📝 Updating Helm chart docs...")
+	@$(HELM_DOCS) --skip-version-footer $(CHART_PATH) -f values.yaml -l warning
+	$(call vecho,"📐 Updating Helm chart JSON schema...")
+	@helm schema -input $(CHART_PATH)/values.yaml -output $(CHART_PATH)/values.schema.json > /dev/null 2>&1
+
 .PHONY: helm-package
 helm-package: helm-update
-	@echo "📦 Packaging Helm chart..."
+	$(call vecho, "📦 Packaging Helm chart...")
 	@helm package -u --version $(CHART_VERSION) --app-version $(CHART_VERSION) $(CHART_DIR) > /dev/null
 
 .PHONY: helm-publish
 helm-publish: helm-package
-	@echo "🚀 Cloning $(CHART_REPO)..."
+	$(call vecho,"🚀 Cloning $(CHART_REPO)...")
 	@rm -rf $(CLONE_DIR)
 	@git clone -q --branch $(BASE_BRANCH) $(CHART_REPO) $(CLONE_DIR)
 
-	@echo "🌿 Creating branch $(TARGET_BRANCH) from $(BASE_BRANCH)..."
+	$(call vecho,"🌿 Creating branch $(TARGET_BRANCH) from $(BASE_BRANCH)...")
 	@cd $(CLONE_DIR) && git checkout -q -b $(TARGET_BRANCH)
 
-	@echo "📤 Copying and indexing chart..."
+	$(call vecho,"📤 Copying and indexing chart...")
 	@cd $(CLONE_DIR) && \
 		helm repo index $(REPO_DIR) --merge index.yaml && \
 		mv $(REPO_DIR)/$(CHART_PACKAGE) $(CLONE_DIR)/ && \
 		mv $(REPO_DIR)/index.yaml $(CLONE_DIR)/
 
-	@echo "🚀 Committing changes..."
+	$(call vecho,"🚀 Committing changes...")
 	@cd $(CLONE_DIR) && \
 		git add $(CHART_PACKAGE) index.yaml && \
 		git commit -q -m "chore: publish $(CHART_PACKAGE)" && \
 		git push -q origin $(TARGET_BRANCH) && \
 		rm -rf $(CLONE_DIR)
 
-	@echo "✅ Chart published"
+	$(call vecho,"✅ Chart published")
