@@ -76,6 +76,8 @@ spec:
                           minSeverity:
                             type: string
                         type: object
+                    required:
+                    - endpoint
                     type: object
                   s3:
                     properties:
@@ -109,6 +111,9 @@ spec:
                         type: string
                       s3Region:
                         type: string
+                    required:
+                    - s3Bucket
+                    - s3Region
                     type: object
                 type: object
             type: object

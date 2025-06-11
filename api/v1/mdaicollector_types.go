@@ -62,8 +62,8 @@ type S3LogsConfig struct {
 	HubLogs *LogstreamConfig `json:"hubLogs,omitempty" yaml:"hubLogs,omitempty"`
 	// +optional
 	OtherLogs *LogstreamConfig `json:"otherLogs,omitempty" yaml:"otherLogs,omitempty"`
-	S3Region  *string          `json:"s3Region,omitempty" yaml:"s3Region,omitempty"`
-	S3Bucket  *string          `json:"s3Bucket,omitempty" yaml:"s3Bucket,omitempty"`
+	S3Region  string           `json:"s3Region" yaml:"s3Region"`
+	S3Bucket  string           `json:"s3Bucket" yaml:"s3Bucket"`
 }
 
 type OtlpLogsConfig struct {
@@ -75,7 +75,7 @@ type OtlpLogsConfig struct {
 	HubLogs *LogstreamConfig `json:"hubLogs,omitempty" yaml:"hubLogs,omitempty"`
 	// +optional
 	OtherLogs *LogstreamConfig `json:"otherLogs,omitempty" yaml:"otherLogs,omitempty"`
-	Endpoint  *string          `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
+	Endpoint  string           `json:"endpoint" yaml:"endpoint"`
 	// TODO: Support TLS. Need integration w/ cert manager
 	// TlsConfig *OtlpTlsConfig `json:"tls,omitempty" yaml:"tls,omitempty"`
 }

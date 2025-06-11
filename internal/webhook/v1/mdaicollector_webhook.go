@@ -129,11 +129,7 @@ func (v *MdaiCollectorCustomValidator) Validate(mdaiCollector *mdaiv1.MdaiCollec
 	awsConfigPtr := spec.AWSConfig
 
 	if logsConfigPtr != nil {
-		var (
-			s3LogsConfigPtr *mdaiv1.S3LogsConfig
-			accessKeySecret *string
-		)
-		s3Warnings, err := v.validateS3LogsConfig(s3LogsConfigPtr, warnings, awsConfigPtr, accessKeySecret)
+		s3Warnings, err := v.validateS3LogsConfig(logsConfigPtr.S3, warnings, awsConfigPtr)
 		warnings = append(warnings, s3Warnings...)
 		if err != nil {
 			return warnings, err
@@ -155,14 +151,16 @@ func (v *MdaiCollectorCustomValidator) validateS3LogsConfig(
 	s3LogsConfigPtr *mdaiv1.S3LogsConfig,
 	warnings admission.Warnings,
 	awsConfigPtr *mdaiv1.AWSConfig,
-	accessKeySecret *string,
 ) (admission.Warnings, error) {
 	if s3LogsConfigPtr != nil {
+		if awsConfigPtr == nil {
+			return warnings, fmt.Errorf("got s3 logs configuration, but AWSConfig not specified; cannot write logs to s3 without access secret")
+		}
 		s3LogsConfig := *s3LogsConfigPtr
-		if s3LogsConfig.S3Bucket == nil {
+		if s3LogsConfig.S3Bucket == "" {
 			return warnings, fmt.Errorf("s3 logs configuration given but s3Bucket not specified; cannot write logs to s3")
 		}
-		if s3LogsConfig.S3Region == nil {
+		if s3LogsConfig.S3Region == "" {
 			return warnings, fmt.Errorf("s3 logs configuration given but s3Region not specified; cannot write logs to s3")
 		}
 		if s3LogsConfig.AuditLogs != nil && s3LogsConfig.AuditLogs.Disabled {
@@ -179,15 +177,12 @@ func (v *MdaiCollectorCustomValidator) validateS3LogsConfig(
 		}
 	}
 
-	if awsConfigPtr == nil && s3LogsConfigPtr != nil {
-		return warnings, fmt.Errorf("got s3 logs configuration, but AWSConfig not specified; cannot write logs to s3 without access secret")
-	}
-
+	var accessKeySecretPtr *string
 	if awsConfigPtr != nil {
-		accessKeySecret = awsConfigPtr.AWSAccessKeySecret
+		accessKeySecretPtr = awsConfigPtr.AWSAccessKeySecret
 	}
 
-	if accessKeySecret == nil && s3LogsConfigPtr != nil {
+	if accessKeySecretPtr == nil && s3LogsConfigPtr != nil {
 		return warnings, fmt.Errorf("got s3 logs configuration, but awsConfig.accessKeySecret not specified; cannot write logs to s3 without access secret")
 	}
 	return warnings, nil
@@ -196,8 +191,8 @@ func (v *MdaiCollectorCustomValidator) validateS3LogsConfig(
 func (v *MdaiCollectorCustomValidator) validateOtlpLogsConfig(logsConfigPtr *mdaiv1.LogsConfig, warnings admission.Warnings) (admission.Warnings, error) {
 	if logsConfigPtr.Otlp != nil {
 		otlpConfig := *logsConfigPtr.Otlp
-		if otlpConfig.Endpoint == nil || (otlpConfig.Endpoint != nil && *otlpConfig.Endpoint == "") {
-			warnings = append(warnings, "Otlp config block is present but does not have an endpoint defined. Logs will not be forwarded via OTLP!")
+		if otlpConfig.Endpoint == "" {
+			return warnings, fmt.Errorf("OTLP logs configuration present but endpoint field is empty. Cannot send logs over OTLP")
 		}
 		if otlpConfig.AuditLogs != nil && otlpConfig.AuditLogs.Disabled {
 			warnings = append(warnings, "OTLP audit logs disabled, hub audit events will not be recorded to OTLP!")

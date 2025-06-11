@@ -41,18 +41,18 @@ func TestGetS3ExporterForLogstream(t *testing.T) {
 		logstream              v1.MDAILogStream
 		s3LogsConfig           v1.S3LogsConfig
 		expectedExporterName   string
-		expectedExporterConfig S3ExporterConfig
+		expectedExporterConfig s3ExporterConfig
 	}{
 		{
 			hubName:   "test-hub",
 			logstream: v1.CollectorLogstream,
 			s3LogsConfig: v1.S3LogsConfig{
-				S3Region: ptr.To("uesc-marathon-7"),
-				S3Bucket: ptr.To("whoa-bucket"),
+				S3Region: "uesc-marathon-7",
+				S3Bucket: "whoa-bucket",
 			},
 			expectedExporterName: "awss3/collector",
-			expectedExporterConfig: S3ExporterConfig{
-				S3Uploader: S3UploaderConfig{
+			expectedExporterConfig: s3ExporterConfig{
+				S3Uploader: s3UploaderConfig{
 					Region:            "uesc-marathon-7",
 					S3Bucket:          "whoa-bucket",
 					S3Prefix:          "test-hub-collector-logs",
@@ -65,12 +65,12 @@ func TestGetS3ExporterForLogstream(t *testing.T) {
 			hubName:   "inf",
 			logstream: v1.HubLogstream,
 			s3LogsConfig: v1.S3LogsConfig{
-				S3Region: ptr.To("aeiou-meh-99"),
-				S3Bucket: ptr.To("qwerty"),
+				S3Region: "aeiou-meh-99",
+				S3Bucket: "qwerty",
 			},
 			expectedExporterName: "awss3/hub",
-			expectedExporterConfig: S3ExporterConfig{
-				S3Uploader: S3UploaderConfig{
+			expectedExporterConfig: s3ExporterConfig{
+				S3Uploader: s3UploaderConfig{
 					Region:            "aeiou-meh-99",
 					S3Bucket:          "qwerty",
 					S3Prefix:          "inf-hub-logs",
@@ -83,12 +83,12 @@ func TestGetS3ExporterForLogstream(t *testing.T) {
 			hubName:   "whoa",
 			logstream: v1.AuditLogstream,
 			s3LogsConfig: v1.S3LogsConfig{
-				S3Region: ptr.To("splat"),
-				S3Bucket: ptr.To("hey"),
+				S3Region: "splat",
+				S3Bucket: "hey",
 			},
 			expectedExporterName: "awss3/audit",
-			expectedExporterConfig: S3ExporterConfig{
-				S3Uploader: S3UploaderConfig{
+			expectedExporterConfig: s3ExporterConfig{
+				S3Uploader: s3UploaderConfig{
 					Region:            "splat",
 					S3Bucket:          "hey",
 					S3Prefix:          "whoa-audit-logs",
@@ -101,12 +101,12 @@ func TestGetS3ExporterForLogstream(t *testing.T) {
 			hubName:   "heh",
 			logstream: v1.OtherLogstream,
 			s3LogsConfig: v1.S3LogsConfig{
-				S3Region: ptr.To("okay"),
-				S3Bucket: ptr.To("ytho"),
+				S3Region: "okay",
+				S3Bucket: "ytho",
 			},
 			expectedExporterName: "awss3/other",
-			expectedExporterConfig: S3ExporterConfig{
-				S3Uploader: S3UploaderConfig{
+			expectedExporterConfig: s3ExporterConfig{
+				S3Uploader: s3UploaderConfig{
 					Region:            "okay",
 					S3Bucket:          "ytho",
 					S3Prefix:          "heh-other-logs",
