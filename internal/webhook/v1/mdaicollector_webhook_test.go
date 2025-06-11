@@ -42,8 +42,8 @@ func createTestMdaiCollector() *mdaiv1.MdaiCollector {
 			},
 			Logs: &mdaiv1.LogsConfig{
 				S3: &mdaiv1.S3LogsConfig{
-					S3Region: ptr.To("asdf"),
-					S3Bucket: ptr.To("qwer"),
+					S3Region: "asdf",
+					S3Bucket: "qwer",
 				},
 			},
 		},
