@@ -83,6 +83,11 @@ spec:
             value: "false"
           - name: USE_CONSOLE_LOG_ENCODER
             value: "false"
+          - name: RELEASE_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: mdai-operator-release-info
+                key: RELEASE_NAME
         name: manager
         ports: []
         securityContext:
