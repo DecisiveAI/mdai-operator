@@ -127,6 +127,7 @@ jobs:
         with:
           version: v0.29.0
           wait: 60s
+          cluster_name: kind
 
       - name: Running Test e2e
         run: |
