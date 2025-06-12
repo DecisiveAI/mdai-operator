@@ -563,7 +563,7 @@ func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[s
 	if setControllerRef {
 		if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
 			c.logger.Error(err, "Failed to set owner reference on "+envConfigMapName+" ConfigMap", "configmap", envConfigMapName)
-			return "", err
+			return controllerutil.OperationResultNone, err
 		}
 	}
 
