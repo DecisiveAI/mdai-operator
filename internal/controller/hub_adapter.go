@@ -397,21 +397,16 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	}
 
 	// manual variables: we need  one ConfigMap for hub in hub's namespace
-	switch len(manualEnvMap) {
-	case 0:
-		{
-			c.logger.Info("No manual variables defined in the MDAI CR", "name", c.mdaiCR.Name)
-			if err := c.deleteEnvConfigMap(ctx, manualEnvConfigMapNamePostfix, c.mdaiCR.Namespace); err != nil {
-				c.logger.Error(err, "Failed to delete manual variables ConfigMap", "name", c.mdaiCR.Name)
-				return OperationResult{}, err
-			}
+	if len(manualEnvMap) == 0 {
+		c.logger.Info("No manual variables defined in the MDAI CR", "name", c.mdaiCR.Name)
+		if err := c.deleteEnvConfigMap(ctx, manualEnvConfigMapNamePostfix, c.mdaiCR.Namespace); err != nil {
+			c.logger.Error(err, "Failed to delete manual variables ConfigMap", "name", c.mdaiCR.Name)
+			return OperationResult{}, err
 		}
-	default:
-		{
-			_, err := c.createOrUpdateEnvConfigMap(ctx, manualEnvMap, manualEnvConfigMapNamePostfix, c.mdaiCR.Namespace, true)
-			if err != nil {
-				return OperationResult{}, err
-			}
+	} else {
+		_, err := c.createOrUpdateEnvConfigMap(ctx, manualEnvMap, manualEnvConfigMapNamePostfix, c.mdaiCR.Namespace, true)
+		if err != nil {
+			return OperationResult{}, err
 		}
 	}
 
