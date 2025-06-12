@@ -95,15 +95,43 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
+
+      - name: Check module tidiness
+        run: make tidy-check
 
       - name: Running Tests
-        run: |
-          go mod vendor
-          go mod tidy
-          make test-coverage
+        run: make test-coverage
 
       - name: Archive code coverage results
         uses: actions/upload-artifact@v4
         with:
           name: code-coverage
           path: coverage.out
+
+  test-e2e:
+    name: E2E tests on Ubuntu
+    needs: [ lint, test ]
+    if: needs.lint.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up kind
+        uses: helm/kind-action@v1.12.0
+        with:
+          version: v0.29.0
+          wait: 60s
+          cluster_name: kind
+
+      - name: Running Test e2e
+        run: |
+          go mod vendor
+          go mod tidy
+          make test-e2e
