@@ -98,43 +98,6 @@ spec:
               join:
                 delimiter: ","
       dataType: set
-  observers:
-    - name: observer1
-      resourceRef: observer-collector
-      labelResourceAttributes:
-        - service.name
-      countMetricName: mdai_observer_one_count_total
-      bytesMetricName: mdai_observer_one_bytes_total
-    - name: observer2
-      resourceRef: observer-collector
-      labelResourceAttributes:
-      - team
-      - log_level
-      countMetricName: mdai_observer_two_count_total
-    - name: observer3
-      resourceRef: observer-collector
-      labelResourceAttributes:
-      - region
-      - log_level
-      bytesMetricName: mdai_observer_three_count_total
-    - name: observer4
-      resourceRef: observer-collector
-      labelResourceAttributes:
-      - service.name
-      - team
-      - region
-      countMetricName: mdai_observer_four_count_total
-      bytesMetricName: mdai_observer_four_bytes_total
-      filter:
-        error_mode: ignore
-        logs:
-          log_record:
-            - 'attributes["log_level"] == "INFO"'
-
-  observerResources:
-    - name: observer-collector
-      image: public.ecr.aws/decisiveai/observer-collector:0.1
-      replicas: 2
 
   prometheusAlert:
     - name: logBytesOutTooHighBySvc

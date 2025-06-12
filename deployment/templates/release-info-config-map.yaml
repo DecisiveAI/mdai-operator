@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mdai-operator-release-info
+  namespace: {{ .Release.Namespace }}
+data:
+  RELEASE_NAME: {{ .Release.Name | quote }}
+  RELEASE_NAMESPACE: {{ .Release.Namespace | quote }}
+  CHART_NAME: {{ .Chart.Name | quote }}
+  CHART_VERSION: {{ .Chart.Version | quote }}
+  APP_VERSION: {{ .Chart.AppVersion | quote }}
+  HELM_REVISION: {{ .Release.Revision | quote }}
+  DEPLOY_TIMESTAMP: {{ now | date "2006-01-02T15:04:05Z07:00" | quote }}

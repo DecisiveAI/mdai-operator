@@ -1,0 +1,25 @@
+apiVersion: hub.mydecisive.ai/v1
+kind: MdaiObserver
+metadata:
+  labels:
+    app.kubernetes.io/name: mdai-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: second
+  namespace: mdai
+spec:
+  observers:
+    - name: service-bytes-watcher
+      labelResourceAttributes:
+      - service.name
+      - team
+      - region
+      countMetricName: mdai_watcher_four_count_total
+      bytesMetricName: mdai_watcher_four_bytes_total
+      filter:
+        error_mode: ignore
+        logs:
+          log_record:
+            - 'attributes["log_level"] == "INFO"'
+
+  observerResource:
+    image: public.ecr.aws/decisiveai/observer-collector:0.1

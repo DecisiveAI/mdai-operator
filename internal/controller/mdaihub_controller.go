@@ -116,7 +116,6 @@ func (r *MdaiHubReconciler) ReconcileHandler(ctx context.Context, adapter HubAda
 		adapter.ensurePrometheusAlertsSynchronized,
 		adapter.ensureAutomationsSynchronized,
 		adapter.ensureVariableSynced,
-		adapter.ensureObserversSynchronized,
 		adapter.ensureStatusSetToDone,
 	}
 	for _, operation := range operations {

@@ -17,7 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -26,31 +25,40 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/yaml"
 )
 
-type MDAILogStream string
-
-type S3ExporterConfig struct {
-	S3Uploader S3UploaderConfig `mapstructure:"s3uploader"`
+type otlpTlsConfig struct {
+	Insecure bool `yaml:"insecure" json:"insecure"`
 }
 
-type S3UploaderConfig struct {
-	Region            string `yaml:"region"`
-	S3Bucket          string `yaml:"s3_bucket"`
-	S3Prefix          string `yaml:"s3_prefix"`
-	S3PartitionFormat string `yaml:"s3_partition_format"`
-	FilePrefix        string `yaml:"file_prefix"`
-	DisableSSL        bool   `yaml:"disable_ssl"`
+type otlpExporterConfig struct {
+	Endpoint  string        `yaml:"endpoint" json:"endpoint"`
+	TlsConfig otlpTlsConfig `yaml:"tls" json:"tls"`
+}
+
+type s3ExporterConfig struct {
+	S3Uploader s3UploaderConfig `yaml:"s3uploader" json:"s3uploader"`
+}
+
+type s3UploaderConfig struct {
+	Region            string `yaml:"region" json:"region"`
+	S3Bucket          string `yaml:"s3_bucket" json:"s3_bucket"`
+	S3Prefix          string `yaml:"s3_prefix" json:"s3_prefix"`
+	S3PartitionFormat string `yaml:"s3_partition_format" json:"s3_partition_format"`
+	FilePrefix        string `yaml:"file_prefix" json:"file_prefix"`
+	DisableSSL        bool   `yaml:"disable_ssl" json:"disable_ssl"`
+}
+
+type routingConnectorTableEntry struct {
+	Context   string   `yaml:"context" json:"context"`
+	Condition string   `yaml:"condition" json:"condition"`
+	Pipelines []string `yaml:"pipelines" json:"pipelines"`
 }
 
 const (
 	MdaiCollectorHubComponent     = "mdai-collector"
 	mdaiCollectorResourceNameBase = "mdai-collector"
-
-	AuditLogstream     MDAILogStream = "audit"
-	CollectorLogstream MDAILogStream = "collector"
-	HubLogstream       MDAILogStream = "hub"
-	OtherLogstream     MDAILogStream = "other"
 
 	S3PartitionFormat = "%Y/%m/%d/%H"
 )
@@ -58,7 +66,22 @@ const (
 var (
 	//go:embed config/mdai_collector_base_config.yaml
 	baseMdaiCollectorYAML string
-	logstreams            = []MDAILogStream{AuditLogstream, CollectorLogstream, HubLogstream, OtherLogstream}
+	severityFilterMap     = map[mdaiv1.SeverityLevel]string{
+		mdaiv1.DebugSeverityLevel: "filter/severity_min_debug",
+		mdaiv1.InfoSeverityLevel:  "filter/severity_min_info",
+		mdaiv1.WarnSeverityLevel:  "filter/severity_min_warn",
+		mdaiv1.ErrorSeverityLevel: "filter/severity_min_error",
+	}
+	routingTableContextMap = map[mdaiv1.MDAILogStream]string{
+		mdaiv1.CollectorLogstream: "resource",
+		mdaiv1.HubLogstream:       "resource",
+		mdaiv1.AuditLogstream:     "log",
+	}
+	routingTableConditionMap = map[mdaiv1.MDAILogStream]string{
+		mdaiv1.CollectorLogstream: "attributes[\"mdai-logstream\"] == \"collector\"",
+		mdaiv1.HubLogstream:       "attributes[\"mdai-logstream\"] == \"hub\"",
+		mdaiv1.AuditLogstream:     "attributes[\"mdai-logstream\"] == \"audit\"",
+	}
 )
 
 type MdaiCollectorAdapter struct {
@@ -87,7 +110,7 @@ func NewMdaiCollectorAdapter(
 
 func (c MdaiCollectorAdapter) ensureMdaiCollectorFinalizerInitialized(ctx context.Context) (OperationResult, error) {
 	if !controllerutil.ContainsFinalizer(c.collectorCR, hubFinalizer) {
-		c.logger.Info("Adding Finalizer for Engine")
+		c.logger.Info("Adding Finalizer for MdaiHub")
 		if ok := controllerutil.AddFinalizer(c.collectorCR, hubFinalizer); !ok {
 			c.logger.Error(nil, "Failed to add finalizer into the custom resource")
 			return RequeueWithError(errors.New("failed to add finalizer " + hubFinalizer))
@@ -129,7 +152,7 @@ func (c MdaiCollectorAdapter) finalizeMdaiCollector(ctx context.Context) (Object
 			c.logger.Info("Cluster has been deleted, no need to finalize")
 			return ObjectModified, nil
 		}
-		c.logger.Error(err, "Failed to re-fetch Engine")
+		c.logger.Error(err, "Failed to re-fetch MdaiHub")
 		return ObjectUnchanged, err
 	}
 
@@ -243,41 +266,217 @@ func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *mdaiv1.LogsConf
 		return "", err
 	}
 
-	if logsConfig != nil && awsAccessKeySecret != nil {
-		s3Config := logsConfig.S3
-		if s3Config != nil {
-			exporters := mdaiCollectorConfig["exporters"].(map[string]any)
-			serviceBlock := mdaiCollectorConfig["service"].(map[string]any)
-			pipelines := serviceBlock["pipelines"].(map[string]any)
-			for _, logstream := range logstreams {
-				s3ExporterName, s3Exporter := getS3ExporterForLogstream(c.collectorCR.Name, logstream, *s3Config)
-				exporters[s3ExporterName] = s3Exporter
-				pipelineName := fmt.Sprintf("logs/%s", logstream)
-				pipeline := pipelines[pipelineName].(map[string]any)
-				pipelines[pipelineName] = getPipelineWithS3Exporter(pipeline, s3ExporterName)
-			}
+	if logsConfig != nil {
+		exporters := mdaiCollectorConfig["exporters"].(map[string]any)
+		serviceBlock := mdaiCollectorConfig["service"].(map[string]any)
+		pipelines := serviceBlock["pipelines"].(map[string]any)
+		connectors := mdaiCollectorConfig["connectors"].(map[string]any)
+		routingTableMap := make(map[mdaiv1.MDAILogStream]routingConnectorTableEntry)
+		otherLogstreamPipelines := make([]string, 0)
+
+		otlpOtherLogstreamPipelines := c.augmentConfigForOtlpConfigAndGetOtherLogstreamPipelines(logsConfig, exporters, pipelines, routingTableMap)
+		otherLogstreamPipelines = append(otherLogstreamPipelines, otlpOtherLogstreamPipelines...)
+
+		s3OtherLogstreamPipelines := c.augmentPipelinesForS3ConfigAndGetOtherLogstreamPipelines(logsConfig, awsAccessKeySecret, exporters, pipelines, routingTableMap)
+		otherLogstreamPipelines = append(otherLogstreamPipelines, s3OtherLogstreamPipelines...)
+
+		logstreamRouter := connectors["routing/logstream"].(map[string]any)
+		newRoutingTable := make([]routingConnectorTableEntry, 0, len(routingTableMap))
+		for _, entry := range routingTableMap {
+			newRoutingTable = append(newRoutingTable, entry)
 		}
-	} else {
-		c.logger.Info("Skipped adding s3 components to mdai-collector due to missing s3 configuration", "logsConfig", logsConfig, "awsAccessKeySecret", awsAccessKeySecret)
+		logstreamRouter["table"] = newRoutingTable
+		if len(otherLogstreamPipelines) > 0 {
+			logstreamRouter["default_pipelines"] = otherLogstreamPipelines
+		}
 	}
 
 	collectorConfigBytes, err := yaml.Marshal(mdaiCollectorConfig)
 	if err != nil {
 		c.logger.Error(err, "Failed to marshal mdai-collector config", "mdaiCollectorConfig", mdaiCollectorConfig)
+		return "", err
 	}
 	collectorConfig := string(collectorConfigBytes)
 
 	return collectorConfig, nil
 }
 
-func getS3ExporterForLogstream(hubName string, logstream MDAILogStream, s3LogsConfig mdaiv1.S3LogsConfig) (string, S3ExporterConfig) {
+func (c MdaiCollectorAdapter) augmentPipelinesForS3ConfigAndGetOtherLogstreamPipelines(
+	logsConfig *mdaiv1.LogsConfig,
+	awsAccessKeySecret *string,
+	exporters map[string]any,
+	pipelines map[string]any,
+	routingTableMap map[mdaiv1.MDAILogStream]routingConnectorTableEntry,
+) []string {
+	defaultRoutingPipelines := make([]string, 0)
+	if awsAccessKeySecret != nil {
+		s3Config := logsConfig.S3
+		if s3Config != nil {
+			c.logger.Info(fmt.Sprintf("Adding S3 components to mdai-collector config for %s", c.collectorCR.Name))
+			auditLogstreamConfig := s3Config.AuditLogs
+			if auditLogstreamConfig == nil || !auditLogstreamConfig.Disabled {
+				logstream := mdaiv1.AuditLogstream
+				c.addS3ComponentsAndPipeline(logstream, s3Config, exporters, nil, pipelines, routingTableMap)
+			}
+
+			collectorLogstreamConfig := s3Config.CollectorLogs
+			if collectorLogstreamConfig == nil || !collectorLogstreamConfig.Disabled {
+				logstream := mdaiv1.CollectorLogstream
+				s3ExporterName, s3Exporter := getS3ExporterForLogstream(c.collectorCR.Name, logstream, *s3Config)
+				exporters[s3ExporterName] = s3Exporter
+				var minSeverity *mdaiv1.SeverityLevel
+				if collectorLogstreamConfig != nil && collectorLogstreamConfig.MinSeverity != nil {
+					minSeverity = collectorLogstreamConfig.MinSeverity
+				}
+				c.addS3ComponentsAndPipeline(logstream, s3Config, exporters, minSeverity, pipelines, routingTableMap)
+			}
+
+			hubLogstreamConfig := s3Config.HubLogs
+			if hubLogstreamConfig == nil || !hubLogstreamConfig.Disabled {
+				logstream := mdaiv1.HubLogstream
+				var minSeverity *mdaiv1.SeverityLevel
+				if hubLogstreamConfig != nil && hubLogstreamConfig.MinSeverity != nil {
+					minSeverity = hubLogstreamConfig.MinSeverity
+				}
+				c.addS3ComponentsAndPipeline(logstream, s3Config, exporters, minSeverity, pipelines, routingTableMap)
+			}
+
+			otherLogstreamConfig := s3Config.OtherLogs
+			if otherLogstreamConfig == nil || !otherLogstreamConfig.Disabled {
+				logstream := mdaiv1.OtherLogstream
+				var minSeverity *mdaiv1.SeverityLevel
+				if otherLogstreamConfig != nil && otherLogstreamConfig.MinSeverity != nil {
+					minSeverity = otherLogstreamConfig.MinSeverity
+				}
+				pipelineName := c.addS3ComponentsAndPipeline(logstream, s3Config, exporters, minSeverity, pipelines, routingTableMap)
+				defaultRoutingPipelines = append(defaultRoutingPipelines, pipelineName)
+			}
+		}
+	} else {
+		c.logger.Info("Skipped adding s3 components to mdai-collector due to missing s3 configuration", "logsConfig", logsConfig, "awsAccessKeySecret", awsAccessKeySecret)
+	}
+	return defaultRoutingPipelines
+}
+
+func (c MdaiCollectorAdapter) augmentConfigForOtlpConfigAndGetOtherLogstreamPipelines(
+	logsConfig *mdaiv1.LogsConfig,
+	exporters map[string]any,
+	pipelines map[string]any,
+	routingTableMap map[mdaiv1.MDAILogStream]routingConnectorTableEntry,
+) []string {
+	defaultRoutingPipelines := make([]string, 0)
+	otlpConfig := logsConfig.Otlp
+	if otlpConfig != nil && otlpConfig.Endpoint != "" {
+		c.logger.Info(fmt.Sprintf("Adding OTLP components to mdai-collector config for %s", c.collectorCR.Name))
+		otlpExporterName, otlpExporterConfig := getOtlpExporterForLogstream(*otlpConfig)
+		exporters[otlpExporterName] = otlpExporterConfig
+
+		auditLogstreamConfig := otlpConfig.AuditLogs
+		if auditLogstreamConfig == nil || !auditLogstreamConfig.Disabled {
+			logstream := mdaiv1.AuditLogstream
+			pipelineName := fmt.Sprintf("logs/otlp_%s", logstream)
+			newPipeline := c.getPipelineWithExporterAndSeverityFilter("routing/logstream", otlpExporterName, nil)
+			pipelines[pipelineName] = newPipeline
+			c.addOrCreateRoutingTableEntryWithPipeline(logstream, &routingTableMap, pipelineName)
+		}
+
+		collectorLogstreamConfig := otlpConfig.CollectorLogs
+		if collectorLogstreamConfig == nil || !collectorLogstreamConfig.Disabled {
+			logstream := mdaiv1.CollectorLogstream
+			c.addPipelineForLogstream(collectorLogstreamConfig, logstream, otlpExporterName, pipelines, &routingTableMap)
+		}
+
+		hubLogstreamConfig := otlpConfig.HubLogs
+		if hubLogstreamConfig == nil || !hubLogstreamConfig.Disabled {
+			logstream := mdaiv1.HubLogstream
+			c.addPipelineForLogstream(hubLogstreamConfig, logstream, otlpExporterName, pipelines, &routingTableMap)
+		}
+
+		otherLogstreamConfig := otlpConfig.OtherLogs
+		if otherLogstreamConfig == nil || !otherLogstreamConfig.Disabled {
+			logstream := mdaiv1.OtherLogstream
+			pipelineName := c.addPipelineForLogstream(otherLogstreamConfig, logstream, otlpExporterName, pipelines, &routingTableMap)
+			defaultRoutingPipelines = append(defaultRoutingPipelines, pipelineName)
+		}
+	}
+	return defaultRoutingPipelines
+}
+
+func (c MdaiCollectorAdapter) addS3ComponentsAndPipeline(
+	logstream mdaiv1.MDAILogStream,
+	s3Config *mdaiv1.S3LogsConfig,
+	exporters map[string]any,
+	minSeverity *mdaiv1.SeverityLevel,
+	pipelines map[string]any,
+	routingTableMap map[mdaiv1.MDAILogStream]routingConnectorTableEntry,
+) string {
+	s3ExporterName, s3Exporter := getS3ExporterForLogstream(c.collectorCR.Name, logstream, *s3Config)
+	exporters[s3ExporterName] = s3Exporter
+	pipelineName := fmt.Sprintf("logs/s3_%s", logstream)
+	newPipeline := c.getPipelineWithExporterAndSeverityFilter("routing/logstream", s3ExporterName, minSeverity)
+	pipelines[pipelineName] = newPipeline
+	c.addOrCreateRoutingTableEntryWithPipeline(logstream, &routingTableMap, pipelineName)
+	return pipelineName
+}
+
+func (c MdaiCollectorAdapter) addPipelineForLogstream(
+	logstreamConfig *mdaiv1.LogstreamConfig,
+	logstream mdaiv1.MDAILogStream,
+	otlpExporterName string,
+	pipelines map[string]any,
+	routingTableMap *map[mdaiv1.MDAILogStream]routingConnectorTableEntry,
+) string {
+	var minSeverity *mdaiv1.SeverityLevel
+	if logstreamConfig != nil && logstreamConfig.MinSeverity != nil {
+		minSeverity = logstreamConfig.MinSeverity
+	}
+	pipelineName := fmt.Sprintf("logs/otlp_%s", logstream)
+	newPipeline := c.getPipelineWithExporterAndSeverityFilter("routing/logstream", otlpExporterName, minSeverity)
+	pipelines[pipelineName] = newPipeline
+	c.addOrCreateRoutingTableEntryWithPipeline(logstream, routingTableMap, pipelineName)
+	return pipelineName
+}
+
+func (c MdaiCollectorAdapter) addOrCreateRoutingTableEntryWithPipeline(
+	logstream mdaiv1.MDAILogStream,
+	routingTableMap *map[mdaiv1.MDAILogStream]routingConnectorTableEntry,
+	pipelineName string,
+) {
+	if logstream != mdaiv1.OtherLogstream {
+		if _, ok := (*routingTableMap)[logstream]; !ok {
+			(*routingTableMap)[logstream] = routingConnectorTableEntry{
+				Context:   routingTableContextMap[logstream],
+				Condition: routingTableConditionMap[logstream],
+				Pipelines: []string{
+					pipelineName,
+				},
+			}
+		} else {
+			routingEntry := (*routingTableMap)[logstream]
+			routingEntry.Pipelines = append((*routingTableMap)[logstream].Pipelines, pipelineName)
+			(*routingTableMap)[logstream] = routingEntry
+		}
+	}
+}
+
+func getOtlpExporterForLogstream(otlpLogsConfig mdaiv1.OtlpLogsConfig) (string, otlpExporterConfig) {
+	exporter := otlpExporterConfig{
+		Endpoint: otlpLogsConfig.Endpoint,
+		TlsConfig: otlpTlsConfig{
+			Insecure: true,
+		},
+	}
+	return "otlp", exporter
+}
+
+func getS3ExporterForLogstream(hubName string, logstream mdaiv1.MDAILogStream, s3LogsConfig mdaiv1.S3LogsConfig) (string, s3ExporterConfig) {
 	s3Prefix := fmt.Sprintf("%s-%s-logs", hubName, logstream)
 	exporterKey := fmt.Sprintf("awss3/%s", logstream)
 	filePrefix := fmt.Sprintf("%s-", logstream)
-	exporter := S3ExporterConfig{
-		S3Uploader: S3UploaderConfig{
-			Region:            *s3LogsConfig.S3Region,
-			S3Bucket:          *s3LogsConfig.S3Bucket,
+	exporter := s3ExporterConfig{
+		S3Uploader: s3UploaderConfig{
+			Region:            s3LogsConfig.S3Region,
+			S3Bucket:          s3LogsConfig.S3Bucket,
 			S3Prefix:          s3Prefix,
 			FilePrefix:        filePrefix,
 			S3PartitionFormat: S3PartitionFormat,
@@ -287,11 +486,19 @@ func getS3ExporterForLogstream(hubName string, logstream MDAILogStream, s3LogsCo
 	return exporterKey, exporter
 }
 
-func getPipelineWithS3Exporter(pipeline map[string]any, exporterName string) map[string]any {
-	exporters := pipeline["exporters"].([]any)
+func (c MdaiCollectorAdapter) getPipelineWithExporterAndSeverityFilter(receiverName string, exporterName string, minSeverity *mdaiv1.SeverityLevel) map[string]any {
+	receivers := []any{receiverName}
+	exporters := make([]any, 0)
+	processors := make([]any, 0)
+	if minSeverity != nil {
+		severityFilter := severityFilterMap[*minSeverity]
+		if severityFilter != "" {
+			processors = append(processors, severityFilter)
+		}
+	}
 	newPipeline := map[string]any{
-		"receivers":  pipeline["receivers"],
-		"processors": pipeline["processors"],
+		"receivers":  receivers,
+		"processors": processors,
 		"exporters":  append(exporters, exporterName),
 	}
 	return newPipeline

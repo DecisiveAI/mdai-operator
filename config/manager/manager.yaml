@@ -78,11 +78,16 @@ spec:
                 name: valkey-secret
                 key: VALKEY_PASSWORD
           - name: OTEL_EXPORTER_OTLP_ENDPOINT
-            value: http://mdai-collector-service.mdai.svc.cluster.local:4318
+            value: http://hub-monitor-mdai-collector-service.mdai.svc.cluster.local:4318
           - name: OTEL_SDK_DISABLED
             value: "false"
           - name: USE_CONSOLE_LOG_ENCODER
             value: "false"
+          - name: RELEASE_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: mdai-operator-release-info
+                key: RELEASE_NAME
         name: manager
         ports: []
         securityContext:

@@ -47,15 +47,74 @@ spec:
                 type: object
               logs:
                 properties:
+                  otlp:
+                    properties:
+                      auditLogs:
+                        properties:
+                          disabled:
+                            type: boolean
+                        type: object
+                      collectorLogs:
+                        properties:
+                          disabled:
+                            type: boolean
+                          minSeverity:
+                            type: string
+                        type: object
+                      endpoint:
+                        type: string
+                      hubLogs:
+                        properties:
+                          disabled:
+                            type: boolean
+                          minSeverity:
+                            type: string
+                        type: object
+                      otherLogs:
+                        properties:
+                          disabled:
+                            type: boolean
+                          minSeverity:
+                            type: string
+                        type: object
+                    required:
+                    - endpoint
+                    type: object
                   s3:
                     properties:
+                      auditLogs:
+                        properties:
+                          disabled:
+                            type: boolean
+                        type: object
+                      collectorLogs:
+                        properties:
+                          disabled:
+                            type: boolean
+                          minSeverity:
+                            type: string
+                        type: object
+                      hubLogs:
+                        properties:
+                          disabled:
+                            type: boolean
+                          minSeverity:
+                            type: string
+                        type: object
+                      otherLogs:
+                        properties:
+                          disabled:
+                            type: boolean
+                          minSeverity:
+                            type: string
+                        type: object
                       s3Bucket:
                         type: string
                       s3Region:
-                        description: |-
-                          For now will be coded to WARN or greater
-                          LogLevel *string `json:"logLevel,omitempty" yaml:"logLevel,omitempty"`
                         type: string
+                    required:
+                    - s3Bucket
+                    - s3Region
                     type: object
                 type: object
             type: object

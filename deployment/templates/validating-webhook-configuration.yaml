@@ -47,3 +47,23 @@ webhooks:
     resources:
     - mdaihubs
   sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: '{{ include "deployment.fullname" . }}-webhook-service'
+      namespace: '{{ .Release.Namespace }}'
+      path: /validate-hub-mydecisive-ai-v1-mdaiobserver
+  failurePolicy: Fail
+  name: vmdaiobserver-v1.kb.io
+  rules:
+  - apiGroups:
+    - hub.mydecisive.ai
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - mdaiobservers
+  sideEffects: None

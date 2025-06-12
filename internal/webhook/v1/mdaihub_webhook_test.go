@@ -20,11 +20,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
@@ -153,70 +150,6 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 						{
 							Name: "HASH_SET",
 						},
-					},
-				},
-			},
-			Observers: []mdaiv1.Observer{
-				{
-					Name:                    "watcher1",
-					ResourceRef:             "watcher-collector",
-					LabelResourceAttributes: []string{"service.name"},
-					CountMetricName:         ptr.To("mdai_watcher_one_count_total"),
-					BytesMetricName:         ptr.To("mdai_watcher_one_bytes_total"),
-				},
-				{
-					Name:                    "watcher2",
-					ResourceRef:             "watcher-collector",
-					LabelResourceAttributes: []string{"team", "log_level"},
-					CountMetricName:         ptr.To("mdai_watcher_two_count_total"),
-				},
-				{
-					Name:                    "watcher3",
-					ResourceRef:             "watcher-nother-collector",
-					LabelResourceAttributes: []string{"region", "log_level"},
-					BytesMetricName:         ptr.To("mdai_watcher_three_count_total"),
-				},
-				{
-					Name:                    "watcher4",
-					ResourceRef:             "watcher-collector",
-					LabelResourceAttributes: []string{"service.name", "team", "region"},
-					CountMetricName:         ptr.To("mdai_watcher_four_count_total"),
-					BytesMetricName:         ptr.To("mdai_watcher_four_bytes_total"),
-					Filter: &mdaiv1.ObserverFilter{
-						ErrorMode: ptr.To("ignore"),
-						Logs: &mdaiv1.ObserverLogsFilter{
-							LogRecord: []string{`attributes["log_level"] == "INFO"`},
-						},
-					},
-				},
-			},
-			ObserverResources: []mdaiv1.ObserverResource{
-				{
-					Name:     "watcher-collector",
-					Image:    ptr.To("watcher-image:9.9.9"),
-					Replicas: ptr.To(int32(3)),
-					Resources: &v1.ResourceRequirements{
-						Limits: v1.ResourceList{
-							"Cpu":    resource.MustParse("500m"),
-							"Memory": resource.MustParse("1Gi"),
-						},
-						Requests: v1.ResourceList{
-							"Cpu":    resource.MustParse("200m"),
-							"Memory": resource.MustParse("256Mi")},
-					},
-				},
-				{
-					Name:     "watcher-nother-collector",
-					Image:    ptr.To("watcher-image:4.2.0"),
-					Replicas: ptr.To(int32(2)),
-					Resources: &v1.ResourceRequirements{
-						Limits: v1.ResourceList{
-							"Cpu":    resource.MustParse("300m"),
-							"Memory": resource.MustParse("512Mi"),
-						},
-						Requests: v1.ResourceList{
-							"Cpu":    resource.MustParse("100m"),
-							"Memory": resource.MustParse("128Mi")},
 					},
 				},
 			},

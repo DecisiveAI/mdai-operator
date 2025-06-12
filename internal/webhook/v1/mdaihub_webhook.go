@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"slices"
 
 	"github.com/prometheus/prometheus/promql/parser"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -177,7 +176,7 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 		}
 	}
 
-	return v.validateObserversAndObserverResources(mdaihub, warnings)
+	return warnings, nil
 }
 
 func (v *MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub, warnings admission.Warnings) (map[string]struct{}, admission.Warnings, error) {
@@ -230,48 +229,4 @@ func (v *MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub, warn
 		}
 	}
 	return keys, warnings, nil
-}
-
-func (v *MdaiHubCustomValidator) validateObserversAndObserverResources(mdaihub *mdaiv1.MdaiHub, existingWarnings admission.Warnings) (admission.Warnings, error) {
-	newWarnings := admission.Warnings{}
-	observers := mdaihub.Spec.Observers
-	observerResources := mdaihub.Spec.ObserverResources
-	observerResourceNames := make([]string, 0)
-	observerResourcesUsedInObservers := make([]string, 0)
-	if len(observerResources) == 0 {
-		newWarnings = append(newWarnings, "ObserverResources are not specified")
-	} else {
-		for _, observerResource := range observerResources {
-			observerResourceNames = append(observerResourceNames, observerResource.Name)
-			if observerResource.Replicas == nil {
-				newWarnings = append(newWarnings, "ObserverResource "+observerResource.Name+" does not define a replica count")
-			}
-			if observerResource.Resources == nil {
-				newWarnings = append(newWarnings, "ObserverResource "+observerResource.Name+" does not define resource requests/limits")
-			}
-		}
-	}
-	if len(observers) == 0 {
-		newWarnings = append(newWarnings, "Observers are not specified")
-	} else {
-		for _, observer := range observers {
-			if observer.ResourceRef == "" || !slices.Contains(observerResourceNames, observer.ResourceRef) {
-				return newWarnings, fmt.Errorf("observer %s does not reference a valid resource", observer.Name)
-			}
-			if observer.BytesMetricName == nil && observer.CountMetricName == nil {
-				return newWarnings, fmt.Errorf("observer %s must have either a bytesMetricName or countMetricName", observer.Name)
-			}
-			if len(observer.LabelResourceAttributes) == 0 {
-				newWarnings = append(newWarnings, "observer "+observer.Name+" does not define any labels to apply to counts")
-			}
-			observerResourcesUsedInObservers = append(observerResourcesUsedInObservers, observer.ResourceRef)
-		}
-	}
-	for _, observerResource := range observerResourceNames {
-		if !slices.Contains(observerResourcesUsedInObservers, observerResource) {
-			newWarnings = append(newWarnings, "observerResource "+observerResource+" is not used in any observers")
-		}
-	}
-
-	return append(existingWarnings, newWarnings...), nil
 }
