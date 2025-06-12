@@ -76,6 +76,13 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
+		By("creating the release-info configmap for the controller-manager")
+		cmd = exec.Command("kubectl", "create", "configmap", "mdai-operator-release-info",
+			"--namespace", namespace,
+			"--from-literal=RELEASE_NAME=mdai")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to create configmap")
+
 		By("creating a valkey secret for the controller-manager")
 		cmd = exec.Command("kubectl", "create", "secret", "generic", "valkey-secret",
 			"--namespace", namespace,
