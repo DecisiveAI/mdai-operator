@@ -396,6 +396,20 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 		return OperationResult{}, err
 	}
 
+	// manual variables: we need  one ConfigMap for hub in hub's namespace
+	if len(manualEnvMap) == 0 {
+		c.logger.Info("No manual variables defined in the MDAI CR", "name", c.mdaiCR.Name)
+		if err := c.deleteEnvConfigMap(ctx, manualEnvConfigMapNamePostfix, c.mdaiCR.Namespace); err != nil {
+			c.logger.Error(err, "Failed to delete manual variables ConfigMap", "name", c.mdaiCR.Name)
+			return OperationResult{}, err
+		}
+	} else {
+		_, err := c.createOrUpdateEnvConfigMap(ctx, manualEnvMap, manualEnvConfigMapNamePostfix, c.mdaiCR.Namespace, true)
+		if err != nil {
+			return OperationResult{}, err
+		}
+	}
+
 	collectors, err := c.listOtelCollectorsWithLabel(ctx, fmt.Sprintf("%s=%s", LabelMdaiHubName, c.mdaiCR.Name))
 	if err != nil {
 		return OperationResult{}, err
@@ -410,12 +424,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	namespaceToRestart := make(map[string]struct{})
 	for namespace := range namespaces {
 		// computed variables
-		operationResultComputed, err := c.createOrUpdateEnvConfigMap(ctx, envMap, envConfigMapNamePostfix, namespace)
-		if err != nil {
-			return OperationResult{}, err
-		}
-		// manual variables
-		_, err = c.createOrUpdateEnvConfigMap(ctx, manualEnvMap, manualEnvConfigMapNamePostfix, namespace)
+		operationResultComputed, err := c.createOrUpdateEnvConfigMap(ctx, envMap, envConfigMapNamePostfix, namespace, false)
 		if err != nil {
 			return OperationResult{}, err
 		}
@@ -510,7 +519,7 @@ func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (Operatio
 		}
 		automationMap[key] = string(workflowJSON)
 	}
-	operationResult, err := c.createOrUpdateEnvConfigMap(ctx, automationMap, automationConfigMapNamePostfix, c.mdaiCR.Namespace) // TODO trigger reload of configmap at event hub through some API
+	operationResult, err := c.createOrUpdateEnvConfigMap(ctx, automationMap, automationConfigMapNamePostfix, c.mdaiCR.Namespace, true) // TODO trigger reload of configmap at event hub through some API
 	c.logger.Info(fmt.Sprintf("Successfully %s ConfigMap for automations", operationResult), "name", c.mdaiCR.Name)
 	if err != nil {
 		return OperationResult{}, err
@@ -539,14 +548,25 @@ func (c HubAdapter) deleteEnvConfigMap(ctx context.Context, postfix string, name
 	return nil
 }
 
-func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, configMapPostfix string, namespace string) (controllerutil.OperationResult, error) {
+func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, configMapPostfix string, namespace string, setControllerRef bool) (controllerutil.OperationResult, error) {
 	envConfigMapName := c.mdaiCR.Name + configMapPostfix
 	desiredConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      envConfigMapName,
 			Namespace: namespace,
+			Labels: map[string]string{
+				LabelManagedByMdaiKey: LabelManagedByMdaiValue,
+			},
 		},
 	}
+	// we are setting an owner reference here if we need one configmap for a specific Hub in the Hub namespace
+	if setControllerRef {
+		if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
+			c.logger.Error(err, "Failed to set owner reference on "+envConfigMapName+" ConfigMap", "configmap", envConfigMapName)
+			return controllerutil.OperationResultNone, err
+		}
+	}
+
 	// we are not setting an owner reference here as we want to allow config maps being deployed across namespaces
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, desiredConfigMap, func() error {
 		desiredConfigMap.Data = envMap

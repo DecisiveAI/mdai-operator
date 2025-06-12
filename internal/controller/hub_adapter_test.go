@@ -273,7 +273,7 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	envMap := map[string]string{"VAR": "value"}
-	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, envConfigMapNamePostfix, "default"); err != nil {
+	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, envConfigMapNamePostfix, "default", false); err != nil {
 		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
 	}
 
@@ -296,7 +296,7 @@ func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	envMap := map[string]string{"VAR": "string"}
-	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, manualEnvConfigMapNamePostfix, "default"); err != nil {
+	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, manualEnvConfigMapNamePostfix, "default", true); err != nil {
 		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
 	}
 
@@ -826,6 +826,7 @@ func TestEnsureAutomationsSynchronized(t *testing.T) {
 		mdaiCR: mdaiCR,
 		client: fakeClient,
 		logger: logr.Discard(),
+		scheme: scheme,
 	}
 
 	opResult, err := adapter.ensureAutomationsSynchronized(ctx)

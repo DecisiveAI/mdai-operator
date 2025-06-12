@@ -403,7 +403,7 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should create the config map for variables", func() {
 			By("verifying the config map for variables exists")
 			configMapExists("mdaihub-sample-variables", otelNamespace)
-			configMapExists("mdaihub-sample-manual-variables", otelNamespace)
+			configMapExists("mdaihub-sample-manual-variables", namespace)
 
 			By("verifying the config map content for variables defaults")
 			verifyConfigMap := func(g Gomega) {
@@ -422,7 +422,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("verifying the config map content for manual variables")
 			verifyConfigMapManual := func(g Gomega) {
-				data := getDataFromMap(g, "mdaihub-sample-manual-variables", otelNamespace)
+				data := getDataFromMap(g, "mdaihub-sample-manual-variables", namespace)
 				g.Expect(data).To(HaveLen(2))
 				g.Expect(data["manual_filter"]).To(Equal("string"))
 				g.Expect(data["service_list_manual"]).To(Equal("set"))
@@ -437,6 +437,16 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(data["logBytesOutTooHighBySvc"]).
 					To(Equal("[{\"handlerRef\":\"setVariable\",\"args\":{\"default\":\"default_service\",\"key\":\"service_name\"}}," +
 						"{\"handlerRef\":\"publishMetrics\"},{\"handlerRef\":\"notifySlack\",\"args\":{\"channel\":\"infra-alerts\"}}]"))
+			}
+			Eventually(verifyConfigMapManual).Should(Succeed())
+		})
+
+		It("can create the config map for manual variables", func() {
+			verifyConfigMapManual := func(g Gomega) {
+				data := getDataFromMap(g, "mdaihub-sample-manual-variables", namespace)
+				g.Expect(data).To(HaveLen(2))
+				g.Expect(data).
+					To(Equal(map[string]any{"manual_filter": "string", "service_list_manual": "set"}))
 			}
 			Eventually(verifyConfigMapManual).Should(Succeed())
 		})
@@ -723,6 +733,12 @@ var _ = Describe("Manager", Ordered, func() {
 			By("validating the config map for observer is still present")
 			configMapExists("mdaihub-sample-variables", otelNamespace)
 
+			By("validating the config map for manual variables is deleted")
+			configMapDoesNotExist("mdaihub-sample-manual-variables", namespace)
+
+			By("validating the config map for automations is deleted")
+			configMapDoesNotExist("mdaihub-sample-automations", namespace)
+
 			By("validating the prometheus rules deleted")
 			verifyPromRulesDeleted := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "prometheusrules", "-n", namespace, "-o", "json")
@@ -830,6 +846,16 @@ func configMapExists(name string, namespace string) {
 		cmd := exec.Command("kubectl", "get", "configmap", name, "-n", namespace)
 		_, err := utils.Run(cmd)
 		g.Expect(err).NotTo(HaveOccurred())
+	}
+	Eventually(verifyConfigMap, "1m", "5s").Should(Succeed())
+}
+
+func configMapDoesNotExist(name string, namespace string) {
+	verifyConfigMap := func(g Gomega) {
+		cmd := exec.Command("kubectl", "get", "configmap", name, "-n", namespace)
+		_, err := utils.Run(cmd)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("not found"))
 	}
 	Eventually(verifyConfigMap, "1m", "5s").Should(Succeed())
 }
