@@ -66,7 +66,7 @@ helm upgrade prometheus prometheus-community/kube-prometheus-stack -f test/test-
 kubectl create namespace otel
 kubectl create namespace mdai
 kubectl create configmap mdai-operator-release-info \
-  --from-literal=RELEASE_NAME=mdai
+  --from-literal=RELEASE_NAME=mdai \
   --namespace=mdai
 kubectl create secret generic valkey-secret \
   --from-literal=VALKEY_ENDPOINT=valkey-primary.default.svc.cluster.local:6379 \
