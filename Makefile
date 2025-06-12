@@ -97,6 +97,18 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 lint-config: golangci-lint ## Verify golangci-lint linter configuration
 	$(GOLANGCI_LINT) config verify
 
+.PHONY: tidy
+tidy:
+	@go mod tidy
+
+.PHONY: vendor
+vendor:
+	@go mod vendor
+
+.PHONY: tidy-check
+tidy-check: tidy
+	@git diff --quiet --exit-code go.mod go.sum || { echo >&2 "go.mod or go.sum is out of sync. Run 'make tidy'."; exit 1; }
+
 ##@ Build
 
 .PHONY: build
