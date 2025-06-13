@@ -1,4 +1,3 @@
-![Coverage](https://img.shields.io/badge/Coverage-1-red)
 [![Chores](https://github.com/DecisiveAI/mdai-operator/actions/workflows/chores.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/chores.yml)
 # MDAI K8s Operator
 manages MDAI Hubs
@@ -167,27 +166,4 @@ the project, i.e.:
 ```sh
 kubectl apply -f https://raw.githubusercontent.com/<org>/mdai-operator/<tag or branch>/dist/install.yaml
 ```
-
-## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
-
-**NOTE:** Run `make help` for more information on all potential `make` targets
-
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
-
-## License
-
-Copyright 2025.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
 
