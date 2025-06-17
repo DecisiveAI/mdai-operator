@@ -1,0 +1,17 @@
+name: 'E2E Tests'
+
+on:
+  workflow_run:
+    workflows: ["Go CI"]
+    types: [completed]
+
+jobs:
+  e2e-tests:
+    name: 'E2E Tests'
+    uses: decisiveai/ci/.github/workflows/e2e-test.yml@main
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    with:
+      cluster-name: 'e2e-test-cluster'
+      test-timeout: '45'
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}
