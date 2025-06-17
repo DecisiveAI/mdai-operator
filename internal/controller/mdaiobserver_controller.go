@@ -71,6 +71,7 @@ func (r *MdaiObserverReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	return ctrl.Result{}, nil
 }
 
+// ReconcileHandler processes the MdaiObserver CR and performs the necessary operations.
 func (r *MdaiObserverReconciler) ReconcileHandler(ctx context.Context, adapter ObserverAdapter) (ctrl.Result, error) {
 	operations := []ReconcileOperation{
 		adapter.ensureObserverDeletionProcessed,
