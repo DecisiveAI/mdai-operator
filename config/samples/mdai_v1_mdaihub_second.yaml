@@ -7,6 +7,8 @@ metadata:
   name: mdaihub-second
   namespace: mdai
 spec:
+  config:
+    evaluationInterval: 10m
   variables:
     - key: service_list
       dataType: set
@@ -67,6 +69,7 @@ spec:
       severity: warning
       for: 5m
       keep_firing_for: 10m
+      interval: 3m
 
   automations:
     - eventRef: logBytesOutTooHighBySvc

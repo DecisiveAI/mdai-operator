@@ -243,17 +243,27 @@ func (c HubAdapter) ensurePrometheusAlertsSynchronized(ctx context.Context) (Ope
 		return RequeueAfter(requeueTime, err)
 	}
 
-	if c.mdaiCR.Spec.Config != nil && c.mdaiCR.Spec.Config.EvaluationInterval != nil {
-		prometheusRule.Spec.Groups[0].Interval = c.mdaiCR.Spec.Config.EvaluationInterval
-	}
+	groups := make([]prometheusv1.RuleGroup, 0, len(evals))
 
-	rules := make([]prometheusv1.Rule, 0, len(evals))
 	for _, eval := range evals {
 		rule := c.composePrometheusRule(eval)
-		rules = append(rules, rule)
+
+		group := prometheusv1.RuleGroup{
+			Name:  fmt.Sprintf("group-%s", eval.Name), // or whatever naming scheme you prefer
+			Rules: []prometheusv1.Rule{rule},
+		}
+
+		if eval.Interval != nil {
+			group.Interval = eval.Interval
+		} else if c.mdaiCR.Spec.Config != nil && c.mdaiCR.Spec.Config.EvaluationInterval != nil {
+			group.Interval = c.mdaiCR.Spec.Config.EvaluationInterval
+		}
+
+		groups = append(groups, group)
 	}
 
-	prometheusRule.Spec.Groups[0].Rules = rules
+	prometheusRule.Spec.Groups = groups
+
 	if err = c.client.Update(ctx, prometheusRule); err != nil {
 		c.logger.Error(err, "Failed to update PrometheusRule")
 	}
