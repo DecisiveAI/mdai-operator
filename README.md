@@ -1,4 +1,7 @@
-[![Chores](https://github.com/DecisiveAI/mdai-operator/actions/workflows/chores.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/chores.yml) [![codecov](https://codecov.io/gh/DecisiveAI/mdai-operator/branch/main/graph/badge.svg?token=AO9MG6SCO7)](https://codecov.io/gh/DecisiveAI/mdai-operator)
+[![Chores](https://github.com/DecisiveAI/mdai-operator/actions/workflows/chores.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/chores.yml)
+[![codecov](https://codecov.io/gh/DecisiveAI/mdai-operator/branch/main/graph/badge.svg?token=AO9MG6SCO7)](https://codecov.io/gh/DecisiveAI/mdai-operator)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/mdai-operator)](https://artifacthub.io/packages/search?repo=mdai-operator)
+
 # MDAI K8s Operator
 manages MDAI Hubs
 ## Description
