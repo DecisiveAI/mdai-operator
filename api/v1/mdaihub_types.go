@@ -94,6 +94,9 @@ type PrometheusAlert struct {
 	// +kubebuilder:validation:Pattern:="^(warning|critical)$"
 	// +kubebuilder:validation:Required
 	Severity string `json:"severity" yaml:"severity"`
+	// Interval Specify the interval at wich you want this alert to be evaluated
+	// +kubebuilder:validation:Optional
+	Interval *prometheusv1.Duration `json:"interval,omitempty" yaml:"interval,omitempty"`
 }
 
 type Config struct {
