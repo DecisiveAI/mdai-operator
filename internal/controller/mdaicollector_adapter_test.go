@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -8,6 +9,8 @@ import (
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1core "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -165,4 +168,88 @@ func TestGetPipelineWithS3Exporter(t *testing.T) {
 			assert.Equal(t, testCase.expected, adapter.getPipelineWithExporterAndSeverityFilter(testCase.receiverName, testCase.exporterName, ptr.To(testCase.severityLevel)))
 		})
 	}
+}
+
+func TestCreateOrUpdateMdaiCollectorRole(t *testing.T) {
+	cr := &v1.MdaiCollector{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-hub",
+			Namespace: "default",
+		},
+	}
+	scheme := createTestSchemeForMdaiCollector()
+	assert.NoError(t, rbacv1.AddToScheme(scheme))
+
+	cl := newFakeClientForCollectorCR(cr, scheme)
+	adapter := NewMdaiCollectorAdapter(cr, logr.Discard(), cl, record.NewFakeRecorder(10), scheme)
+
+	expectedName := adapter.getScopedMdaiCollectorResourceName("role")
+
+	t.Run(fmt.Sprintf("creates or updates ClusterRole %q", expectedName), func(t *testing.T) {
+		name, err := adapter.createOrUpdateMdaiCollectorRole(context.Background())
+		assert.NoError(t, err)
+		assert.Equal(t, expectedName, name)
+
+		var role rbacv1.ClusterRole
+		assert.NoError(t,
+			cl.Get(context.Background(), client.ObjectKey{Name: name}, &role),
+		)
+
+		assert.Equal(t, expectedName, role.Name)
+		assert.Equal(t, "mdai-operator", role.Labels["app.kubernetes.io/managed-by"])
+		assert.Equal(t, MdaiCollectorHubComponent, role.Labels[HubComponentLabel])
+		assert.Len(t, role.Rules, 5)
+
+		for _, r := range role.Rules {
+			assert.Contains(t, r.Verbs, "get")
+			assert.Contains(t, r.Verbs, "list")
+			assert.Contains(t, r.Verbs, "watch")
+			assert.NotEmpty(t, r.Resources)
+		}
+	})
+}
+
+func TestCreateOrUpdateMdaiCollectorRoleBinding(t *testing.T) {
+	cr := &v1.MdaiCollector{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-hub",
+			Namespace: "default",
+		},
+	}
+	scheme := createTestSchemeForMdaiCollector()
+	assert.NoError(t, rbacv1.AddToScheme(scheme))
+
+	cl := newFakeClientForCollectorCR(cr, scheme)
+	adapter := NewMdaiCollectorAdapter(cr, logr.Discard(), cl, record.NewFakeRecorder(10), scheme)
+
+	expectedName := adapter.getScopedMdaiCollectorResourceName("rb")
+
+	namespace := "mdai"
+	roleName := "mdai-role"
+	saName := "mdai-sa"
+
+	t.Run(fmt.Sprintf("creates/updates RoleBinding %q", expectedName), func(t *testing.T) {
+		err := adapter.createOrUpdateMdaiCollectorRoleBinding(context.Background(), namespace, roleName, saName)
+		assert.NoError(t, err)
+
+		var rb rbacv1.ClusterRoleBinding
+		assert.NoError(t, cl.Get(context.Background(), client.ObjectKey{Name: expectedName}, &rb))
+
+		assert.Equal(t, expectedName, rb.Name)
+		assert.Equal(t, map[string]string{
+			"app.kubernetes.io/managed-by": "mdai-operator",
+			HubComponentLabel:              MdaiCollectorHubComponent,
+		}, rb.Labels)
+
+		assert.Equal(t, "rbac.authorization.k8s.io", rb.RoleRef.APIGroup)
+		assert.Equal(t, "ClusterRole", rb.RoleRef.Kind)
+		assert.Equal(t, roleName, rb.RoleRef.Name)
+
+		if assert.Len(t, rb.Subjects, 1) {
+			subj := rb.Subjects[0]
+			assert.Equal(t, "ServiceAccount", subj.Kind)
+			assert.Equal(t, saName, subj.Name)
+			assert.Equal(t, namespace, subj.Namespace)
+		}
+	})
 }
