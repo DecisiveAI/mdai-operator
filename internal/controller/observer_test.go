@@ -56,7 +56,7 @@ func TestGetObserverCollectorConfig(t *testing.T) {
 					Filter: &v1.ObserverFilter{
 						ErrorMode: lo.ToPtr("ignore"),
 						Logs: &v1.ObserverLogsFilter{
-							LogRecord: []string{"resource.attributes[\"observer_direction\"] != \"received\""},
+							LogRecord: []string{`resource.attributes["observer_direction"] != "received"`},
 						},
 					},
 				},
@@ -68,7 +68,7 @@ func TestGetObserverCollectorConfig(t *testing.T) {
 					Filter: &v1.ObserverFilter{
 						ErrorMode: lo.ToPtr("ignore"),
 						Logs: &v1.ObserverLogsFilter{
-							LogRecord: []string{"resource.attributes[\"observer_direction\"] != \"exported\""},
+							LogRecord: []string{`resource.attributes["observer_direction"] != "exported"`},
 						},
 					},
 				},
@@ -111,12 +111,12 @@ func TestGetObserverCollectorConfig(t *testing.T) {
 
 				connectors := config["connectors"].(map[string]any)
 				require.NotNil(t, connectors["datavolume/observer-in"])
-				assert.Equal(t, []interface{}{"mdai_service"}, connectors["datavolume/observer-in"].(map[string]any)["label_resource_attributes"])
+				assert.Equal(t, []any{"mdai_service"}, connectors["datavolume/observer-in"].(map[string]any)["label_resource_attributes"])
 				assert.Equal(t, "items_received_by_service_total", connectors["datavolume/observer-in"].(map[string]any)["count_metric_name"])
 				assert.Equal(t, "bytes_received_by_service_total", connectors["datavolume/observer-in"].(map[string]any)["bytes_metric_name"])
 
 				require.NotNil(t, connectors["datavolume/observer-out"])
-				assert.Equal(t, []interface{}{"mdai_service"}, connectors["datavolume/observer-out"].(map[string]any)["label_resource_attributes"])
+				assert.Equal(t, []any{"mdai_service"}, connectors["datavolume/observer-out"].(map[string]any)["label_resource_attributes"])
 				assert.Equal(t, "items_sent_by_service_total", connectors["datavolume/observer-out"].(map[string]any)["count_metric_name"])
 				assert.Equal(t, "bytes_sent_by_service_total", connectors["datavolume/observer-out"].(map[string]any)["bytes_metric_name"])
 			},
