@@ -1,13 +1,14 @@
 package controller
 
 import (
+	"testing"
+
 	v1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
-	"testing"
 )
 
 func TestGetObserverCollectorConfig(t *testing.T) {
