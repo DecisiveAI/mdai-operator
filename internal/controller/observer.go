@@ -281,7 +281,7 @@ func (c ObserverAdapter) getObserverCollectorConfig(observers []v1.Observer, obs
 	var config map[string]any
 	if err := yaml.Unmarshal([]byte(baseObserverCollectorYAML), &config); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base collector config")
-		return "", err
+		return "", fmt.Errorf(`unmarshal base collector config: %w`, err)
 	}
 	grpcReceiverMaxMsgSize := observerResource.GrpcReceiverMaxMsgSize
 	if grpcReceiverMaxMsgSize != nil {
@@ -328,6 +328,13 @@ func (c ObserverAdapter) getObserverCollectorConfig(observers []v1.Observer, obs
 			"exporters":  []string{dvKey},
 		}
 
+		tracesPipelineName := "traces/" + observerName
+		config["service"].(map[string]any)["pipelines"].(map[string]any)[tracesPipelineName] = map[string]any{
+			"receivers":  []string{"otlp"},
+			"processors": pipelineProcessors,
+			"exporters":  []string{dvKey},
+		}
+
 		dataVolumeReceivers = append(dataVolumeReceivers, dvKey)
 	}
 
@@ -358,7 +365,7 @@ func (c ObserverAdapter) getObserverCollectorConfig(observers []v1.Observer, obs
 
 	raw, err := yaml.Marshal(config)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("marshal observer config: %w", err)
 	}
 
 	return string(raw), nil
