@@ -1,8 +1,8 @@
 resources:
-  - manager.yaml
+- manager.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 images:
-  - name: controller
-    newName: public.ecr.aws/p3k6k6h3/mdai-operator
-    newTag: 0.1.21
+- name: controller
+  newName: public.ecr.aws/p3k6k6h3/mdai-operator
+  newTag: 0.1.21
