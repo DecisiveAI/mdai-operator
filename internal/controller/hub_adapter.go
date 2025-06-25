@@ -551,10 +551,6 @@ func (c HubAdapter) deleteEnvConfigMap(ctx context.Context, postfix string, name
 
 func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, configMapPostfix string, namespace string, setControllerRef bool) (controllerutil.OperationResult, error) {
 	envConfigMapName := c.mdaiCR.Name + configMapPostfix
-	switch configMapPostfix {
-	case automationConfigMapNamePostfix:
-
-	}
 	desiredConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      envConfigMapName,
