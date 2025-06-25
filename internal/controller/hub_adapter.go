@@ -41,8 +41,9 @@ const (
 
 	requeueTime = time.Second * 10
 
-	hubNameLabel      = "mdai-hub-name"
-	HubComponentLabel = "mdai-hub-component"
+	hubNameLabel       = "mydecisive.ai/hub-name"
+	HubComponentLabel  = "mydecisive.ai/hub-component"
+	configMapTypeLabel = "mydecisive.ai/configmap-type"
 )
 
 type HubAdapter struct {
@@ -550,12 +551,18 @@ func (c HubAdapter) deleteEnvConfigMap(ctx context.Context, postfix string, name
 
 func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, configMapPostfix string, namespace string, setControllerRef bool) (controllerutil.OperationResult, error) {
 	envConfigMapName := c.mdaiCR.Name + configMapPostfix
+	switch configMapPostfix {
+	case automationConfigMapNamePostfix:
+
+	}
 	desiredConfigMap := &v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      envConfigMapName,
 			Namespace: namespace,
 			Labels: map[string]string{
 				LabelManagedByMdaiKey: LabelManagedByMdaiValue,
+				LabelMdaiHubName:      c.mdaiCR.Name,
+				configMapTypeLabel:    fmt.Sprintf("hub%v", configMapPostfix),
 			},
 		},
 	}
