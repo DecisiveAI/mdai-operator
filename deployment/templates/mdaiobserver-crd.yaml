@@ -139,6 +139,13 @@ spec:
                       items:
                         type: string
                       type: array
+                    logs:
+                      properties:
+                        count_severity_by:
+                          description: '''logs.severity_text'', ''logs.severity_number''
+                            or attribute name to count severity by'
+                          type: string
+                      type: object
                     name:
                       type: string
                   required:
