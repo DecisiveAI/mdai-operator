@@ -16,6 +16,14 @@ type Observer struct {
 	BytesMetricName *string `json:"bytesMetricName,omitempty" yaml:"bytesMetricName,omitempty"`
 	// +kubebuilder:validation:Optional
 	Filter *ObserverFilter `json:"filter,omitempty" yaml:"filter,omitempty"`
+	// +kubebuilder:validation:Optional
+	Logs *ObserverLogsConfig `json:"logs,omitempty" yaml:"logs,omitempty"`
+}
+
+type ObserverLogsConfig struct {
+	// 'logs.severity_text', 'logs.severity_number' or attribute name to count severity by
+	// +kubebuilder:validation:Optional
+	CountSeverityBy string `json:"count_severity_by,omitempty" yaml:"count_severity_by,omitempty"`
 }
 
 type ObserverLogsFilter struct {

@@ -307,6 +307,11 @@ func (c ObserverAdapter) getObserverCollectorConfig(observers []v1.Observer, obs
 		if obs.BytesMetricName != nil {
 			dvSpec["bytes_metric_name"] = *obs.BytesMetricName
 		}
+		if obs.Logs != nil && obs.Logs.CountSeverityBy != "" {
+			dvSpec["logs"] = map[string]any{
+				"count_severity_by": obs.Logs.CountSeverityBy,
+			}
+		}
 		config["connectors"].(map[string]any)[dvKey] = dvSpec
 
 		filterName := ""
