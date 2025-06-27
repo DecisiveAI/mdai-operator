@@ -627,7 +627,20 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 		Severity: "critical",
 	}
 
-	evals := []v1.PrometheusAlert{eval}
+	otherAlertName := "alert2"
+	var otherExpr = intstr.FromString("up == 0")
+	var duration2 prometheusv1.Duration = "3m"
+	var interval1 prometheusv1.Duration = "1m"
+
+	otherEval := v1.PrometheusAlert{
+		Name:     otherAlertName,
+		Expr:     otherExpr,
+		For:      &duration2,
+		Interval: &interval1,
+		Severity: "warning",
+	}
+
+	evals := []v1.PrometheusAlert{eval, otherEval}
 	var interval prometheusv1.Duration = "10m"
 	mdaiCR := &v1.MdaiHub{
 		ObjectMeta: metav1.ObjectMeta{
@@ -662,6 +675,11 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 		t.Fatalf("failed to get PrometheusRule: %v", err)
 	}
 
+	groupsLen := len(promRule.Spec.Groups)
+	if groupsLen != 2 {
+		t.Errorf("expected 2 groups, got %d", groupsLen)
+	}
+
 	group := promRule.Spec.Groups[0]
 	if group.Interval == nil || *group.Interval != interval {
 		t.Errorf("expected EvaluationInterval %q, got %v", interval, group.Interval)
@@ -679,6 +697,25 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 	}
 	if *rule.For != duration1 {
 		t.Errorf("expected For '5m', got %q", *rule.For)
+	}
+
+	otherGroup := promRule.Spec.Groups[1]
+	if otherGroup.Interval == nil || *otherGroup.Interval != interval1 {
+		t.Errorf("expected EvaluationInterval %q, got %v", interval, otherGroup.Interval)
+	}
+
+	if len(otherGroup.Rules) != 1 {
+		t.Errorf("expected 1 rule, got %d", len(otherGroup.Rules))
+	}
+	otherRule := otherGroup.Rules[0]
+	if otherRule.Alert != "alert2" {
+		t.Errorf("expected alert name 'alert2', got %q", otherRule.Alert)
+	}
+	if otherRule.Expr != intstr.FromString("up == 0") {
+		t.Errorf("expected expr 'up == 0', got %q", otherRule.Expr)
+	}
+	if *otherRule.For != duration2 {
+		t.Errorf("expected For '3m', got %q", *otherRule.For)
 	}
 }
 
