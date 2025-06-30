@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	LabelMdaiHubName               = "mdaihub-name" // Replace with your actual label key
+	LabelMdaiHubName               = "mydecisive.ai/hub-name" // Replace with your actual label key
 	VariableKeyPrefix              = "variable/"
 	DefaultValkeyAuditStreamExpiry = 30 * 24 * time.Hour
 )

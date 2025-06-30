@@ -41,8 +41,9 @@ const (
 
 	requeueTime = time.Second * 10
 
-	hubNameLabel      = "mdai-hub-name"
-	HubComponentLabel = "mdai-hub-component"
+	hubNameLabel       = "mydecisive.ai/hub-name"
+	HubComponentLabel  = "mydecisive.ai/hub-component"
+	configMapTypeLabel = "mydecisive.ai/configmap-type"
 )
 
 type HubAdapter struct {
@@ -556,6 +557,8 @@ func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[s
 			Namespace: namespace,
 			Labels: map[string]string{
 				LabelManagedByMdaiKey: LabelManagedByMdaiValue,
+				LabelMdaiHubName:      c.mdaiCR.Name,
+				configMapTypeLabel:    fmt.Sprintf("hub%v", configMapPostfix),
 			},
 		},
 	}
