@@ -375,7 +375,7 @@ func (c MdaiCollectorAdapter) augmentConfigForOtlpConfigAndGetOtherLogstreamPipe
 		if auditLogstreamConfig == nil || !auditLogstreamConfig.Disabled {
 			logstream := mdaiv1.AuditLogstream
 			pipelineName := fmt.Sprintf("logs/otlp_%s", logstream)
-			newPipeline := c.getPipelineWithExporterAndSeverityFilter("routing/logstream", otlpExporterName, nil)
+			newPipeline := c.getPipelineWithExporterAndSeverityFilter("routing/logstream", otlpExporterName, nil, "batch/audit")
 			pipelines[pipelineName] = newPipeline
 			c.addOrCreateRoutingTableEntryWithPipeline(logstream, &routingTableMap, pipelineName)
 		}
@@ -413,7 +413,7 @@ func (c MdaiCollectorAdapter) addS3ComponentsAndPipeline(
 	s3ExporterName, s3Exporter := getS3ExporterForLogstream(c.collectorCR.Name, logstream, *s3Config)
 	exporters[s3ExporterName] = s3Exporter
 	pipelineName := fmt.Sprintf("logs/s3_%s", logstream)
-	newPipeline := c.getPipelineWithExporterAndSeverityFilter("routing/logstream", s3ExporterName, minSeverity)
+	newPipeline := c.getPipelineWithExporterAndSeverityFilter("routing/logstream", s3ExporterName, minSeverity, "batch")
 	pipelines[pipelineName] = newPipeline
 	c.addOrCreateRoutingTableEntryWithPipeline(logstream, &routingTableMap, pipelineName)
 	return pipelineName
@@ -431,7 +431,7 @@ func (c MdaiCollectorAdapter) addPipelineForLogstream(
 		minSeverity = logstreamConfig.MinSeverity
 	}
 	pipelineName := fmt.Sprintf("logs/otlp_%s", logstream)
-	newPipeline := c.getPipelineWithExporterAndSeverityFilter("routing/logstream", otlpExporterName, minSeverity)
+	newPipeline := c.getPipelineWithExporterAndSeverityFilter("routing/logstream", otlpExporterName, minSeverity, "")
 	pipelines[pipelineName] = newPipeline
 	c.addOrCreateRoutingTableEntryWithPipeline(logstream, routingTableMap, pipelineName)
 	return pipelineName
@@ -486,7 +486,7 @@ func getS3ExporterForLogstream(hubName string, logstream mdaiv1.MDAILogStream, s
 	return exporterKey, exporter
 }
 
-func (c MdaiCollectorAdapter) getPipelineWithExporterAndSeverityFilter(receiverName string, exporterName string, minSeverity *mdaiv1.SeverityLevel) map[string]any {
+func (c MdaiCollectorAdapter) getPipelineWithExporterAndSeverityFilter(receiverName string, exporterName string, minSeverity *mdaiv1.SeverityLevel, batchProcessor string) map[string]any {
 	receivers := []any{receiverName}
 	exporters := make([]any, 0)
 	processors := make([]any, 0)
@@ -495,6 +495,9 @@ func (c MdaiCollectorAdapter) getPipelineWithExporterAndSeverityFilter(receiverN
 		if severityFilter != "" {
 			processors = append(processors, severityFilter)
 		}
+	}
+	if batchProcessor != "" {
+		processors = append(processors, batchProcessor)
 	}
 	newPipeline := map[string]any{
 		"receivers":  receivers,
@@ -669,7 +672,7 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 
 		containerSpec := corev1.Container{
 			Name:  mdaiCollectorDeploymentName,
-			Image: "public.ecr.aws/decisiveai/mdai-collector:0.1",
+			Image: "public.ecr.aws/decisiveai/mdai-collector:0.1.6",
 			Command: []string{
 				"/mdai-collector",
 				"--config=/conf/collector.yaml",
@@ -677,6 +680,7 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 			Ports: []corev1.ContainerPort{
 				{ContainerPort: 4317, Name: "otlp-grpc"},
 				{ContainerPort: 4318, Name: "otlp-http"},
+				{ContainerPort: 8899, Name: "prom-http"},
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{

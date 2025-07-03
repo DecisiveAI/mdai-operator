@@ -10,10 +10,15 @@ receivers:
       - '${env:K8S_NAMESPACE}'
 
 processors:
+  deltatocumulative: {}
   batch:
     send_batch_size: 1000
     send_batch_max_size: 10000
-    timeout: 13s
+    timeout: 300s
+  batch/audit:
+    send_batch_size: 1000
+    send_batch_max_size: 10000
+    timeout: 10s
 
   filter/severity_min_debug:
     error_mode: ignore
@@ -54,6 +59,11 @@ exporters:
   debug/collector: {}
   debug/verbose:
     verbosity: detailed
+  prometheus:
+    endpoint: 0.0.0.0:8899
+    metric_expiration: 180m
+    resource_to_telemetry_conversion:
+      enabled: true
 
 connectors:
   routing/logstream:
@@ -69,6 +79,16 @@ connectors:
       - context: resource
         condition: attributes["mdai-logstream"] == "hub"
         pipelines: [logs/debug_hub]
+  count/severity_counts:
+    logs:
+      mdai_errors_by_component_total:
+        description: Error logs from MDAI components
+        conditions:
+          - severity_number >= SEVERITY_NUMBER_ERROR
+      mdai_warnings_by_component_total:
+        description: Warning logs from MDAI components
+        conditions:
+          - severity_number >= SEVERITY_NUMBER_WARN and severity_number < SEVERITY_NUMBER_ERROR
 
 extensions:
   cgroupruntime:
@@ -82,15 +102,15 @@ service:
     logs/k8s_events:
       receivers: [k8s_events]
       processors: [resource/k8slogstream]
-      exporters: [routing/logstream]
+      exporters: [routing/logstream, count/severity_counts]
     logs/input:
       receivers: [otlp]
       processors: []
-      exporters: [routing/logstream]
+      exporters: [routing/logstream, count/severity_counts]
 
     logs/debug_audit:
       receivers: [routing/logstream]
-      processors: [resource/hub-to-audit, batch]
+      processors: [resource/hub-to-audit, batch/audit]
       exporters: [debug/audit]
     logs/debug_hub:
       receivers: [routing/logstream]
@@ -104,3 +124,8 @@ service:
       receivers: [routing/logstream]
       processors: [batch]
       exporters: [debug]
+
+    metrics/log_counts:
+      receivers: [count/severity_counts]
+      processors: [deltatocumulative]
+      exporters: [prometheus]

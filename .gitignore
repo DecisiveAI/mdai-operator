@@ -33,3 +33,5 @@ go.work
 /output-dir/
 
 /deployment/values.schema.json
+
+cover.txt
