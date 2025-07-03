@@ -157,7 +157,7 @@ func TestGetPipelineWithS3Exporter(t *testing.T) {
 			exporterName:  "awss3/hub",
 			expected: map[string]any{
 				"receivers":  []any{"foobaz"},
-				"processors": []any{severityFilterMap[v1.InfoSeverityLevel]},
+				"processors": []any{severityFilterMap[v1.InfoSeverityLevel], "batch"},
 				"exporters":  []any{"awss3/hub"},
 			},
 		},
@@ -165,7 +165,7 @@ func TestGetPipelineWithS3Exporter(t *testing.T) {
 
 	for idx, testCase := range testCases {
 		t.Run(fmt.Sprintf("Case %d %s", idx, testCase.exporterName), func(t *testing.T) {
-			assert.Equal(t, testCase.expected, adapter.getPipelineWithExporterAndSeverityFilter(testCase.receiverName, testCase.exporterName, ptr.To(testCase.severityLevel)))
+			assert.Equal(t, testCase.expected, adapter.getPipelineWithExporterAndSeverityFilter(testCase.receiverName, testCase.exporterName, ptr.To(testCase.severityLevel), "batch"))
 		})
 	}
 }
