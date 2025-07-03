@@ -147,7 +147,7 @@ func TestGetPipelineWithS3Exporter(t *testing.T) {
 			exporterName:  "awss3/collector",
 			expected: map[string]any{
 				"receivers":  []any{"routing/logstream"},
-				"processors": []any{severityFilterMap[v1.WarnSeverityLevel]},
+				"processors": []any{severityFilterMap[v1.WarnSeverityLevel], "batch"},
 				"exporters":  []any{"awss3/collector"},
 			},
 		},
