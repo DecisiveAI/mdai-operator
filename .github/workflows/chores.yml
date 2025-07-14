@@ -3,102 +3,60 @@ name: Chores
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
   pull_request:
     branches: [ "main" ]
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  lint:
-    name: Lint on Ubuntu
+  lint-and-test:
+    name: Lint & Test on Ubuntu
     runs-on: ubuntu-latest
     steps:
       - name: Clone the code
         uses: actions/checkout@v4
 
       - name: Setup Go
+        id: setup-go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go mod and build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ steps.setup-go.outputs.go-version }}-
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: |
+          go mod download
+
+      - name: Check module tidiness
+        run: |
+          make tidy-check
 
       - name: Run linter
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.1.6
-
-  check-go-file-changes:
-    name: Check if Go files changed
-    runs-on: ubuntu-latest
-    needs: lint
-    outputs:
-      go_files_changed: ${{ steps.check.outputs.go_files_changed }}
-    steps:
-      - name: Clone the code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Fetch full history to compare commits
-
-      - name: Determine base commit
-        id: base
-        run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            BASE_COMMIT="${{ github.event.pull_request.base.sha }}"
-          else
-            BASE_COMMIT=$(git rev-parse HEAD~1)  # Previous commit on main
-          fi
-          echo "BASE_COMMIT=$BASE_COMMIT"
-          echo "BASE_COMMIT=$BASE_COMMIT" >> "$GITHUB_ENV"
-
-      - name: Check for Go-related file changes
-        id: check
-        run: |
-          # Fetch latest main branch
-          git fetch origin main
-          
-          # Find changed Go files (excluding _test.go and vendor/)
-          CHANGED_FILES=$(git diff --name-only "$BASE_COMMIT" HEAD -- '**/*.go' 'go.mod' 'go.sum' | grep -vE '^vendor/' || true)
-          
-          # Define output file path
-          OUTPUT_FILE=".github/outputs/all_changed_files.json"
-          mkdir -p .github/outputs  # Ensure the directory exists
-          
-          if [[ -z "$CHANGED_FILES" ]]; then
-            echo "No relevant Go file changes detected."
-            echo "go_files_changed=false" >> "$GITHUB_OUTPUT"
-            echo "[]" > "$OUTPUT_FILE"  # Save empty JSON array
-          else
-            echo "Relevant Go file changes detected."
-            echo "go_files_changed=true" >> "$GITHUB_OUTPUT"
-          
-            # Convert to JSON format and save to file
-            echo "$CHANGED_FILES" | jq -R . | jq -s . > "$OUTPUT_FILE"
-          fi
-
-      - name: Upload changed files record
-        uses: actions/upload-artifact@v4
-        with:
-          name: changed-files
-          path: .github/outputs/all_changed_files.json
-
-  test:
-    name: Test on Ubuntu
-    runs-on: ubuntu-latest
-    needs: [ lint, check-go-file-changes ]
-    if: needs.check-go-file-changes.outputs.go_files_changed == 'true'
-    steps:
-      - name: Clone the code
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Check module tidiness
-        run: make tidy-check
+          install-mode: "binary"
+          version: "latest"
 
       - name: Running Tests
         run: make test-coverage
@@ -111,8 +69,8 @@ jobs:
 
   test-e2e:
     name: E2E tests on Ubuntu
-    needs: [ lint, test ]
-    if: needs.lint.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    needs: [ lint-and-test ]
+    if: needs.lint-and-test.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Clone the code
@@ -132,6 +90,4 @@ jobs:
 
       - name: Running Test e2e
         run: |
-          go mod vendor
-          go mod tidy
           make test-e2e
