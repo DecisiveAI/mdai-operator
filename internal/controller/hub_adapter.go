@@ -12,11 +12,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/decisiveai/mdai-data-core/events"
 	"go.uber.org/zap"
 
 	"github.com/decisiveai/mdai-data-core/audit"
 
-	datacore "github.com/decisiveai/mdai-data-core/variables"
+	vars "github.com/decisiveai/mdai-data-core/variables"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/go-logr/logr"
@@ -159,7 +160,7 @@ func (c HubAdapter) finalizeHub(ctx context.Context) (ObjectState, error) {
 
 	prefix := VariableKeyPrefix + c.mdaiCR.Name + "/"
 	c.logger.Info("Cleaning up old variables from Valkey with prefix", "prefix", prefix)
-	if err := datacore.NewValkeyAdapter(c.valKeyClient, c.zapLogger).DeleteKeysWithPrefixUsingScan(ctx, map[string]struct{}{}, c.mdaiCR.Name); err != nil {
+	if err := vars.NewValkeyAdapter(c.valKeyClient, c.zapLogger).DeleteKeysWithPrefixUsingScan(ctx, map[string]struct{}{}, c.mdaiCR.Name); err != nil {
 		return ObjectUnchanged, err
 	}
 
@@ -317,7 +318,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 
 	envMap := make(map[string]string)
 	manualEnvMap := make(map[string]string)
-	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.zapLogger)
+	dataAdapter := vars.NewValkeyAdapter(c.valKeyClient, c.zapLogger)
 	valkeyKeysToKeep := map[string]struct{}{}
 	for _, variable := range variables {
 		c.logger.Info(fmt.Sprintf("Processing variable: %s", variable.Key))
@@ -510,17 +511,32 @@ func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (Operatio
 		}
 		return ContinueProcessing()
 	}
+
 	c.logger.Info("Creating or updating ConfigMap for automations", "name", c.mdaiCR.Name)
-	automationMap := make(map[string]string)
+	automationMap := make(map[string]string, len(c.mdaiCR.Spec.Automations))
 	for _, automation := range c.mdaiCR.Spec.Automations {
-		key := automation.EventRef
-		workflowJSON, err := json.Marshal(automation.Workflow)
+		key := automation.Name
+		trig, err := transformWhenToTrigger(&automation.When)
+		if err != nil {
+			return OperationResult{}, fmt.Errorf("failed to transform when to trigger: %w", err)
+		}
+		cmds, err := transformThenToCommands(automation.Then)
+		if err != nil {
+			return OperationResult{}, fmt.Errorf("failed to transform then to command: %w", err)
+		}
+		rule := events.Rule{
+			Name:     automation.Name,
+			Trigger:  trig,
+			Commands: cmds,
+		}
+		workflowJSON, err := json.Marshal(rule)
 		if err != nil {
 			return OperationResult{}, fmt.Errorf("failed to marshal automation workflow: %w", err)
 		}
 		automationMap[key] = string(workflowJSON)
 	}
-	operationResult, err := c.createOrUpdateEnvConfigMap(ctx, automationMap, automationConfigMapNamePostfix, c.mdaiCR.Namespace, true) // TODO trigger reload of configmap at event hub through some API
+
+	operationResult, err := c.createOrUpdateEnvConfigMap(ctx, automationMap, automationConfigMapNamePostfix, c.mdaiCR.Namespace, true)
 	c.logger.Info(fmt.Sprintf("Successfully %s ConfigMap for automations", operationResult), "name", c.mdaiCR.Name)
 	if err != nil {
 		return OperationResult{}, err

@@ -1,11 +1,11 @@
 ## Append samples of your project ##
 resources:
-- mdai_v1_mdaihub.yaml
-- mdai_v1_mdaihub_default.yaml
+#- mdai_v1_mdaihub.yaml
+#- mdai_v1_mdaihub_default.yaml
 - mdai_v1_mdaihub_second.yaml
-- hub_v1_mdaicollector.yaml
+#- hub_v1_mdaicollector.yaml
 # the example below requires AWS secret being deployed
 #- hub_v1_mdaicollector_mdaihub.yaml
-- hub_v1_mdaiobserver.yaml
-- hub_v1_mdaiobserver-second.yaml
+#- hub_v1_mdaiobserver.yaml
+#- hub_v1_mdaiobserver-second.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

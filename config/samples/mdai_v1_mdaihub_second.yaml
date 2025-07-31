@@ -69,13 +69,33 @@ spec:
       keep_firing_for: 10m
 
   automations:
-    - eventRef: logBytesOutTooHighBySvc
-      workflow:
-        - handlerRef: HandleAddNoisyServiceToSet
-          args:
-            payload_val_ref: service_name
-            variable_ref: service_list
-        - handlerRef: publishMetrics
-        - handlerRef: notifySlack
-          args:
-            channel: infra-alerts
+    - name: HandleAddNoisyServiceToSet
+      when:
+        alertName: logBytesOutTooHighBySvc
+        status: firing
+      then:
+        - addToSet:
+            set: noisyServiceList
+            value: "{{ service_name }}"
+        - callWebhook:
+            url: "https://alerts.company.com/webhook"
+            method: POST
+            body:
+              service: "{{ service_name }}"
+              error_rate: "{{ error_rate }}"
+    - name: HandleRemoveNoisyServiceFromSet
+      when:
+        alertName: logBytesOutTooHighBySvc
+        status: resolved
+      then:
+        - removeFromSet:
+            set: noisyServiceList
+            value: "{{ service_name }}"
+    - name: TrackCriticalRiskLevel
+      when:
+        variableUpdated: riskLevel
+        condition: "variable_value == 'critical'"
+      then:
+        - addToSet:
+            set: highRiskStates
+            value: "{{ variable_value }}"

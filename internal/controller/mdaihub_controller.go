@@ -12,6 +12,8 @@ import (
 	"github.com/cenkalti/backoff/v5"
 	"github.com/go-logr/logr"
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -155,9 +157,9 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	if err := ctrl.NewControllerManagedBy(mgr).
 		For(&mdaiv1.MdaiHub{}).
-		Owns(&v1.ConfigMap{}, builder.WithPredicates(mdaiResourcesPredicate())).
-		Owns(&v1.Service{}, builder.WithPredicates(mdaiResourcesPredicate())).
-		Owns(&appsv1.Deployment{}, builder.WithPredicates(mdaiResourcesPredicate())).
+		Owns(&v1.ConfigMap{}, builder.WithPredicates(mdaiResourcesPredicate(r.Scheme, log))).
+		Owns(&v1.Service{}, builder.WithPredicates(mdaiResourcesPredicate(r.Scheme, log))).
+		Owns(&appsv1.Deployment{}, builder.WithPredicates(mdaiResourcesPredicate(r.Scheme, log))).
 		Watches(
 			// we are watching OpenTelemetryCollector resources to detect if new ones have been created
 			// if new ones are created, we have to provide mdai variables for new collectors
@@ -185,16 +187,38 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func mdaiResourcesPredicate() predicate.Predicate {
-	log := logger.FromContext(context.TODO())
+func mdaiResourcesPredicate(scheme *runtime.Scheme, log logr.Logger) predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(_ event.CreateEvent) bool {
 			// log.Info("<CreateFunc> " + e.Object.GetName() + " ignored")
-			return false // assuming only mdai operator creates managed resources
+			return false // only mdai operator creates managed resources
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			shouldReconcile := predicate.GenerationChangedPredicate{}.Update(e)
-			log.Info("<UpdateFunc> " + e.ObjectNew.GetName() + " shouldReconcile: " + strconv.FormatBool(shouldReconcile))
+
+			kind := ""
+			apiVersion := ""
+
+			if groupVersionKind, err := apiutil.GVKForObject(e.ObjectNew, scheme); err == nil && !groupVersionKind.Empty() {
+				kind = groupVersionKind.Kind
+				apiVersion = groupVersionKind.GroupVersion().String()
+			} else if u, ok := e.ObjectNew.(*unstructured.Unstructured); ok {
+				k := u.GroupVersionKind()
+				kind = k.Kind
+				apiVersion = k.GroupVersion().String()
+			} else {
+				kind = "unknown"
+				apiVersion = "unknown"
+			}
+
+			log.Info("<UpdateFunc> update event",
+				"kind", kind,
+				"apiVersion", apiVersion,
+				"namespace", e.ObjectNew.GetNamespace(),
+				"name", e.ObjectNew.GetName(),
+				"shouldReconcile", shouldReconcile,
+			)
+
 			return shouldReconcile
 		},
 		DeleteFunc: func(_ event.DeleteEvent) bool {
