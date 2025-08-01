@@ -139,7 +139,8 @@ type CallWebhookAction struct {
 //  1. alertName + status
 //  2. variableUpdated + condition
 //
-// Exactly one variant must be set. TODO write validation for this.
+// Exactly one variant must be set. TODO check the validation logic for this.
+// +kubebuilder:validation:XValidation:rule="(has(self.alertName) && has(self.status)) != (has(self.variableUpdated) && has(self.condition))",message="exactly one variant must be set"
 type When struct {
 	// Variant 1: alert
 	// +optional

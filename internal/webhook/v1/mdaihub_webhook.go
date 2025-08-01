@@ -180,24 +180,45 @@ func (v *MdaiHubCustomValidator) validateAutomations(mdaihub *mdaiv1.MdaiHub) (a
 		return warnings, nil
 	}
 
+	// TODO create a map with variable names and alert names for faster lookup
+	vars := mdaihub.Spec.Variables
+	varKeys := make(map[string]struct{}, len(vars))
+	for i := range vars {
+		key := strings.TrimSpace(vars[i].Key)
+		if key == "" {
+			continue
+		}
+		varKeys[strings.ToLower(key)] = struct{}{}
+	}
+
+	alerts := mdaihub.Spec.PrometheusAlert
+	alertNames := make(map[string]struct{}, len(alerts))
+	for i := range alerts {
+		key := strings.TrimSpace(alerts[i].Name)
+		if key == "" {
+			continue
+		}
+		alertNames[strings.ToLower(key)] = struct{}{}
+	}
+
 	specPath := field.NewPath("spec")
 	for i, rule := range mdaihub.Spec.Automations {
 		rulePath := specPath.Child("automations").Index(i)
-		errs = append(errs, validateWhen(rulePath.Child("when"), rule.When)...)
+		errs = append(errs, validateWhen(rulePath.Child("when"), rule.When, varKeys, alertNames)...)
 
 		if len(rule.Then) == 0 {
 			errs = append(errs, field.Required(rulePath.Child("then"), "at least 1 action is required"))
 			continue
 		}
 		for j, act := range rule.Then {
-			errs = append(errs, validateAction(rulePath.Child("then").Index(j), act)...)
+			errs = append(errs, validateAction(rulePath.Child("then").Index(j), act, varKeys)...)
 		}
 	}
 
 	return warnings, errs
 }
 
-func validateWhen(path *field.Path, when mdaiv1.When) field.ErrorList {
+func validateWhen(path *field.Path, when mdaiv1.When, knownVarKeys map[string]struct{}, knownAlertNames map[string]struct{}) field.ErrorList {
 	var errs field.ErrorList
 
 	hasAlertName := strings.TrimSpace(ptr.Deref(when.AlertName, "")) != ""
@@ -213,19 +234,41 @@ func validateWhen(path *field.Path, when mdaiv1.When) field.ErrorList {
 		errs = append(errs, field.Invalid(path, "<variable>", "variableUpdated and condition must be set together"))
 	}
 
+	if when.VariableUpdated != nil && !hasVariableKey(knownVarKeys, *when.VariableUpdated) {
+		errs = append(errs, field.Invalid(path, "<variable>", "variable do not exists within hub"))
+	}
+	if when.AlertName != nil && !hasVariableKey(knownAlertNames, *when.AlertName) {
+		errs = append(errs, field.Invalid(path, "<alert>", "alertName do not exists within hub"))
+	}
+
+	// Existence checks
+	if hasVariableUpdated && !hasVariableKey(knownVarKeys, *when.VariableUpdated) {
+		errs = append(errs, field.Invalid(path.Child("variableUpdated"), *when.VariableUpdated, "not defined in spec.variables"))
+	}
+	if hasAlertName && !hasVariableKey(knownAlertNames, *when.AlertName) {
+		errs = append(errs, field.Invalid(path.Child("alertName"), *when.AlertName, "not defined in spec.alerts"))
+	}
+
 	return errs
 }
 
-func validateAction(actionPath *field.Path, action mdaiv1.Action) field.ErrorList {
+func hasVariableKey(set map[string]struct{}, key string) bool {
+	_, ok := set[strings.ToLower(strings.TrimSpace(key))]
+	return ok
+}
+
+func validateAction(actionPath *field.Path, action mdaiv1.Action, knownVarKeys map[string]struct{}) field.ErrorList {
 	var errs field.ErrorList
 	present := 0
 
 	if action.AddToSet != nil {
 		present++
+		errs = append(errs, validateSetAction(actionPath.Child("addToSet"), action.AddToSet, knownVarKeys)...)
 	}
 
 	if action.RemoveFromSet != nil {
 		present++
+		errs = append(errs, validateSetAction(actionPath.Child("removeFromSet"), action.RemoveFromSet, knownVarKeys)...)
 	}
 
 	if action.CallWebhook != nil {
@@ -235,6 +278,15 @@ func validateAction(actionPath *field.Path, action mdaiv1.Action) field.ErrorLis
 
 	if present == 0 {
 		errs = append(errs, field.Invalid(actionPath, "<action>", "at least one action must be specified"))
+	}
+	return errs
+}
+
+func validateSetAction(p *field.Path, a *mdaiv1.SetAction, knownVarKeys map[string]struct{}) field.ErrorList {
+	var errs field.ErrorList
+	set := strings.TrimSpace(a.Set)
+	if !hasVariableKey(knownVarKeys, set) {
+		errs = append(errs, field.Invalid(p.Child("set"), set, "not defined in spec.variables"))
 	}
 	return errs
 }

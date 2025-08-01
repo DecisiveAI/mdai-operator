@@ -16,14 +16,22 @@ spec:
             - type: join
               join:
                 delimiter: "|"
+    - key: highRiskStates
+      dataType: set
+      serializeAs:
+        - name: "HIGH_RISK_STATES"
+          transformers:
+            - type: join
+              join:
+                delimiter: "|"
     - key: filter
       dataType: string
       serializeAs:
         - name: "FILTER"
-    - key: default
+    - key: riskLevel
       dataType: string
       serializeAs:
-        - name: "DEFAULT"
+        - name: "RISK_LEVEL"
     - key: severity_number
       dataType: int
       serializeAs:
@@ -75,7 +83,7 @@ spec:
         status: firing
       then:
         - addToSet:
-            set: noisyServiceList
+            set: service_list
             value: "{{ service_name }}"
         - callWebhook:
             url: "https://alerts.company.com/webhook"
@@ -89,7 +97,7 @@ spec:
         status: resolved
       then:
         - removeFromSet:
-            set: noisyServiceList
+            set: service_list
             value: "{{ service_name }}"
     - name: TrackCriticalRiskLevel
       when:
