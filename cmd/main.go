@@ -10,7 +10,12 @@ import (
 	"github.com/go-logr/zapr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -224,11 +229,32 @@ func main() {
 		})
 	}
 
+	cacheOptions := cache.Options{
+		ByObject: map[client.Object]cache.ByObject{
+			&corev1.ConfigMap{}: {
+				Label: labels.SelectorFromSet(labels.Set{
+					controller.LabelManagedByMdaiKey: controller.LabelManagedByMdaiValue,
+				}),
+			},
+			&corev1.Service{}: {
+				Label: labels.SelectorFromSet(labels.Set{
+					controller.LabelManagedByMdaiKey: controller.LabelManagedByMdaiValue,
+				}),
+			},
+			&appsv1.Deployment{}: {
+				Label: labels.SelectorFromSet(labels.Set{
+					controller.LabelManagedByMdaiKey: controller.LabelManagedByMdaiValue,
+				}),
+			},
+		},
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
+		Cache:                  cacheOptions,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "ec755d87.mydecisive.ai",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
