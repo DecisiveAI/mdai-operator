@@ -80,9 +80,10 @@ func (c ObserverAdapter) createOrUpdateObserverResourceService(ctx context.Conte
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, service, func() error {
 		if service.Labels == nil {
 			service.Labels = map[string]string{
-				"app":             appLabel,
-				hubNameLabel:      c.observerCR.Name,
-				HubComponentLabel: mdaiObserverHubComponent,
+				"app":                 appLabel,
+				hubNameLabel:          c.observerCR.Name,
+				HubComponentLabel:     mdaiObserverHubComponent,
+				LabelManagedByMdaiKey: LabelManagedByMdaiValue,
 			}
 		}
 
@@ -130,9 +131,10 @@ func (c ObserverAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Con
 			Name:      configMapName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				"app":             c.getScopedObserverResourceName(""),
-				HubComponentLabel: mdaiObserverHubComponent,
-				hubNameLabel:      c.observerCR.Name,
+				"app":                 c.getScopedObserverResourceName(""),
+				LabelManagedByMdaiKey: LabelManagedByMdaiValue,
+				HubComponentLabel:     mdaiObserverHubComponent,
+				hubNameLabel:          c.observerCR.Name,
 			},
 		},
 		Data: map[string]string{
@@ -175,9 +177,10 @@ func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Co
 
 		if deployment.Labels == nil {
 			deployment.Labels = map[string]string{
-				"app":             name,
-				HubComponentLabel: mdaiObserverHubComponent,
-				hubNameLabel:      c.observerCR.Name,
+				"app":                 name,
+				HubComponentLabel:     mdaiObserverHubComponent,
+				hubNameLabel:          c.observerCR.Name,
+				LabelManagedByMdaiKey: LabelManagedByMdaiValue,
 			}
 		}
 

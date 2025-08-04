@@ -322,6 +322,33 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyCAInjection).Should(Succeed())
 		})
 
+		It("shouldn't cache events for non-managed resources", func() {
+			By("Creating a non-managed ConfigMap")
+			verifyCmCreate := func(g Gomega) {
+				cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/configmap-unmanaged.yaml", "-n", "default")
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyCmCreate).Should(Succeed())
+
+			By("Updating a non-managed ConfigMap")
+			verifyCmUpdate := func(g Gomega) {
+				cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/configmap-unmanaged-upd.yaml", "-n", "default")
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyCmUpdate).Should(Succeed())
+
+			By("checking manager's logs")
+			verifyLogs := func(g Gomega) {
+				cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
+				controllerLogs, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(controllerLogs).NotTo(ContainSubstring("<UpdateFunc> random-configmap shouldReconcile: false"))
+			}
+			Eventually(verifyLogs, "30s", "10s").Should(Succeed())
+		})
+
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
 		It("should reconcile successfully", func() {
