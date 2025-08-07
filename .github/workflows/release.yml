@@ -7,7 +7,7 @@ on:
       - 'v*'
 
 jobs:
-  helm-publish:
+  docker-push:
     uses: DecisiveAI/ci/.github/workflows/docker-push-to-ecr.yml@main
     secrets:
       SLACK_NOTIFY_URL: ${{ secrets.SLACK_NOTIFY_URL }}
