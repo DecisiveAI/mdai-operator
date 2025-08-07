@@ -11,4 +11,3 @@ jobs:
     uses: DecisiveAI/ci/.github/workflows/helm-publish.yml@main
     secrets:
       SLACK_NOTIFY_URL: ${{ secrets.SLACK_NOTIFY_URL }}
-      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}

@@ -11,4 +11,4 @@ jobs:
     uses: DecisiveAI/ci/.github/workflows/docker-push-to-ecr.yml@main
     secrets:
       SLACK_NOTIFY_URL: ${{ secrets.SLACK_NOTIFY_URL }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
