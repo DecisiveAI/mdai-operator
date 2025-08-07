@@ -5,12 +5,12 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // nolint:unused
@@ -63,7 +63,7 @@ func (v *MdaiObserverCustomValidator) ValidateUpdate(ctx context.Context, oldObj
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type MdaiObserver.
-func (v *MdaiObserverCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (*MdaiObserverCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	mdaiobserver, ok := obj.(*mdaiv1.MdaiObserver)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiObserver object but got %T", obj)
@@ -75,7 +75,7 @@ func (v *MdaiObserverCustomValidator) ValidateDelete(ctx context.Context, obj ru
 	return nil, nil
 }
 
-func (v *MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiobserver *mdaiv1.MdaiObserver) (admission.Warnings, error) {
+func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiobserver *mdaiv1.MdaiObserver) (admission.Warnings, error) {
 	newWarnings := admission.Warnings{}
 	observers := mdaiobserver.Spec.Observers
 	observerResource := mdaiobserver.Spec.ObserverResource
@@ -88,17 +88,15 @@ func (v *MdaiObserverCustomValidator) validateObserversAndObserverResources(mdai
 	}
 
 	if len(observers) == 0 {
-		newWarnings = append(newWarnings, "Observers are not specified")
-	} else {
-		for _, observer := range observers {
-			if observer.BytesMetricName == nil && observer.CountMetricName == nil {
-				return newWarnings, fmt.Errorf("observer %s must have either a bytesMetricName or countMetricName", observer.Name)
-			}
-			if len(observer.LabelResourceAttributes) == 0 {
-				newWarnings = append(newWarnings, "observer "+observer.Name+" does not define any labels to apply to counts")
-			}
+		return append(newWarnings, "Observers are not specified"), nil
+	}
+	for _, observer := range observers {
+		if observer.BytesMetricName == nil && observer.CountMetricName == nil {
+			return newWarnings, fmt.Errorf("observer %s must have either a bytesMetricName or countMetricName", observer.Name)
+		}
+		if len(observer.LabelResourceAttributes) == 0 {
+			newWarnings = append(newWarnings, "observer "+observer.Name+" does not define any labels to apply to counts")
 		}
 	}
-
 	return newWarnings, nil
 }

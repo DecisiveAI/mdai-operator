@@ -20,6 +20,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
+var _ Adapter = (*ObserverAdapter)(nil)
+
 type ObserverAdapter struct {
 	observerCR  *mdaiv1.MdaiObserver
 	logger      logr.Logger
@@ -32,14 +34,14 @@ type ObserverAdapter struct {
 func NewObserverAdapter(
 	cr *mdaiv1.MdaiObserver,
 	log logr.Logger,
-	client client.Client,
+	k8sClient client.Client,
 	recorder record.EventRecorder,
 	scheme *runtime.Scheme,
 ) *ObserverAdapter {
 	return &ObserverAdapter{
 		observerCR:  cr,
 		logger:      log,
-		client:      client,
+		client:      k8sClient,
 		recorder:    recorder,
 		scheme:      scheme,
 		releaseName: os.Getenv("RELEASE_NAME"),
@@ -47,51 +49,51 @@ func NewObserverAdapter(
 }
 
 func (c ObserverAdapter) ensureFinalizerInitialized(ctx context.Context) (OperationResult, error) {
-	if !controllerutil.ContainsFinalizer(c.observerCR, hubFinalizer) {
-		c.logger.Info("Adding Finalizer for MdaiObserver")
-		if ok := controllerutil.AddFinalizer(c.observerCR, hubFinalizer); !ok {
-			c.logger.Error(nil, "Failed to add finalizer into the custom resource")
-			return RequeueWithError(errors.New("failed to add finalizer " + hubFinalizer))
-		}
-
-		if err := c.client.Update(ctx, c.observerCR); err != nil {
-			c.logger.Error(err, "Failed to update custom resource to add finalizer")
-			return RequeueWithError(err)
-		}
-		return StopProcessing() // when finalizer is added it will trigger reconciliation
+	if controllerutil.ContainsFinalizer(c.observerCR, hubFinalizer) {
+		return ContinueProcessing()
 	}
-	return ContinueProcessing()
+	c.logger.Info("Adding Finalizer for MdaiObserver")
+	if ok := controllerutil.AddFinalizer(c.observerCR, hubFinalizer); !ok {
+		c.logger.Error(nil, "Failed to add finalizer into the custom resource")
+		return RequeueWithError(errors.New("failed to add finalizer " + hubFinalizer))
+	}
+
+	if err := c.client.Update(ctx, c.observerCR); err != nil {
+		c.logger.Error(err, "Failed to update custom resource to add finalizer")
+		return RequeueWithError(err)
+	}
+	return StopProcessing() // when finalizer is added it will trigger reconciliation
 }
 
 func (c ObserverAdapter) ensureStatusInitialized(ctx context.Context) (OperationResult, error) {
-	if len(c.observerCR.Status.Conditions) == 0 {
-		meta.SetStatusCondition(&c.observerCR.Status.Conditions, metav1.Condition{Type: typeAvailableHub, Status: metav1.ConditionUnknown, Reason: "Reconciling", Message: "Starting reconciliation"})
-		if err := c.client.Status().Update(ctx, c.observerCR); err != nil {
-			c.logger.Error(err, "Failed to update MdaiObserver status")
-			return RequeueWithError(err)
-		}
-		c.logger.Info("Re-queued to reconcile with updated status")
-		return StopProcessing()
+	if len(c.observerCR.Status.Conditions) != 0 {
+		return ContinueProcessing()
 	}
-	return ContinueProcessing()
+	meta.SetStatusCondition(&c.observerCR.Status.Conditions, metav1.Condition{Type: typeAvailableHub, Status: metav1.ConditionUnknown, Reason: "Reconciling", Message: "Starting reconciliation"})
+	if err := c.client.Status().Update(ctx, c.observerCR); err != nil {
+		c.logger.Error(err, "Failed to update MdaiObserver status")
+		return RequeueWithError(err)
+	}
+	c.logger.Info("Re-queued to reconcile with updated status")
+	return StopProcessing()
 }
 
-// ensureObserverDeletionProcessed deletes MdaiObserver in cases a deletion was triggered
-func (c ObserverAdapter) ensureObserverDeletionProcessed(ctx context.Context) (OperationResult, error) {
-	if !c.observerCR.DeletionTimestamp.IsZero() {
-		c.logger.Info("Deleting MdaiObserver:" + c.observerCR.Name)
-		crState, err := c.finalizeObserver(ctx)
-		if crState == ObjectUnchanged || err != nil {
-			c.logger.Info("Has to requeue mdaiobserver")
-			return RequeueAfter(5*time.Second, err)
-		}
-		return StopProcessing()
+// ensureDeletionProcessed deletes MdaiObserver in cases a deletion was triggered
+func (c ObserverAdapter) ensureDeletionProcessed(ctx context.Context) (OperationResult, error) {
+	if c.observerCR.DeletionTimestamp.IsZero() {
+		return ContinueProcessing()
 	}
-	return ContinueProcessing()
+	c.logger.Info("Deleting MdaiObserver:" + c.observerCR.Name)
+	crState, err := c.finalize(ctx)
+	if crState == ObjectUnchanged || err != nil {
+		c.logger.Info("Has to requeue mdaiobserver")
+		return OperationResult{RequeueDelay: time.Second * 5}, err
+	}
+	return StopProcessing()
 }
 
-// finalizeObserver handles the deletion of a MdaiObserver
-func (c ObserverAdapter) finalizeObserver(ctx context.Context) (ObjectState, error) {
+// finalize handles the deletion of a MdaiObserver
+func (c ObserverAdapter) finalize(ctx context.Context) (ObjectState, error) {
 	if !controllerutil.ContainsFinalizer(c.observerCR, hubFinalizer) {
 		c.logger.Info("No finalizer found")
 		return ObjectModified, nil
@@ -126,28 +128,61 @@ func (c ObserverAdapter) finalizeObserver(ctx context.Context) (ObjectState, err
 	}
 
 	c.logger.Info("Removing Finalizer for MdaiObserver after successfully perform the operations")
-	if err := c.ensureObserverFinalizerDeleted(ctx); err != nil {
+	if err := c.ensureFinalizerDeleted(ctx); err != nil {
 		return ObjectUnchanged, err
 	}
 
 	return ObjectModified, nil
 }
 
-// ensureObserverFinalizerDeleted removes finalizer of a Hub
-func (c ObserverAdapter) ensureObserverFinalizerDeleted(ctx context.Context) error {
+// ensureFinalizerDeleted removes finalizer of a Hub
+func (c ObserverAdapter) ensureFinalizerDeleted(ctx context.Context) error {
 	c.logger.Info("Deleting MdaiObserver Finalizer")
-	object := c.observerCR
+	return c.deleteFinalizer(ctx, c.observerCR, hubFinalizer)
+}
+
+// deleteFinalizer deletes finalizer of a generic CR
+func (c ObserverAdapter) deleteFinalizer(ctx context.Context, object client.Object, finalizer string) error {
 	metadata, err := meta.Accessor(object)
 	if err != nil {
-		c.logger.Error(err, "Failed to delete finalizer", "finalizer", hubFinalizer)
+		c.logger.Error(err, "Failed to delete finalizer", "finalizer", finalizer)
 		return err
 	}
 	finalizers := metadata.GetFinalizers()
-	if slices.Contains(finalizers, hubFinalizer) {
-		metadata.SetFinalizers(slices.DeleteFunc(finalizers, func(f string) bool { return f == hubFinalizer }))
+	if slices.Contains(finalizers, finalizer) {
+		metadata.SetFinalizers(slices.DeleteFunc(finalizers, func(f string) bool { return f == finalizer }))
 		return c.client.Update(ctx, object)
 	}
 	return nil
+}
+
+func (c ObserverAdapter) ensureSynchronized(ctx context.Context) (OperationResult, error) {
+	observers := c.observerCR.Spec.Observers
+	observerResource := c.observerCR.Spec.ObserverResource
+
+	if len(observers) == 0 {
+		c.logger.Info("No observers found in the CR, skipping observer synchronization")
+		return ContinueProcessing()
+	}
+
+	hash, err := c.createOrUpdateObserverResourceConfigMap(ctx, observerResource, observers)
+	if err != nil {
+		return RequeueWithError(err)
+	}
+
+	if err := c.createOrUpdateObserverResourceDeployment(ctx, c.observerCR.Namespace, hash, observerResource); err != nil {
+		if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
+			c.logger.Info("re-queuing due to resource conflict")
+			return Requeue()
+		}
+		return RequeueWithError(err)
+	}
+
+	if err := c.createOrUpdateObserverResourceService(ctx, c.observerCR.Namespace); err != nil {
+		return RequeueWithError(err)
+	}
+
+	return ContinueProcessing()
 }
 
 func (c ObserverAdapter) ensureStatusSetToDone(ctx context.Context) (OperationResult, error) {

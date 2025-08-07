@@ -10,16 +10,13 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
-	"github.com/go-logr/logr"
-	"go.uber.org/zap"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
-
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
+	"github.com/go-logr/logr"
 	"github.com/valkey-io/valkey-go"
+	"go.uber.org/zap"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,6 +31,7 @@ import (
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -42,9 +40,12 @@ const (
 	DefaultValkeyAuditStreamExpiry = 30 * 24 * time.Hour
 )
 
+var _ Controller = (*MdaiHubReconciler)(nil)
+
 // MdaiHubReconciler reconciles a MdaiHub object
 type MdaiHubReconciler struct {
 	client.Client
+
 	ZapLogger    *zap.Logger
 	Scheme       *runtime.Scheme
 	Recorder     record.EventRecorder
@@ -69,7 +70,7 @@ type MdaiHubReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/reconcile
 func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logger.FromContext(ctx)
-	log.Info("-- Starting MdaiHub reconciliation --")
+	log.Info("-- Starting MdaiHub reconciliation --", "namespace", req.NamespacedName, "name", req.Name)
 
 	fetchedCR := &mdaiv1.MdaiHub{}
 	if err := r.Get(ctx, req.NamespacedName, fetchedCR); err != nil {
@@ -89,23 +90,29 @@ func (r *MdaiHubReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	log.Info("-- Finished MdaiHub reconciliation --")
+
 	return ctrl.Result{}, nil
 }
 
-func (r *MdaiHubReconciler) ReconcileHandler(ctx context.Context, adapter HubAdapter) (ctrl.Result, error) {
+func (*MdaiHubReconciler) ReconcileHandler(ctx context.Context, adapter Adapter) (ctrl.Result, error) {
+	hubAdapter, ok := adapter.(HubAdapter)
+	if !ok {
+		return ctrl.Result{}, fmt.Errorf("unexpected adapter type: %T", adapter)
+	}
+
 	operations := []ReconcileOperation{
-		adapter.ensureHubDeletionProcessed,
-		adapter.ensureStatusInitialized,
-		adapter.ensureFinalizerInitialized,
-		adapter.ensurePrometheusAlertsSynchronized,
-		adapter.ensureAutomationsSynchronized,
-		adapter.ensureVariableSynced,
-		adapter.ensureStatusSetToDone,
+		hubAdapter.ensureDeletionProcessed,
+		hubAdapter.ensureStatusInitialized,
+		hubAdapter.ensureFinalizerInitialized,
+		hubAdapter.ensurePrometheusAlertsSynchronized,
+		hubAdapter.ensureAutomationsSynchronized,
+		hubAdapter.ensureVariableSynchronized,
+		hubAdapter.ensureStatusSetToDone,
 	}
 	for _, operation := range operations {
 		result, err := operation(ctx)
-		if err != nil || result.RequeueRequest {
-			return ctrl.Result{RequeueAfter: result.RequeueDelay}, err
+		if err != nil {
+			return ctrl.Result{}, err
 		}
 		if result.CancelRequest {
 			return ctrl.Result{}, nil
@@ -114,8 +121,6 @@ func (r *MdaiHubReconciler) ReconcileHandler(ctx context.Context, adapter HubAda
 
 	return ctrl.Result{}, nil
 }
-
-type ReconcileOperation func(context.Context) (OperationResult, error)
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -155,8 +160,8 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	if err := ctrl.NewControllerManagedBy(mgr).
 		For(&mdaiv1.MdaiHub{}).
-		Owns(&v1.ConfigMap{}, builder.WithPredicates(mdaiResourcesPredicate())).
-		Owns(&v1.Service{}, builder.WithPredicates(mdaiResourcesPredicate())).
+		Owns(&corev1.ConfigMap{}, builder.WithPredicates(mdaiResourcesPredicate())).
+		Owns(&corev1.Service{}, builder.WithPredicates(mdaiResourcesPredicate())).
 		Owns(&appsv1.Deployment{}, builder.WithPredicates(mdaiResourcesPredicate())).
 		Watches(
 			// we are watching OpenTelemetryCollector resources to detect if new ones have been created
