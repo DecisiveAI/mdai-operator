@@ -12,26 +12,25 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/decisiveai/mdai-data-core/audit"
-
-	datacore "github.com/decisiveai/mdai-data-core/variables"
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/go-logr/logr"
-	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/valkey-io/valkey-go"
-	v1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	datacore "github.com/decisiveai/mdai-data-core/variables"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -45,6 +44,15 @@ const (
 	HubComponentLabel  = "mydecisive.ai/hub-component"
 	configMapTypeLabel = "mydecisive.ai/configmap-type"
 )
+
+var (
+	errUnsupportedVariableDataType   = errors.New("unsupported variable data type")
+	errUnsupportedVariableType       = errors.New("unsupported variable type")
+	errUnsupportedVariableSourceType = errors.New("unsupported variable source type")
+	errUnsupportedTransformerType    = errors.New("unsupported transformer type")
+)
+
+var _ Adapter = (*HubAdapter)(nil)
 
 type HubAdapter struct {
 	mdaiCR                  *mdaiv1.MdaiHub
@@ -62,7 +70,7 @@ func NewHubAdapter(
 	cr *mdaiv1.MdaiHub,
 	log logr.Logger,
 	zapLogger *zap.Logger,
-	client client.Client,
+	k8sClient client.Client,
 	recorder record.EventRecorder,
 	scheme *runtime.Scheme,
 	valkeyClient valkey.Client,
@@ -71,7 +79,7 @@ func NewHubAdapter(
 	return &HubAdapter{
 		mdaiCR:                  cr,
 		logger:                  log,
-		client:                  client,
+		client:                  k8sClient,
 		recorder:                recorder,
 		scheme:                  scheme,
 		valKeyClient:            valkeyClient,
@@ -82,37 +90,37 @@ func NewHubAdapter(
 }
 
 func (c HubAdapter) ensureFinalizerInitialized(ctx context.Context) (OperationResult, error) {
-	if !controllerutil.ContainsFinalizer(c.mdaiCR, hubFinalizer) {
-		c.logger.Info("Adding Finalizer for MdaiHub")
-		if ok := controllerutil.AddFinalizer(c.mdaiCR, hubFinalizer); !ok {
-			c.logger.Error(nil, "Failed to add finalizer into the custom resource")
-			return RequeueWithError(errors.New("failed to add finalizer " + hubFinalizer))
-		}
-
-		if err := c.client.Update(ctx, c.mdaiCR); err != nil {
-			c.logger.Error(err, "Failed to update custom resource to add finalizer")
-			return RequeueWithError(err)
-		}
-		return StopProcessing() // when finalizer is added it will trigger reconciliation
+	if controllerutil.ContainsFinalizer(c.mdaiCR, hubFinalizer) {
+		return ContinueProcessing()
 	}
-	return ContinueProcessing()
+	c.logger.Info("Adding Finalizer for MdaiHub")
+	if ok := controllerutil.AddFinalizer(c.mdaiCR, hubFinalizer); !ok {
+		c.logger.Error(nil, "Failed to add finalizer into the custom resource")
+		return RequeueWithError(errors.New("failed to add finalizer " + hubFinalizer))
+	}
+
+	if err := c.client.Update(ctx, c.mdaiCR); err != nil {
+		c.logger.Error(err, "Failed to update custom resource to add finalizer")
+		return RequeueWithError(err)
+	}
+	return StopProcessing() // when finalizer is added it will trigger reconciliation
 }
 
 func (c HubAdapter) ensureStatusInitialized(ctx context.Context) (OperationResult, error) {
-	if len(c.mdaiCR.Status.Conditions) == 0 {
-		meta.SetStatusCondition(&c.mdaiCR.Status.Conditions, metav1.Condition{Type: typeAvailableHub, Status: metav1.ConditionUnknown, Reason: "Reconciling", Message: "Starting reconciliation"})
-		if err := c.client.Status().Update(ctx, c.mdaiCR); err != nil {
-			c.logger.Error(err, "Failed to update Cluster status")
-			return RequeueWithError(err)
-		}
-		c.logger.Info("Re-queued to reconcile with updated status")
-		return StopProcessing()
+	if len(c.mdaiCR.Status.Conditions) != 0 {
+		return ContinueProcessing()
 	}
-	return ContinueProcessing()
+	meta.SetStatusCondition(&c.mdaiCR.Status.Conditions, metav1.Condition{Type: typeAvailableHub, Status: metav1.ConditionUnknown, Reason: "Reconciling", Message: "Starting reconciliation"})
+	if err := c.client.Status().Update(ctx, c.mdaiCR); err != nil {
+		c.logger.Error(err, "Failed to update Cluster status")
+		return RequeueWithError(err)
+	}
+	c.logger.Info("Re-queued to reconcile with updated status")
+	return StopProcessing()
 }
 
-// finalizeHub handles the deletion of a hub
-func (c HubAdapter) finalizeHub(ctx context.Context) (ObjectState, error) {
+// finalize handles the deletion of a hub
+func (c HubAdapter) finalize(ctx context.Context) (ObjectState, error) {
 	if !controllerutil.ContainsFinalizer(c.mdaiCR, hubFinalizer) {
 		c.logger.Info("No finalizer found")
 		return ObjectModified, nil
@@ -153,7 +161,7 @@ func (c HubAdapter) finalizeHub(ctx context.Context) (ObjectState, error) {
 	}
 
 	c.logger.Info("Removing Finalizer for Cluster after successfully perform the operations")
-	if err := c.ensureHubFinalizerDeleted(ctx); err != nil {
+	if err := c.ensureFinalizerDeleted(ctx); err != nil {
 		return ObjectUnchanged, err
 	}
 
@@ -166,8 +174,8 @@ func (c HubAdapter) finalizeHub(ctx context.Context) (ObjectState, error) {
 	return ObjectModified, nil
 }
 
-// ensureHubFinalizerDeleted removes finalizer of a Hub
-func (c HubAdapter) ensureHubFinalizerDeleted(ctx context.Context) error {
+// ensureFinalizerDeleted removes finalizer of a Hub
+func (c HubAdapter) ensureFinalizerDeleted(ctx context.Context) error {
 	c.logger.Info("Deleting Cluster Finalizer")
 	return c.deleteFinalizer(ctx, c.mdaiCR, hubFinalizer)
 }
@@ -206,8 +214,8 @@ func (c HubAdapter) ensurePrometheusAlertsSynchronized(ctx context.Context) (Ope
 		c.logger.Info("No evaluations found, skipping PrometheusRule creation")
 		if err == nil {
 			c.logger.Info("Removing existing rules")
-			if err := c.deletePrometheusRule(ctx); err != nil {
-				c.logger.Error(err, "Failed to remove existing rules")
+			if deleteErr := c.deletePrometheusRule(ctx); deleteErr != nil {
+				c.logger.Error(deleteErr, "Failed to remove existing rules")
 			}
 		}
 		return ContinueProcessing()
@@ -234,13 +242,13 @@ func (c HubAdapter) ensurePrometheusAlertsSynchronized(ctx context.Context) (Ope
 				},
 			},
 		}
-		if err := c.client.Create(ctx, prometheusRule); err != nil {
-			c.logger.Error(err, "Failed to create PrometheusRule"+defaultPrometheusRuleName, "prometheus_rule_name", defaultPrometheusRuleName)
+		if createErr := c.client.Create(ctx, prometheusRule); createErr != nil {
+			c.logger.Error(createErr, "Failed to create PrometheusRule", "prometheus_rule_name", defaultPrometheusRuleName)
 			return RequeueAfter(requeueTime, err)
 		}
-		c.logger.Info("Created new PrometheusRule:"+defaultPrometheusRuleName, "prometheus_rule_name", defaultPrometheusRuleName)
+		c.logger.Info("Created new PrometheusRule", "prometheus_rule_name", defaultPrometheusRuleName)
 	} else if err != nil {
-		c.logger.Error(err, "Failed to get PrometheusRule:"+defaultPrometheusRuleName, "prometheus_rule_name", defaultPrometheusRuleName)
+		c.logger.Error(err, "Failed to get PrometheusRule", "prometheus_rule_name", defaultPrometheusRuleName)
 		return RequeueAfter(requeueTime, err)
 	}
 
@@ -250,8 +258,7 @@ func (c HubAdapter) ensurePrometheusAlertsSynchronized(ctx context.Context) (Ope
 
 	rules := make([]prometheusv1.Rule, 0, len(evals))
 	for _, eval := range evals {
-		rule := c.composePrometheusRule(eval)
-		rules = append(rules, rule)
+		rules = append(rules, c.composePrometheusRule(eval))
 	}
 
 	prometheusRule.Spec.Groups[0].Rules = rules
@@ -263,14 +270,12 @@ func (c HubAdapter) ensurePrometheusAlertsSynchronized(ctx context.Context) (Ope
 }
 
 func (c HubAdapter) composePrometheusRule(alertingRule mdaiv1.PrometheusAlert) prometheusv1.Rule {
-	alertName := alertingRule.Name
-
 	prometheusRule := prometheusv1.Rule{
 		Expr:  alertingRule.Expr,
-		Alert: alertName,
+		Alert: alertingRule.Name,
 		For:   alertingRule.For,
 		Annotations: map[string]string{
-			"alert_name":    alertName,
+			"alert_name":    alertingRule.Name,
 			"hub_name":      c.mdaiCR.Name,
 			"current_value": "{{ $value | printf \"%.2f\" }}",
 			"expression":    alertingRule.Expr.StrVal,
@@ -306,8 +311,157 @@ func (c HubAdapter) deletePrometheusRule(ctx context.Context) error {
 	return nil
 }
 
+func (c HubAdapter) handleComputedVariable(ctx context.Context, dataAdapter *datacore.ValkeyAdapter, variable mdaiv1.Variable, envMap map[string]string) error {
+	switch variable.DataType {
+	case mdaiv1.VariableDataTypeSet:
+		valueAsSlice, err := dataAdapter.GetSetAsStringSlice(ctx, variable.Key, c.mdaiCR.Name)
+		if err != nil {
+			return err
+		}
+		c.applySetTransformation(variable, envMap, valueAsSlice)
+	case mdaiv1.VariableDataTypeString, mdaiv1.VariableDataTypeInt, mdaiv1.VariableDataTypeBoolean:
+		// int is represented as string in Valkey, we assume writer guarantee the variable type is correct
+		// boolean is represented as string in Valkey: false or true, we assume writer guarantee the variable type is correct
+		value, found, err := dataAdapter.GetString(ctx, variable.Key, c.mdaiCR.Name)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return nil
+		}
+		c.applySerializerToString(variable, envMap, value)
+
+	case mdaiv1.VariableDataTypeMap:
+		value, err := dataAdapter.GetMapAsString(ctx, variable.Key, c.mdaiCR.Name)
+		if err != nil {
+			return err
+		}
+		c.applySerializerToString(variable, envMap, value)
+	default:
+		c.logger.Error(fmt.Errorf("%w: %s", errUnsupportedVariableDataType, variable.DataType), errUnsupportedVariableDataType.Error(), "key", variable.Key)
+	}
+
+	return nil
+}
+
+func (c HubAdapter) handleMetaVariable(ctx context.Context, dataAdapter *datacore.ValkeyAdapter, variable mdaiv1.Variable, envMap map[string]string) error {
+	switch variable.DataType {
+	case mdaiv1.MetaVariableDataTypePriorityList:
+		valueAsSlice, found, err := dataAdapter.GetOrCreateMetaPriorityList(ctx, variable.Key, c.mdaiCR.Name, variable.VariableRefs)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return nil
+		}
+		c.applySetTransformation(variable, envMap, valueAsSlice)
+	case mdaiv1.MetaVariableDataTypeHashSet:
+		value, found, err := dataAdapter.GetOrCreateMetaHashSet(ctx, variable.Key, c.mdaiCR.Name, variable.VariableRefs[0], variable.VariableRefs[1])
+		if err != nil {
+			return err
+		}
+		if !found {
+			return nil
+		}
+		c.applySerializerToString(variable, envMap, value)
+	default:
+		c.logger.Error(fmt.Errorf("%w: %s", errUnsupportedVariableDataType, variable.DataType), errUnsupportedVariableDataType.Error(), "key", variable.Key)
+	}
+	return nil
+}
+
+func (c HubAdapter) syncValkeyVariables(ctx context.Context, envMap, manualEnvMap map[string]string, valkeyKeysToKeep map[string]struct{}) error {
+	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.zapLogger)
+
+	for _, variable := range c.mdaiCR.Spec.Variables {
+		c.logger.Info("Processing variable", "key", variable.Key)
+
+		if variable.StorageType != mdaiv1.VariableSourceTypeBuiltInValkey {
+			c.logger.Error(fmt.Errorf("%w: %s", errUnsupportedVariableSourceType, variable.StorageType), errUnsupportedVariableSourceType.Error(), "key", variable.Key)
+			continue
+		}
+
+		key := variable.Key
+		valkeyKeysToKeep[key] = struct{}{}
+
+		switch variable.Type {
+		case mdaiv1.VariableTypeManual:
+			manualEnvMap[key] = string(variable.DataType)
+			fallthrough
+		case mdaiv1.VariableTypeComputed:
+			if err := c.handleComputedVariable(ctx, dataAdapter, variable, envMap); err != nil {
+				return err
+			}
+		case mdaiv1.VariableTypeMeta:
+			if err := c.handleMetaVariable(ctx, dataAdapter, variable, envMap); err != nil {
+				return err
+			}
+		default:
+			c.logger.Error(fmt.Errorf("%w: %s", errUnsupportedVariableType, variable.Type), errUnsupportedVariableType.Error(), "key", variable.Key)
+			continue
+		}
+	}
+	return nil
+}
+
+func (c HubAdapter) restartCollectorAndAudit(ctx context.Context, collector v1beta1.OpenTelemetryCollector, envMap map[string]string) error {
+	c.logger.Info("Triggering restart of OpenTelemetry Collector", "name", collector.Name)
+
+	collectorCopy := collector.DeepCopy()
+	if collectorCopy.Annotations == nil {
+		collectorCopy.Annotations = make(map[string]string)
+	}
+	collectorCopy.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+
+	if err := c.client.Update(ctx, collectorCopy); err != nil {
+		if apierrors.IsConflict(err) {
+			c.logger.Info("Conflict while updating OpenTelemetry Collector, will retry", "name", collectorCopy.Name)
+			return nil // let controller requeue naturally
+		}
+		return err
+	}
+
+	auditAdapter := audit.NewAuditAdapter(c.zapLogger, c.valKeyClient, c.valkeyAuditStreamExpiry)
+	restartEvent := auditAdapter.CreateRestartEvent(c.mdaiCR.Name, envMap)
+	logFields := []any{"mdai-logstream", "audit"}
+	for k, v := range restartEvent {
+		logFields = append(logFields, k, v)
+	}
+	c.logger.Info("AUDIT: Triggering restart of OpenTelemetry Collector", logFields...)
+	return auditAdapter.InsertAuditLogEventFromMap(ctx, restartEvent)
+}
+
+func (c HubAdapter) syncComputedConfigMapsAndRestart(ctx context.Context, envMap map[string]string) (OperationResult, error) {
+	collectors, err := c.listOtelCollectorsWithLabel(ctx, fmt.Sprintf("%s=%s", LabelMdaiHubName, c.mdaiCR.Name))
+	if err != nil {
+		return RequeueWithError(err)
+	}
+
+	// determine which namespaces to restart
+	namespaceToRestart := map[string]struct{}{}
+	for _, collector := range collectors {
+		result, _, err := c.createOrUpdateEnvConfigMap(ctx, envMap, envConfigMapNamePostfix, collector.Namespace)
+		if err != nil {
+			return RequeueWithError(err)
+		}
+		if result == controllerutil.OperationResultCreated || result == controllerutil.OperationResultUpdated {
+			namespaceToRestart[collector.Namespace] = struct{}{}
+		}
+	}
+
+	// trigger restarts
+	for _, collector := range collectors {
+		if _, shouldRestart := namespaceToRestart[collector.Namespace]; shouldRestart {
+			if err := c.restartCollectorAndAudit(ctx, collector, envMap); err != nil {
+				return RequeueWithError(err)
+			}
+		}
+	}
+	return ContinueProcessing()
+}
+
 //nolint:gocyclo // TODO refactor later
-func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, error) {
+func (c HubAdapter) ensureVariableSynchronized(ctx context.Context) (OperationResult, error) {
 	// current assumption is we have only built-in Valkey storage
 	variables := c.mdaiCR.Spec.Variables
 	if variables == nil {
@@ -319,7 +473,12 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 	manualEnvMap := make(map[string]string)
 	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.zapLogger)
 	valkeyKeysToKeep := map[string]struct{}{}
-	for _, variable := range variables {
+
+	if err := c.syncValkeyVariables(ctx, envMap, manualEnvMap, valkeyKeysToKeep); err != nil {
+		return RequeueWithError(err)
+	}
+
+	/*for _, variable := range variables {
 		c.logger.Info(fmt.Sprintf("Processing variable: %s", variable.Key))
 		switch variable.StorageType {
 		case mdaiv1.VariableSourceTypeBuiltInValkey:
@@ -356,7 +515,7 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 					}
 					c.applySerializerToString(variable, envMap, value)
 				default:
-					c.logger.Error(fmt.Errorf("unsupported variable data type: %s", variable.DataType), "key", variable.Key)
+					c.logger.Error(fmt.Errorf("%w: %s", errUnsupportedVariableDataType, variable.DataType), errUnsupportedVariableDataType.Error(), "key", variable.Key)
 					continue
 				}
 			case mdaiv1.VariableTypeMeta:
@@ -380,40 +539,44 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 					}
 					c.applySerializerToString(variable, envMap, value)
 				default:
-					c.logger.Error(fmt.Errorf("unsupported variable data type: %s", variable.DataType), "key", variable.Key)
+					c.logger.Error(fmt.Errorf("%w: %s", errUnsupportedVariableDataType, variable.DataType), errUnsupportedVariableDataType.Error(), "key", variable.Key)
+					continue
 				}
 			default:
-				c.logger.Error(fmt.Errorf("unsupported variable type: %s", variable.Type), "key", variable.Key)
+				c.logger.Error(fmt.Errorf("%w: %s", errUnsupportedVariableType, variable.Type), errUnsupportedVariableType.Error(), "key", variable.Key)
 				continue
 			}
 		default:
-			c.logger.Error(fmt.Errorf("unsupported variable source type: %s", variable.StorageType), "key", variable.Key)
+			c.logger.Error(fmt.Errorf("%w: %s", errUnsupportedVariableSourceType, variable.StorageType), errUnsupportedVariableSourceType.Error(), "key", variable.Key)
 			continue
 		}
-	}
+	}*/
 
 	c.logger.Info("Deleting old valkey keys", "valkeyKeysToKeep", valkeyKeysToKeep)
 	if err := dataAdapter.DeleteKeysWithPrefixUsingScan(ctx, valkeyKeysToKeep, c.mdaiCR.Name); err != nil {
-		return OperationResult{}, err
+		return RequeueOnErrorOrContinue(err)
 	}
 
-	// manual variables: we need  one ConfigMap for hub in hub's namespace
+	// manual variables: we need one ConfigMap for hub in hub's namespace
 	if len(manualEnvMap) == 0 {
 		c.logger.Info("No manual variables defined in the MDAI CR", "name", c.mdaiCR.Name)
 		if err := c.deleteEnvConfigMap(ctx, manualEnvConfigMapNamePostfix, c.mdaiCR.Namespace); err != nil {
-			c.logger.Error(err, "Failed to delete manual variables ConfigMap", "name", c.mdaiCR.Name)
-			return OperationResult{}, err
+			c.logger.Error(err, "Failed to delete manual variables ConfigMap", "name", c.mdaiCR.Name, "namespace", c.mdaiCR.Namespace)
+			return RequeueOnErrorOrContinue(err)
 		}
 	} else {
-		_, err := c.createOrUpdateEnvConfigMap(ctx, manualEnvMap, manualEnvConfigMapNamePostfix, c.mdaiCR.Namespace, true)
+		_, cm, err := c.createOrUpdateEnvConfigMap(ctx, manualEnvMap, manualEnvConfigMapNamePostfix, c.mdaiCR.Namespace)
 		if err != nil {
-			return OperationResult{}, err
+			return RequeueOnErrorOrContinue(err)
+		}
+		if err := c.ensureControllerRef(cm); err != nil {
+			return RequeueOnErrorOrContinue(err)
 		}
 	}
 
-	collectors, err := c.listOtelCollectorsWithLabel(ctx, fmt.Sprintf("%s=%s", LabelMdaiHubName, c.mdaiCR.Name))
+	/*collectors, err := c.listOtelCollectorsWithLabel(ctx, fmt.Sprintf("%s=%s", LabelMdaiHubName, c.mdaiCR.Name))
 	if err != nil {
-		return OperationResult{}, err
+		return RequeueOnErrorOrContinue(err)
 	}
 
 	// assuming collectors could be running in different namespaces, so we need to update envConfigMap in each namespace
@@ -427,50 +590,58 @@ func (c HubAdapter) ensureVariableSynced(ctx context.Context) (OperationResult, 
 		// computed variables
 		operationResultComputed, err := c.createOrUpdateEnvConfigMap(ctx, envMap, envConfigMapNamePostfix, namespace, false)
 		if err != nil {
-			return OperationResult{}, err
+			return RequeueOnErrorOrContinue(err)
 		}
 		if operationResultComputed == controllerutil.OperationResultCreated || operationResultComputed == controllerutil.OperationResultUpdated {
 			namespaceToRestart[namespace] = struct{}{}
 		}
 	}
+
 	auditAdapter := audit.NewAuditAdapter(c.zapLogger, c.valKeyClient, c.valkeyAuditStreamExpiry)
 
 	for _, collector := range collectors {
-		if _, shouldRestart := namespaceToRestart[collector.Namespace]; shouldRestart {
-			c.logger.Info("Triggering restart of OpenTelemetry Collector", "name", collector.Name)
-			collectorCopy := collector.DeepCopy()
-			if collectorCopy.Annotations == nil {
-				collectorCopy.Annotations = make(map[string]string)
-			}
-			collectorCopy.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+		if _, shouldRestart := namespaceToRestart[collector.Namespace]; !shouldRestart {
+			continue
+		}
+		c.logger.Info("Triggering restart of OpenTelemetry Collector", "name", collector.Name)
+		collectorCopy := collector.DeepCopy()
+		if collectorCopy.Annotations == nil {
+			collectorCopy.Annotations = make(map[string]string)
+		}
+		collectorCopy.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
 
-			if err := c.client.Update(ctx, collectorCopy); err != nil {
-				if apierrors.IsConflict(err) {
-					c.logger.Info("Conflict while updating OpenTelemetry Collector, will retry", "name", collectorCopy.Name)
-					return RequeueAfter(requeueTime, nil)
-				}
-				c.logger.Error(err, "Failed to update OpenTelemetry Collector", "name", collectorCopy.Name)
-				return OperationResult{}, err
+		if err := c.client.Update(ctx, collectorCopy); err != nil {
+			if apierrors.IsConflict(err) {
+				c.logger.Info("Conflict while updating OpenTelemetry Collector, will retry", "name", collectorCopy.Name)
+				return RequeueAfter(requeueTime, nil)
 			}
+			c.logger.Error(err, "Failed to update OpenTelemetry Collector", "name", collectorCopy.Name)
+			return RequeueOnErrorOrContinue(err)
+		}
 
-			restartEvent := auditAdapter.CreateRestartEvent(c.mdaiCR.Name, envMap)
-			restartEventKeyValsForLog := []any{"mdai-logstream", "audit"}
-			for key, val := range restartEvent {
-				restartEventKeyValsForLog = append(restartEventKeyValsForLog, key, val)
-			}
-			c.logger.Info("AUDIT: Triggering restart of OpenTelemetry Collector", restartEventKeyValsForLog...)
-			if err := auditAdapter.InsertAuditLogEventFromMap(ctx, restartEvent); err != nil {
-				return OperationResult{}, err
-			}
+		restartEvent := auditAdapter.CreateRestartEvent(c.mdaiCR.Name, envMap)
+		restartEventKeyValsForLog := []any{"mdai-logstream", "audit"}
+		for key, val := range restartEvent {
+			restartEventKeyValsForLog = append(restartEventKeyValsForLog, key, val)
+		}
+		c.logger.Info("AUDIT: Triggering restart of OpenTelemetry Collector", restartEventKeyValsForLog...)
+		if err := auditAdapter.InsertAuditLogEventFromMap(ctx, restartEvent); err != nil {
+			return RequeueOnErrorOrContinue(err)
 		}
 	}
 
 	return ContinueProcessing()
+	*/
+
+	return c.syncComputedConfigMapsAndRestart(ctx, envMap)
 }
 
 func (c HubAdapter) applySerializerToString(variable mdaiv1.Variable, envMap map[string]string, value string) {
 	for _, serializer := range variable.SerializeAs {
 		exportedVariableName := serializer.Name
+		if _, exists := envMap[exportedVariableName]; exists {
+			c.logger.Info("Serializer configuration overrides existing configuration", "exportedVariableName", exportedVariableName)
+		}
 		envMap[exportedVariableName] = value
 	}
 }
@@ -495,7 +666,7 @@ func (c HubAdapter) applySetTransformation(variable mdaiv1.Variable, envMap map[
 				variableWithDelimiter := strings.Join(valueAsSlice, delimiter)
 				envMap[exportedVariableName] = variableWithDelimiter
 			default:
-				c.logger.Error(fmt.Errorf("unsupported Transformer type: %s", transformer.Type), "exportedVariableName", exportedVariableName)
+				c.logger.Error(fmt.Errorf("%w: %s", errUnsupportedTransformerType, transformer.Type), errUnsupportedTransformerType.Error(), "exportedVariableName", exportedVariableName)
 			}
 		}
 	}
@@ -506,7 +677,7 @@ func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (Operatio
 		c.logger.Info("No automations defined in the MDAI CR", "name", c.mdaiCR.Name)
 		if err := c.deleteEnvConfigMap(ctx, automationConfigMapNamePostfix, c.mdaiCR.Namespace); err != nil {
 			c.logger.Error(err, "Failed to delete automations ConfigMap", "name", c.mdaiCR.Name)
-			return OperationResult{}, err
+			return RequeueOnErrorOrContinue(err)
 		}
 		return ContinueProcessing()
 	}
@@ -520,18 +691,31 @@ func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (Operatio
 		}
 		automationMap[key] = string(workflowJSON)
 	}
-	operationResult, err := c.createOrUpdateEnvConfigMap(ctx, automationMap, automationConfigMapNamePostfix, c.mdaiCR.Namespace, true) // TODO trigger reload of configmap at event hub through some API
-	c.logger.Info(fmt.Sprintf("Successfully %s ConfigMap for automations", operationResult), "name", c.mdaiCR.Name)
+	_, cm, err := c.createOrUpdateEnvConfigMap(ctx, automationMap, automationConfigMapNamePostfix, c.mdaiCR.Namespace)
 	if err != nil {
-		return OperationResult{}, err
+		return RequeueOnErrorOrContinue(err)
 	}
+	if err := c.ensureControllerRef(cm); err != nil {
+		return RequeueOnErrorOrContinue(err)
+	}
+
 	return ContinueProcessing()
+}
+
+func (c HubAdapter) ensureSynchronized(ctx context.Context) (OperationResult, error) {
+	if operationResult, err := c.ensurePrometheusAlertsSynchronized(ctx); err != nil {
+		return operationResult, err
+	}
+	if operationResult, err := c.ensureAutomationsSynchronized(ctx); err != nil {
+		return operationResult, err
+	}
+	return c.ensureVariableSynchronized(ctx)
 }
 
 func (c HubAdapter) deleteEnvConfigMap(ctx context.Context, postfix string, namespace string) error {
 	configMapName := c.mdaiCR.Name + postfix
 	c.logger.Info("Deleting ConfigMap", "name", configMapName, "namespace", namespace)
-	configMap := &v1.ConfigMap{
+	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configMapName,
 			Namespace: namespace,
@@ -549,9 +733,9 @@ func (c HubAdapter) deleteEnvConfigMap(ctx context.Context, postfix string, name
 	return nil
 }
 
-func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, configMapPostfix string, namespace string, setControllerRef bool) (controllerutil.OperationResult, error) {
+func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[string]string, configMapPostfix string, namespace string) (controllerutil.OperationResult, *corev1.ConfigMap, error) {
 	envConfigMapName := c.mdaiCR.Name + configMapPostfix
-	desiredConfigMap := &v1.ConfigMap{
+	desiredConfigMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      envConfigMapName,
 			Namespace: namespace,
@@ -562,13 +746,6 @@ func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[s
 			},
 		},
 	}
-	// we are setting an owner reference here if we need one configmap for a specific Hub in the Hub namespace
-	if setControllerRef {
-		if err := controllerutil.SetControllerReference(c.mdaiCR, desiredConfigMap, c.scheme); err != nil {
-			c.logger.Error(err, "Failed to set owner reference on "+envConfigMapName+" ConfigMap", "configmap", envConfigMapName)
-			return controllerutil.OperationResultNone, err
-		}
-	}
 
 	// we are not setting an owner reference here as we want to allow config maps being deployed across namespaces
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, desiredConfigMap, func() error {
@@ -577,11 +754,15 @@ func (c HubAdapter) createOrUpdateEnvConfigMap(ctx context.Context, envMap map[s
 	})
 	if err != nil {
 		c.logger.Error(err, "Failed to create or update ConfigMap", "name", envConfigMapName, "namespace", namespace)
-		return controllerutil.OperationResultNone, fmt.Errorf("failed to create or update ConfigMap: %w", err)
+		return controllerutil.OperationResultNone, nil, fmt.Errorf("failed to create or update ConfigMap: %w", err)
 	}
 
 	c.logger.Info("Successfully created or updated ConfigMap", "name", envConfigMapName, "namespace", namespace, "operation", operationResult)
-	return operationResult, nil
+	return operationResult, desiredConfigMap, nil
+}
+
+func (c HubAdapter) ensureControllerRef(cm *corev1.ConfigMap) error {
+	return controllerutil.SetControllerReference(c.mdaiCR, cm, c.scheme)
 }
 
 func (c HubAdapter) listOtelCollectorsWithLabel(ctx context.Context, labelSelector string) ([]v1beta1.OpenTelemetryCollector, error) {
@@ -603,25 +784,25 @@ func (c HubAdapter) listOtelCollectorsWithLabel(ctx context.Context, labelSelect
 	return collectorList.Items, nil
 }
 
-// ensureHubDeletionProcessed deletes Cluster in cases a deletion was triggered
-func (c HubAdapter) ensureHubDeletionProcessed(ctx context.Context) (OperationResult, error) {
-	if !c.mdaiCR.DeletionTimestamp.IsZero() {
-		c.logger.Info("Deleting Cluster:" + c.mdaiCR.Name)
-		crState, err := c.finalizeHub(ctx)
-		if crState == ObjectUnchanged || err != nil {
-			c.logger.Info("Has to requeue mdai")
-			return RequeueAfter(5*time.Second, err)
-		}
-		return StopProcessing()
+// ensureDeletionProcessed deletes Hub in cases a deletion was triggered
+func (c HubAdapter) ensureDeletionProcessed(ctx context.Context) (OperationResult, error) {
+	if c.mdaiCR.DeletionTimestamp.IsZero() {
+		return ContinueProcessing()
 	}
-	return ContinueProcessing()
+	c.logger.Info("Deleting Hub:" + c.mdaiCR.Name)
+	crState, err := c.finalize(ctx)
+	if crState == ObjectUnchanged || err != nil {
+		c.logger.Info("Has to requeue mdai")
+		return RequeueAfter(5*time.Second, err)
+	}
+	return StopProcessing()
 }
 
 func int32Ptr(i int32) *int32 {
 	return &i
 }
 
-func getConfigMapSHA(config v1.ConfigMap) (string, error) {
+func getConfigMapSHA(config corev1.ConfigMap) (string, error) {
 	data, err := json.Marshal(config)
 	if err != nil {
 		return "", err

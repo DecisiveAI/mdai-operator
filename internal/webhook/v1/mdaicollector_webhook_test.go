@@ -1,13 +1,12 @@
 package v1
 
 import (
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
 
 func createTestMdaiCollector() *mdaiv1.MdaiCollector {
@@ -63,6 +62,7 @@ var _ = Describe("MdaiCollector Webhook", func() {
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 		})
+
 		It("Should deny creation if name is something else funky", func() {
 			By("simulating an invalid creation scenario")
 			obj := createTestMdaiCollector()
@@ -70,6 +70,7 @@ var _ = Describe("MdaiCollector Webhook", func() {
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 		})
+
 		It("Should deny creation if a required AWSConfig field is missing but s3 config is present", func() {
 			By("simulating an invalid creation scenario")
 			obj := createTestMdaiCollector()
@@ -77,6 +78,7 @@ var _ = Describe("MdaiCollector Webhook", func() {
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 		})
+
 		It("Should deny update if a required AWSConfig field is missing but s3 config is present", func() {
 			By("simulating an invalid creation scenario")
 			oldObj := createTestMdaiCollector()
@@ -148,5 +150,4 @@ var _ = Describe("MdaiCollector Webhook", func() {
 			Expect(warnings).To(Equal(admission.Warnings{}))
 		})
 	})
-
 })

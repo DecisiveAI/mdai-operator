@@ -2,17 +2,18 @@ package v1
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var (
@@ -55,7 +56,7 @@ type MdaiCollectorCustomValidator struct {
 }
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type MdaiCollector.
-func (v *MdaiCollectorCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *MdaiCollectorCustomValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	mdaicollector, ok := obj.(*mdaiv1.MdaiCollector)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiCollector object but got %T", obj)
@@ -66,7 +67,7 @@ func (v *MdaiCollectorCustomValidator) ValidateCreate(ctx context.Context, obj r
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type MdaiCollector.
-func (v *MdaiCollectorCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (v *MdaiCollectorCustomValidator) ValidateUpdate(_ context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
 	mdaicollector, ok := newObj.(*mdaiv1.MdaiCollector)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiCollector object for the newObj but got %T", newObj)
@@ -77,7 +78,7 @@ func (v *MdaiCollectorCustomValidator) ValidateUpdate(ctx context.Context, oldOb
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type MdaiCollector.
-func (v *MdaiCollectorCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *MdaiCollectorCustomValidator) ValidateDelete(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	mdaicollector, ok := obj.(*mdaiv1.MdaiCollector)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiCollector object but got %T", obj)
@@ -88,7 +89,6 @@ func (v *MdaiCollectorCustomValidator) ValidateDelete(ctx context.Context, obj r
 }
 
 func ValidateName(name string) bool {
-
 	if len(name) < 1 || len(name) > 32 {
 		return false
 	}
@@ -100,7 +100,7 @@ func (v *MdaiCollectorCustomValidator) Validate(mdaiCollector *mdaiv1.MdaiCollec
 	warnings := admission.Warnings{}
 
 	if mdaiCollector == nil {
-		return warnings, fmt.Errorf("expected a MdaiCollector object but got nil")
+		return warnings, errors.New("expected a MdaiCollector object but got nil")
 	}
 
 	if !ValidateName(mdaiCollector.Name) {
@@ -112,84 +112,86 @@ func (v *MdaiCollectorCustomValidator) Validate(mdaiCollector *mdaiv1.MdaiCollec
 	logsConfigPtr := spec.Logs
 	awsConfigPtr := spec.AWSConfig
 
-	if logsConfigPtr != nil {
-		s3Warnings, err := v.validateS3LogsConfig(logsConfigPtr.S3, warnings, awsConfigPtr)
-		warnings = append(warnings, s3Warnings...)
-		if err != nil {
-			return warnings, err
-		}
+	if logsConfigPtr == nil {
+		return append(warnings, "logs configuration not present in MDAI Collector spec"), nil
+	}
 
-		otlpWarnings, err := v.validateOtlpLogsConfig(logsConfigPtr, warnings)
-		warnings = append(warnings, otlpWarnings...)
-		if err != nil {
-			return warnings, err
-		}
-	} else {
-		warnings = append(warnings, "logs configuration not present in MDAI Collector spec")
+	s3Warnings, err := v.validateS3LogsConfig(logsConfigPtr.S3, awsConfigPtr)
+	warnings = append(warnings, s3Warnings...)
+	if err != nil {
+		return warnings, err
+	}
+
+	otlpWarnings, err := v.validateOtlpLogsConfig(logsConfigPtr)
+	warnings = append(warnings, otlpWarnings...)
+	if err != nil {
+		return warnings, err
 	}
 
 	return warnings, nil
 }
 
-func (v *MdaiCollectorCustomValidator) validateS3LogsConfig(
-	s3LogsConfigPtr *mdaiv1.S3LogsConfig,
-	warnings admission.Warnings,
-	awsConfigPtr *mdaiv1.AWSConfig,
+func (*MdaiCollectorCustomValidator) validateS3LogsConfig(
+	s3LogsConfig *mdaiv1.S3LogsConfig,
+	awsConfig *mdaiv1.AWSConfig,
 ) (admission.Warnings, error) {
-	if s3LogsConfigPtr != nil {
-		if awsConfigPtr == nil {
-			return warnings, fmt.Errorf("got s3 logs configuration, but AWSConfig not specified; cannot write logs to s3 without access secret")
-		}
-		s3LogsConfig := *s3LogsConfigPtr
-		if s3LogsConfig.S3Bucket == "" {
-			return warnings, fmt.Errorf("s3 logs configuration given but s3Bucket not specified; cannot write logs to s3")
-		}
-		if s3LogsConfig.S3Region == "" {
-			return warnings, fmt.Errorf("s3 logs configuration given but s3Region not specified; cannot write logs to s3")
-		}
-		if s3LogsConfig.AuditLogs != nil && s3LogsConfig.AuditLogs.Disabled {
-			warnings = append(warnings, "s3 audit logs disabled, hub audit events will not be recorded to s3!")
-		}
-		if s3LogsConfig.CollectorLogs != nil && s3LogsConfig.CollectorLogs.MinSeverity != nil && !slices.Contains(validSeverityLevels, *s3LogsConfig.CollectorLogs.MinSeverity) {
-			return warnings, fmt.Errorf("s3 logs configuration for collector logs logstream has an invalid minSeverity: %s. Valid options are: %s", *s3LogsConfig.CollectorLogs.MinSeverity, validSeverityLevels)
-		}
-		if s3LogsConfig.HubLogs != nil && s3LogsConfig.HubLogs.MinSeverity != nil && !slices.Contains(validSeverityLevels, *s3LogsConfig.HubLogs.MinSeverity) {
-			return warnings, fmt.Errorf("s3 logs configuration for hub logs logstream has an invalid minSeverity: %s. Valid options are: %s", *s3LogsConfig.HubLogs.MinSeverity, validSeverityLevels)
-		}
-		if s3LogsConfig.OtherLogs != nil && s3LogsConfig.OtherLogs.MinSeverity != nil && !slices.Contains(validSeverityLevels, *s3LogsConfig.OtherLogs.MinSeverity) {
-			return warnings, fmt.Errorf("s3 logs configuration for other logs logstream has an invalid minSeverity: %s. Valid options are: %s", *s3LogsConfig.OtherLogs.MinSeverity, validSeverityLevels)
-		}
+	var warnings admission.Warnings
+	if s3LogsConfig == nil {
+		return warnings, nil
 	}
-
-	var accessKeySecretPtr *string
-	if awsConfigPtr != nil {
-		accessKeySecretPtr = awsConfigPtr.AWSAccessKeySecret
+	if awsConfig == nil {
+		return warnings, errors.New("got s3 logs configuration, but AWSConfig not specified; cannot write logs to s3 without access secret")
 	}
-
-	if accessKeySecretPtr == nil && s3LogsConfigPtr != nil {
-		return warnings, fmt.Errorf("got s3 logs configuration, but awsConfig.accessKeySecret not specified; cannot write logs to s3 without access secret")
+	if s3LogsConfig.S3Bucket == "" {
+		return warnings, errors.New("s3 logs configuration given but s3Bucket not specified; cannot write logs to s3")
+	}
+	if s3LogsConfig.S3Region == "" {
+		return warnings, errors.New("s3 logs configuration given but s3Region not specified; cannot write logs to s3")
+	}
+	if s3LogsConfig.AuditLogs != nil && s3LogsConfig.AuditLogs.Disabled {
+		warnings = append(warnings, "s3 audit logs disabled, hub audit events will not be recorded to s3!")
+	}
+	if c := s3LogsConfig.CollectorLogs; c != nil && c.MinSeverity != nil && !slices.Contains(validSeverityLevels, *c.MinSeverity) {
+		return warnings, invalidSeverityError("collector logs", *c.MinSeverity)
+	}
+	if h := s3LogsConfig.HubLogs; h != nil && h.MinSeverity != nil && !slices.Contains(validSeverityLevels, *h.MinSeverity) {
+		return warnings, invalidSeverityError("hub logs", *h.MinSeverity)
+	}
+	if o := s3LogsConfig.OtherLogs; o != nil && o.MinSeverity != nil && !slices.Contains(validSeverityLevels, *o.MinSeverity) {
+		return warnings, invalidSeverityError("other logs", *o.MinSeverity)
+	}
+	if awsConfig.AWSAccessKeySecret == nil {
+		return warnings, errors.New("got s3 logs configuration, but awsConfig.accessKeySecret not specified; cannot write logs to s3 without access secret")
 	}
 	return warnings, nil
 }
 
-func (v *MdaiCollectorCustomValidator) validateOtlpLogsConfig(logsConfigPtr *mdaiv1.LogsConfig, warnings admission.Warnings) (admission.Warnings, error) {
-	if logsConfigPtr.Otlp != nil {
-		otlpConfig := *logsConfigPtr.Otlp
-		if otlpConfig.Endpoint == "" {
-			return warnings, fmt.Errorf("OTLP logs configuration present but endpoint field is empty. Cannot send logs over OTLP")
-		}
-		if otlpConfig.AuditLogs != nil && otlpConfig.AuditLogs.Disabled {
-			warnings = append(warnings, "OTLP audit logs disabled, hub audit events will not be recorded to OTLP!")
-		}
-		if otlpConfig.CollectorLogs != nil && otlpConfig.CollectorLogs.MinSeverity != nil && !slices.Contains(validSeverityLevels, *otlpConfig.CollectorLogs.MinSeverity) {
-			return warnings, fmt.Errorf("OTLP logs configuration for collector logs logstream has an invalid minSeverity: %s. Valid options are: %s", *otlpConfig.CollectorLogs.MinSeverity, validSeverityLevels)
-		}
-		if otlpConfig.HubLogs != nil && otlpConfig.HubLogs.MinSeverity != nil && !slices.Contains(validSeverityLevels, *otlpConfig.HubLogs.MinSeverity) {
-			return warnings, fmt.Errorf("OTLP logs configuration for hub logs logstream has an invalid minSeverity: %s. Valid options are: %s", *otlpConfig.HubLogs.MinSeverity, validSeverityLevels)
-		}
-		if otlpConfig.OtherLogs != nil && otlpConfig.OtherLogs.MinSeverity != nil && !slices.Contains(validSeverityLevels, *otlpConfig.OtherLogs.MinSeverity) {
-			return warnings, fmt.Errorf("OTLP logs configuration for other logs logstream has an invalid minSeverity: %s. Valid options are: %s", *otlpConfig.OtherLogs.MinSeverity, validSeverityLevels)
-		}
+func (*MdaiCollectorCustomValidator) validateOtlpLogsConfig(logsConfig *mdaiv1.LogsConfig) (admission.Warnings, error) {
+	var warnings admission.Warnings
+	if logsConfig.Otlp == nil {
+		return warnings, nil
 	}
+
+	otlpConfig := *logsConfig.Otlp
+	if otlpConfig.Endpoint == "" {
+		return warnings, errors.New("OTLP logs configuration present but endpoint field is empty. Cannot send logs over OTLP")
+	}
+	if otlpConfig.AuditLogs != nil && otlpConfig.AuditLogs.Disabled {
+		warnings = append(warnings, "OTLP audit logs disabled, hub audit events will not be recorded to OTLP!")
+	}
+	if c := otlpConfig.CollectorLogs; c != nil && c.MinSeverity != nil && !slices.Contains(validSeverityLevels, *c.MinSeverity) {
+		return warnings, invalidSeverityError("collector logs", *c.MinSeverity)
+	}
+	if h := otlpConfig.HubLogs; h != nil && h.MinSeverity != nil && !slices.Contains(validSeverityLevels, *h.MinSeverity) {
+		return warnings, invalidSeverityError("hub logs", *h.MinSeverity)
+	}
+	if o := otlpConfig.OtherLogs; o != nil && o.MinSeverity != nil && !slices.Contains(validSeverityLevels, *o.MinSeverity) {
+		return warnings, invalidSeverityError("other logs", *o.MinSeverity)
+	}
+
 	return warnings, nil
+}
+
+func invalidSeverityError(logstream string, severity mdaiv1.SeverityLevel) error {
+	return fmt.Errorf("s3 logs configuration for %s logstream has an invalid minSeverity: %s. Valid options are: %v", logstream, severity, validSeverityLevels)
 }

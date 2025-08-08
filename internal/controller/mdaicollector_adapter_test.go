@@ -5,23 +5,23 @@ import (
 	"fmt"
 	"testing"
 
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1core "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	v1 "github.com/decisiveai/mdai-operator/api/v1"
-	"github.com/stretchr/testify/assert"
-	"k8s.io/utils/ptr"
 )
 
-func newFakeClientForCollectorCR(cr *v1.MdaiCollector, scheme *runtime.Scheme) client.Client {
+func newFakeClientForCollectorCR(cr *mdaiv1.MdaiCollector, scheme *runtime.Scheme) client.Client {
 	return fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(cr).
@@ -34,22 +34,22 @@ func createTestSchemeForMdaiCollector() *runtime.Scheme {
 	_ = v1core.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = prometheusv1.AddToScheme(scheme)
-	_ = v1.AddToScheme(scheme)
+	_ = mdaiv1.AddToScheme(scheme)
 	return scheme
 }
 
 func TestGetS3ExporterForLogstream(t *testing.T) {
 	testCases := []struct {
 		hubName                string
-		logstream              v1.MDAILogStream
-		s3LogsConfig           v1.S3LogsConfig
+		logstream              mdaiv1.MDAILogStream
+		s3LogsConfig           mdaiv1.S3LogsConfig
 		expectedExporterName   string
 		expectedExporterConfig s3ExporterConfig
 	}{
 		{
 			hubName:   "test-hub",
-			logstream: v1.CollectorLogstream,
-			s3LogsConfig: v1.S3LogsConfig{
+			logstream: mdaiv1.CollectorLogstream,
+			s3LogsConfig: mdaiv1.S3LogsConfig{
 				S3Region: "uesc-marathon-7",
 				S3Bucket: "whoa-bucket",
 			},
@@ -66,8 +66,8 @@ func TestGetS3ExporterForLogstream(t *testing.T) {
 			},
 		}, {
 			hubName:   "inf",
-			logstream: v1.HubLogstream,
-			s3LogsConfig: v1.S3LogsConfig{
+			logstream: mdaiv1.HubLogstream,
+			s3LogsConfig: mdaiv1.S3LogsConfig{
 				S3Region: "aeiou-meh-99",
 				S3Bucket: "qwerty",
 			},
@@ -84,8 +84,8 @@ func TestGetS3ExporterForLogstream(t *testing.T) {
 			},
 		}, {
 			hubName:   "whoa",
-			logstream: v1.AuditLogstream,
-			s3LogsConfig: v1.S3LogsConfig{
+			logstream: mdaiv1.AuditLogstream,
+			s3LogsConfig: mdaiv1.S3LogsConfig{
 				S3Region: "splat",
 				S3Bucket: "hey",
 			},
@@ -102,8 +102,8 @@ func TestGetS3ExporterForLogstream(t *testing.T) {
 			},
 		}, {
 			hubName:   "heh",
-			logstream: v1.OtherLogstream,
-			s3LogsConfig: v1.S3LogsConfig{
+			logstream: mdaiv1.OtherLogstream,
+			s3LogsConfig: mdaiv1.S3LogsConfig{
 				S3Region: "okay",
 				S3Bucket: "ytho",
 			},
@@ -130,34 +130,29 @@ func TestGetS3ExporterForLogstream(t *testing.T) {
 }
 
 func TestGetPipelineWithS3Exporter(t *testing.T) {
-	cr := &v1.MdaiCollector{}
-	recorder := record.NewFakeRecorder(10)
-	scheme := createTestSchemeForMdaiCollector()
-	adapter := NewMdaiCollectorAdapter(cr, logr.Discard(), newFakeClientForCollectorCR(cr, scheme), recorder, scheme)
-
 	testCases := []struct {
 		receiverName  string
-		severityLevel v1.SeverityLevel
+		severityLevel mdaiv1.SeverityLevel
 		exporterName  string
-		expected      map[string]any
+		expected      ConfigBlock
 	}{
 		{
 			receiverName:  "routing/logstream",
-			severityLevel: v1.WarnSeverityLevel,
+			severityLevel: mdaiv1.WarnSeverityLevel,
 			exporterName:  "awss3/collector",
-			expected: map[string]any{
+			expected: ConfigBlock{
 				"receivers":  []any{"routing/logstream"},
-				"processors": []any{severityFilterMap[v1.WarnSeverityLevel], "batch"},
+				"processors": []any{severityFilterMap[mdaiv1.WarnSeverityLevel], "batch"},
 				"exporters":  []any{"awss3/collector"},
 			},
 		},
 		{
 			receiverName:  "foobaz",
-			severityLevel: v1.InfoSeverityLevel,
+			severityLevel: mdaiv1.InfoSeverityLevel,
 			exporterName:  "awss3/hub",
-			expected: map[string]any{
+			expected: ConfigBlock{
 				"receivers":  []any{"foobaz"},
-				"processors": []any{severityFilterMap[v1.InfoSeverityLevel], "batch"},
+				"processors": []any{severityFilterMap[mdaiv1.InfoSeverityLevel], "batch"},
 				"exporters":  []any{"awss3/hub"},
 			},
 		},
@@ -165,20 +160,20 @@ func TestGetPipelineWithS3Exporter(t *testing.T) {
 
 	for idx, testCase := range testCases {
 		t.Run(fmt.Sprintf("Case %d %s", idx, testCase.exporterName), func(t *testing.T) {
-			assert.Equal(t, testCase.expected, adapter.getPipelineWithExporterAndSeverityFilter(testCase.receiverName, testCase.exporterName, ptr.To(testCase.severityLevel), "batch"))
+			assert.Equal(t, testCase.expected, getPipelineWithExporterAndSeverityFilter(testCase.receiverName, testCase.exporterName, ptr.To(testCase.severityLevel), "batch"))
 		})
 	}
 }
 
 func TestCreateOrUpdateMdaiCollectorRole(t *testing.T) {
-	cr := &v1.MdaiCollector{
+	cr := &mdaiv1.MdaiCollector{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-hub",
 			Namespace: "default",
 		},
 	}
 	scheme := createTestSchemeForMdaiCollector()
-	assert.NoError(t, rbacv1.AddToScheme(scheme))
+	require.NoError(t, rbacv1.AddToScheme(scheme))
 
 	cl := newFakeClientForCollectorCR(cr, scheme)
 	adapter := NewMdaiCollectorAdapter(cr, logr.Discard(), cl, record.NewFakeRecorder(10), scheme)
@@ -187,11 +182,11 @@ func TestCreateOrUpdateMdaiCollectorRole(t *testing.T) {
 
 	t.Run(fmt.Sprintf("creates or updates ClusterRole %q", expectedName), func(t *testing.T) {
 		name, err := adapter.createOrUpdateMdaiCollectorRole(context.Background())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, expectedName, name)
 
 		var role rbacv1.ClusterRole
-		assert.NoError(t,
+		require.NoError(t,
 			cl.Get(context.Background(), client.ObjectKey{Name: name}, &role),
 		)
 
@@ -210,14 +205,14 @@ func TestCreateOrUpdateMdaiCollectorRole(t *testing.T) {
 }
 
 func TestCreateOrUpdateMdaiCollectorRoleBinding(t *testing.T) {
-	cr := &v1.MdaiCollector{
+	cr := &mdaiv1.MdaiCollector{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-hub",
 			Namespace: "default",
 		},
 	}
 	scheme := createTestSchemeForMdaiCollector()
-	assert.NoError(t, rbacv1.AddToScheme(scheme))
+	require.NoError(t, rbacv1.AddToScheme(scheme))
 
 	cl := newFakeClientForCollectorCR(cr, scheme)
 	adapter := NewMdaiCollectorAdapter(cr, logr.Discard(), cl, record.NewFakeRecorder(10), scheme)
@@ -230,10 +225,10 @@ func TestCreateOrUpdateMdaiCollectorRoleBinding(t *testing.T) {
 
 	t.Run(fmt.Sprintf("creates/updates RoleBinding %q", expectedName), func(t *testing.T) {
 		err := adapter.createOrUpdateMdaiCollectorRoleBinding(context.Background(), namespace, roleName, saName)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		var rb rbacv1.ClusterRoleBinding
-		assert.NoError(t, cl.Get(context.Background(), client.ObjectKey{Name: expectedName}, &rb))
+		require.NoError(t, cl.Get(context.Background(), client.ObjectKey{Name: expectedName}, &rb))
 
 		assert.Equal(t, expectedName, rb.Name)
 		assert.Equal(t, map[string]string{

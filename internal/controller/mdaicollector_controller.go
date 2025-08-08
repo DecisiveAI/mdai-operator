@@ -2,21 +2,24 @@ package controller
 
 import (
 	"context"
-
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/client-go/tools/record"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logger "sigs.k8s.io/controller-runtime/pkg/log"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	ctrl "sigs.k8s.io/controller-runtime"
+	logger "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var _ Controller = (*MdaiCollectorReconciler)(nil)
 
 // MdaiCollectorReconciler reconciles a MdaiCollector object
 type MdaiCollectorReconciler struct {
 	client.Client
+
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 }
@@ -43,7 +46,7 @@ type MdaiCollectorReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.4/pkg/reconcile
 func (r *MdaiCollectorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logger.FromContext(ctx)
-	log.Info("-- Starting MdaiCollector reconciliation --")
+	log.Info("-- Starting MdaiCollector reconciliation --", "namespace", req.NamespacedName, "name", req.Name)
 
 	fetchedCR := &mdaiv1.MdaiCollector{}
 	if err := r.Get(ctx, req.NamespacedName, fetchedCR); err != nil {
@@ -57,7 +60,7 @@ func (r *MdaiCollectorReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	_, err := r.MdaiCollectorReconcileHandler(ctx, *NewMdaiCollectorAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme))
+	_, err := r.ReconcileHandler(ctx, *NewMdaiCollectorAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme))
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -67,18 +70,23 @@ func (r *MdaiCollectorReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
-func (r *MdaiCollectorReconciler) MdaiCollectorReconcileHandler(ctx context.Context, adapter MdaiCollectorAdapter) (ctrl.Result, error) {
+func (*MdaiCollectorReconciler) ReconcileHandler(ctx context.Context, adapter Adapter) (ctrl.Result, error) {
+	mdaiCollectorAdapter, ok := adapter.(MdaiCollectorAdapter)
+	if !ok {
+		return ctrl.Result{}, fmt.Errorf("unexpected adapter type: %T", adapter)
+	}
+
 	operations := []ReconcileOperation{
-		adapter.ensureMdaiCollectorDeletionProcessed,
-		adapter.ensureMdaiCollectorStatusInitialized,
-		adapter.ensureMdaiCollectorFinalizerInitialized,
-		adapter.ensureMdaiCollectorSynchronized,
-		adapter.ensureMdaiCollectorStatusSetToDone,
+		mdaiCollectorAdapter.ensureDeletionProcessed,
+		mdaiCollectorAdapter.ensureStatusInitialized,
+		mdaiCollectorAdapter.ensureFinalizerInitialized,
+		mdaiCollectorAdapter.ensureSynchronized,
+		mdaiCollectorAdapter.ensureStatusSetToDone,
 	}
 	for _, operation := range operations {
 		result, err := operation(ctx)
-		if err != nil || result.RequeueRequest {
-			return ctrl.Result{RequeueAfter: result.RequeueDelay}, err
+		if err != nil {
+			return ctrl.Result{}, err
 		}
 		if result.CancelRequest {
 			return ctrl.Result{}, nil

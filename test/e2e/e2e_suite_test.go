@@ -1,16 +1,14 @@
 package e2e
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"testing"
 	"time"
 
+	"github.com/decisiveai/mdai-operator/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/decisiveai/mdai-operator/test/utils"
 )
 
 var (
@@ -33,7 +31,7 @@ var (
 // CertManager and Prometheus.
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
-	_, _ = fmt.Fprintf(GinkgoWriter, "Starting mdai-operator integration test suite\n")
+	GinkgoWriter.Printf("Starting mdai-operator integration test suite\n")
 	RunSpecs(t, "e2e suite")
 }
 
@@ -42,7 +40,7 @@ var _ = BeforeSuite(func() {
 	_ = utils.UncommentCode("config/default/kustomization.yaml", "#- ../prometheus", "#")
 
 	By("building the manager(Operator) image")
-	cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
+	cmd := exec.Command("make", "docker-build", "IMG="+projectImage)
 	_, err := utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager(Operator) image")
 
@@ -58,36 +56,34 @@ var _ = BeforeSuite(func() {
 		By("checking if cert manager is installed already")
 		isCertManagerAlreadyInstalled = utils.IsCertManagerCRDsInstalled()
 		if !isCertManagerAlreadyInstalled {
-			_, _ = fmt.Fprintf(GinkgoWriter, "Installing CertManager...\n")
+			GinkgoWriter.Printf("Installing CertManager...\n")
 			Expect(utils.InstallCertManager()).To(Succeed(), "Failed to install CertManager")
 		} else {
-			_, _ = fmt.Fprintf(GinkgoWriter, "WARNING: CertManager is already installed. Skipping installation...\n")
+			GinkgoWriter.Printf("WARNING: CertManager is already installed. Skipping installation...\n")
 		}
 	}
 
-	_, _ = fmt.Fprintf(GinkgoWriter, "Installing Valkey...\n")
+	GinkgoWriter.Printf("Installing Valkey...\n")
 	Expect(utils.InstallValkey()).To(Succeed(), "Failed to install Valkey")
 
-	_, _ = fmt.Fprintf(GinkgoWriter, "Waiting for certificates...\n")
+	GinkgoWriter.Printf("Waiting for certificates...\n")
 	time.Sleep(15 * time.Second)
 
 	// Install Prometheus operator CRD
 	Expect(utils.InstallPrometheusOperatorCRD()).To(Succeed(), "Failed to install Prometheus Operator CRD")
 
-	_, _ = fmt.Fprintf(GinkgoWriter, "Installing OTEL...\n")
+	GinkgoWriter.Printf("Installing OTEL...\n")
 	Expect(utils.InstallOtelOperator()).To(Succeed(), "Failed to install OpenTelemetry Operator")
-
 	Expect(utils.WaitForValkeyReady()).To(Succeed(), "Failed to wait for Valkey to be ready")
 })
 
 var _ = AfterSuite(func() {
 	// Teardown CertManager after the suite if not skipped and if they were not already installed
 	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
-		_, _ = fmt.Fprintf(GinkgoWriter, "Uninstalling CertManager...\n")
+		GinkgoWriter.Printf("Uninstalling CertManager...\n")
 		utils.UninstallCertManager()
 	}
 
 	utils.UninstallOtelOperator()
 	utils.UninstallValkey()
-
 })

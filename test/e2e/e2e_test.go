@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"github.com/decisiveai/mdai-operator/internal/controller"
-
 	"github.com/decisiveai/mdai-operator/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -20,8 +20,10 @@ import (
 )
 
 // namespace where the project is deployed in
-const namespace = "mdai"
-const otelNamespace = "otel"
+const (
+	namespace     = "mdai"
+	otelNamespace = "otel"
+)
 
 // serviceAccountName created for the project
 const serviceAccountName = "mdai-operator-controller-manager"
@@ -84,7 +86,7 @@ var _ = Describe("Manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Failed to create secret")
 
 		By("deploying the controller-manager")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+		cmd = exec.Command("make", "deploy", "IMG="+projectImage)
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 	})
@@ -111,7 +113,6 @@ var _ = Describe("Manager", Ordered, func() {
 		By("removing otel namespace")
 		cmd = exec.Command("kubectl", "delete", "ns", otelNamespace)
 		_, _ = utils.Run(cmd)
-
 	})
 
 	// After each test, check for failures and collect logs, events,
@@ -123,36 +124,36 @@ var _ = Describe("Manager", Ordered, func() {
 			cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
 			controllerLogs, err := utils.Run(cmd)
 			if err == nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Controller logs:\n %s", controllerLogs)
+				GinkgoWriter.Printf("Controller logs:\n %s", controllerLogs)
 			} else {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get Controller logs: %s", err)
+				GinkgoWriter.Printf("Failed to get Controller logs: %s", err)
 			}
 
 			By("Fetching Kubernetes events")
 			cmd = exec.Command("kubectl", "get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
 			eventsOutput, err := utils.Run(cmd)
 			if err == nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Kubernetes events:\n%s", eventsOutput)
+				GinkgoWriter.Printf("Kubernetes events:\n%s", eventsOutput)
 			} else {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get Kubernetes events: %s", err)
+				GinkgoWriter.Printf("Failed to get Kubernetes events: %s", err)
 			}
 
 			By("Fetching curl-metrics logs")
 			cmd = exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
 			metricsOutput, err := utils.Run(cmd)
 			if err == nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Metrics logs:\n %s", metricsOutput)
+				GinkgoWriter.Printf("Metrics logs:\n %s", metricsOutput)
 			} else {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get curl-metrics logs: %s", err)
+				GinkgoWriter.Printf("Failed to get curl-metrics logs: %s", err)
 			}
 
 			By("Fetching controller manager pod description")
 			cmd = exec.Command("kubectl", "describe", "pod", controllerPodName, "-n", namespace)
 			podDescription, err := utils.Run(cmd)
 			if err == nil {
-				fmt.Println("Pod description:\n", podDescription)
+				GinkgoWriter.Println("Pod description:\n", podDescription)
 			} else {
-				fmt.Println("Failed to describe controller pod")
+				GinkgoWriter.Println("Failed to describe controller pod")
 			}
 		}
 	})
@@ -219,7 +220,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("waiting for the metrics endpoint to be ready")
 			verifyMetricsEndpointReady := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "endpoints", metricsServiceName, "-n", namespace)
+				cmd = exec.Command("kubectl", "get", "endpoints", metricsServiceName, "-n", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(ContainSubstring("8443"), "Metrics endpoint is not ready")
@@ -370,7 +371,6 @@ var _ = Describe("Manager", Ordered, func() {
 				))
 			}
 			Eventually(verifyMetrics, "30s", "10s").Should(Succeed())
-
 		})
 
 		It("can trigger another reconcile on managed OTEL CR created", func() {
@@ -714,7 +714,6 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(data["SEVERITY_NUMBER"]).To(Equal("1"))
 				g.Expect(data["SERVICE_LIST_REGEX_MANUAL"]).To(Equal(""))
 				g.Expect(data["SERVICE_LIST_CSV_MANUAL"]).To(Equal(""))
-
 			}
 			Eventually(verifyConfigMap).Should(Succeed())
 
@@ -756,7 +755,7 @@ var _ = Describe("Manager", Ordered, func() {
 				out, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				var result struct {
-					Items []interface{} `json:"items"`
+					Items []any `json:"items"`
 				}
 				err = json.Unmarshal([]byte(out), &result)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -769,7 +768,6 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("validating all related observers are deleted")
 			// TODO
-
 		})
 
 		It("can delete MdaiCollector CRs and clean up resources", func() {
@@ -783,7 +781,6 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("validating collector deleted")
 			// TODO
-
 		})
 
 		It("can delete MdaiObserver CRs and clean up resources", func() {
@@ -807,13 +804,12 @@ var _ = Describe("Manager", Ordered, func() {
 					return err
 				}
 				if strings.Contains(out, `"items": [`) && !strings.Contains(out, `"items": []`) {
-					return fmt.Errorf("observer pods still present")
+					return errors.New("observer pods still present")
 				}
 				return nil
 			}
 
 			Eventually(verifyObserverDeleted, "30s", "3s").Should(Succeed(), "expected all observer pods to be deleted")
-
 		})
 
 		It("can delete OTEL CRs", func() {
@@ -833,10 +829,10 @@ func getDataFromMap(g Gomega, cmName string, namespace string) map[string]any {
 	out, err := utils.Run(cmd)
 	g.Expect(err).NotTo(HaveOccurred())
 
-	var cm map[string]interface{}
+	var cm map[string]any
 	err = json.Unmarshal([]byte(out), &cm)
 	g.Expect(err).NotTo(HaveOccurred())
-	data, ok := cm["data"].(map[string]interface{})
+	data, ok := cm["data"].(map[string]any)
 	g.Expect(ok).To(BeTrue(), "Expected 'data' field to be a map")
 	return data
 }
@@ -881,7 +877,7 @@ func serviceAccountToken() (string, error) {
 	}`
 
 	// Temporary file to store the token request
-	secretName := fmt.Sprintf("%s-token-request", serviceAccountName)
+	secretName := serviceAccountName + "-token-request"
 	tokenRequestFile := filepath.Join("/tmp", secretName)
 	err := os.WriteFile(tokenRequestFile, []byte(tokenRequestRawString), os.FileMode(0o644))
 	if err != nil {
@@ -930,7 +926,7 @@ func getMetricsOutputFull() string {
 		"--restart=Never",
 		"--namespace", namespace,
 		"--image=curlimages/curl:latest",
-		fmt.Sprintf("--overrides=%s",
+		"--overrides="+
 			fmt.Sprintf(`{
 					"spec": {
 						"containers": [{
@@ -952,7 +948,7 @@ func getMetricsOutputFull() string {
 						}],
 						"serviceAccount": "%s"
 					}
-				}`, token, metricsServiceName, namespace, serviceAccountName)),
+				}`, token, metricsServiceName, namespace, serviceAccountName),
 	)
 
 	metricsOutput, err := utils.Run(cmd)

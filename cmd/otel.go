@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"go.opentelemetry.io/otel"
-
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/contrib/bridges/otellogr"
-
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/log/global"
@@ -71,7 +69,7 @@ func setupOTelSDK(ctx context.Context, enabled bool) (shutdown shutdownFunc, err
 	return shutdown, err
 }
 
-func newLoggerProvider(ctx context.Context, resource *resource.Resource) (*log.LoggerProvider, error) {
+func newLoggerProvider(ctx context.Context, res *resource.Resource) (*log.LoggerProvider, error) {
 	logExporter, err := otlploghttp.New(ctx)
 	if err != nil {
 		return nil, err
@@ -79,7 +77,7 @@ func newLoggerProvider(ctx context.Context, resource *resource.Resource) (*log.L
 
 	loggerProvider := log.NewLoggerProvider(
 		log.WithProcessor(log.NewBatchProcessor(logExporter)),
-		log.WithResource(resource),
+		log.WithResource(res),
 	)
 	return loggerProvider, nil
 }

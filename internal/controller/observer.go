@@ -5,10 +5,9 @@ import (
 	_ "embed"
 	"fmt"
 
-	v1 "github.com/decisiveai/mdai-operator/api/v1"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
@@ -24,35 +23,6 @@ const (
 
 //go:embed config/observer_base_collector_config.yaml
 var baseObserverCollectorYAML string
-
-func (c ObserverAdapter) ensureObserversSynchronized(ctx context.Context) (OperationResult, error) {
-	observers := c.observerCR.Spec.Observers
-	observerResource := c.observerCR.Spec.ObserverResource
-
-	if len(observers) == 0 {
-		c.logger.Info("No observers found in the CR, skipping observer synchronization")
-		return ContinueProcessing()
-	}
-
-	hash, err := c.createOrUpdateObserverResourceConfigMap(ctx, observerResource, observers)
-	if err != nil {
-		return OperationResult{}, err
-	}
-
-	if err := c.createOrUpdateObserverResourceDeployment(ctx, c.observerCR.Namespace, hash, observerResource); err != nil {
-		if errors.ReasonForError(err) == metav1.StatusReasonConflict {
-			c.logger.Info("re-queuing due to resource conflict")
-			return Requeue()
-		}
-		return OperationResult{}, err
-	}
-
-	if err := c.createOrUpdateObserverResourceService(ctx, c.observerCR.Namespace); err != nil {
-		return OperationResult{}, err
-	}
-
-	return ContinueProcessing()
-}
 
 func (c ObserverAdapter) getScopedObserverResourceName(postfix string) string {
 	if postfix != "" {
@@ -117,7 +87,7 @@ func (c ObserverAdapter) createOrUpdateObserverResourceService(ctx context.Conte
 	return nil
 }
 
-func (c ObserverAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Context, observerResource v1.ObserverResource, observers []v1.Observer) (string, error) {
+func (c ObserverAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Context, observerResource mdaiv1.ObserverResource, observers []mdaiv1.Observer) (string, error) {
 	namespace := c.observerCR.Namespace
 	configMapName := c.getScopedObserverResourceName("config")
 
@@ -159,7 +129,7 @@ func (c ObserverAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Con
 	return getConfigMapSHA(*desiredConfigMap)
 }
 
-func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context, namespace string, hash string, observerResource v1.ObserverResource) error {
+func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context, namespace string, hash string, observerResource mdaiv1.ObserverResource) error {
 	name := c.getScopedObserverResourceName("")
 
 	deployment := &appsv1.Deployment{
@@ -280,25 +250,36 @@ func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Co
 	return nil
 }
 
-func (c ObserverAdapter) getObserverCollectorConfig(observers []v1.Observer, observerResource v1.ObserverResource) (string, error) {
-	var config map[string]any
+func (c ObserverAdapter) getObserverCollectorConfig(observers []mdaiv1.Observer, observerResource mdaiv1.ObserverResource) (string, error) {
+	var config ConfigBlock
 	if err := yaml.Unmarshal([]byte(baseObserverCollectorYAML), &config); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base collector config")
 		return "", fmt.Errorf(`unmarshal base collector config: %w`, err)
 	}
 	grpcReceiverMaxMsgSize := observerResource.GrpcReceiverMaxMsgSize
 	if grpcReceiverMaxMsgSize != nil {
-		config["receivers"].(map[string]any)["otlp"].(map[string]any)["protocols"].(map[string]any)["grpc"].(map[string]any)["max_recv_msg_size_mib"] = *grpcReceiverMaxMsgSize
+		config.
+			MustMap("receivers").
+			MustMap("otlp").
+			MustMap("protocols").
+			MustMap("grpc").
+			Set("max_recv_msg_size_mib", *grpcReceiverMaxMsgSize)
 	}
 
 	dataVolumeReceivers := make([]string, 0)
+
+	processors := config.MustMap("processors")
+	connectors := config.MustMap("connectors")
+	pipelines := config.MustMap("service").MustMap("pipelines")
+	telemetry := config.MustMap("service").MustMap("telemetry")
+
 	for _, obs := range observers {
 		observerName := obs.Name
 
 		groupByKey := "groupbyattrs/" + observerName
-		config["processors"].(map[string]any)[groupByKey] = map[string]any{
+		processors.Set(groupByKey, map[string]any{
 			"keys": obs.LabelResourceAttributes,
-		}
+		})
 
 		dvKey := "datavolume/" + observerName
 		dvSpec := map[string]any{
@@ -310,12 +291,12 @@ func (c ObserverAdapter) getObserverCollectorConfig(observers []v1.Observer, obs
 		if obs.BytesMetricName != nil {
 			dvSpec["bytes_metric_name"] = *obs.BytesMetricName
 		}
-		config["connectors"].(map[string]any)[dvKey] = dvSpec
+		connectors.Set(dvKey, dvSpec)
 
 		filterName := ""
 		if obs.Filter != nil {
 			filterName = "filter/" + observerName
-			config["processors"].(map[string]any)[filterName] = getObserverFilterProcessorConfig(obs.Filter)
+			config.MustMap("processors").Set(filterName, getObserverFilterProcessorConfig(obs.Filter))
 		}
 
 		var pipelineProcessors []string
@@ -324,35 +305,31 @@ func (c ObserverAdapter) getObserverCollectorConfig(observers []v1.Observer, obs
 		}
 		pipelineProcessors = append(pipelineProcessors, "batch", groupByKey)
 
-		logsPipelineName := "logs/" + observerName
-		config["service"].(map[string]any)["pipelines"].(map[string]any)[logsPipelineName] = map[string]any{
+		pipeline := map[string]any{
 			"receivers":  []string{"otlp"},
 			"processors": pipelineProcessors,
 			"exporters":  []string{dvKey},
 		}
 
-		tracesPipelineName := "traces/" + observerName
-		config["service"].(map[string]any)["pipelines"].(map[string]any)[tracesPipelineName] = map[string]any{
-			"receivers":  []string{"otlp"},
-			"processors": pipelineProcessors,
-			"exporters":  []string{dvKey},
-		}
+		pipelines.Set("logs/"+observerName, pipeline)
+		pipelines.Set("traces/"+observerName, pipeline)
 
 		dataVolumeReceivers = append(dataVolumeReceivers, dvKey)
 	}
 
-	serviceBlock := config["service"].(map[string]any)
-	serviceBlock["pipelines"].(map[string]any)["metrics/observeroutput"] = map[string]any{
-		"receivers":  dataVolumeReceivers,
-		"processors": []string{"deltatocumulative"},
-		"exporters":  []string{"prometheus"},
-	}
+	pipelines.
+		Set("metrics/observeroutput",
+			map[string]any{
+				"receivers":  dataVolumeReceivers,
+				"processors": []string{"deltatocumulative"},
+				"exporters":  []string{"prometheus"},
+			},
+		)
 
-	ownLogsOtlpEndpoint := observerResource.OwnLogsOtlpEndpoint
-	if (ownLogsOtlpEndpoint != nil) && len(*ownLogsOtlpEndpoint) > 0 {
-		serviceBlock["telemetry"].(map[string]any)["logs"] = map[string]any{
-			"processors": []map[string]any{
-				{
+	if ownLogsOtlpEndpoint := observerResource.OwnLogsOtlpEndpoint; ownLogsOtlpEndpoint != nil && *ownLogsOtlpEndpoint != "" {
+		telemetry.Set("logs", map[string]any{
+			"processors": []any{
+				map[string]any{
 					"batch": map[string]any{
 						"exporter": map[string]any{
 							"otlp": map[string]any{
@@ -363,18 +340,13 @@ func (c ObserverAdapter) getObserverCollectorConfig(observers []v1.Observer, obs
 					},
 				},
 			},
-		}
+		})
 	}
 
-	raw, err := yaml.Marshal(config)
-	if err != nil {
-		return "", fmt.Errorf("marshal observer config: %w", err)
-	}
-
-	return string(raw), nil
+	return config.YAML()
 }
 
-func getObserverFilterProcessorConfig(filter *v1.ObserverFilter) map[string]any {
+func getObserverFilterProcessorConfig(filter *mdaiv1.ObserverFilter) map[string]any {
 	filterMap := map[string]any{}
 
 	if filter.ErrorMode != nil {

@@ -6,8 +6,10 @@ import (
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-type MDAILogStream string
-type SeverityLevel string
+type (
+	MDAILogStream string
+	SeverityLevel string
+)
 
 const (
 	AuditLogstream     MDAILogStream = "audit"
@@ -108,9 +110,10 @@ type MdaiCollector struct {
 type MdaiCollectorList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []MdaiCollector `json:"items"`
+
+	Items []MdaiCollector `json:"items"`
 }
 
-func init() {
+func init() { //nolint:gochecknoinits
 	SchemeBuilder.Register(&MdaiCollector{}, &MdaiCollectorList{})
 }

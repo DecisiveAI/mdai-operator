@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -10,16 +9,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/valkey-io/valkey-go"
-	"go.uber.org/zap"
-
-	v1 "github.com/decisiveai/mdai-operator/api/v1"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/go-logr/logr"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/valkey-io/valkey-go"
 	"github.com/valkey-io/valkey-go/mock"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	v1core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -33,18 +32,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func newTestMdaiCR() *v1.MdaiHub {
-	return &v1.MdaiHub{
+func newTestMdaiCR() *mdaiv1.MdaiHub {
+	return &mdaiv1.MdaiHub{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-hub",
 			Namespace: "default",
 		},
-		Spec:   v1.MdaiHubSpec{},
-		Status: v1.MdaiHubStatus{},
+		Spec:   mdaiv1.MdaiHubSpec{},
+		Status: mdaiv1.MdaiHubStatus{},
 	}
 }
 
-func newFakeClientForCR(cr *v1.MdaiHub, scheme *runtime.Scheme) client.Client {
+func newFakeClientForCR(cr *mdaiv1.MdaiHub, scheme *runtime.Scheme) client.Client {
 	collector := &v1beta1.OpenTelemetryCollector{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "collector1",
@@ -66,23 +65,23 @@ func createTestScheme() *runtime.Scheme {
 	_ = v1core.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	_ = prometheusv1.AddToScheme(scheme)
-	_ = v1.AddToScheme(scheme)
+	_ = mdaiv1.AddToScheme(scheme)
 	_ = v1beta1.AddToScheme(scheme)
 	return scheme
 }
 
 func TestFinalizeHub_Success(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	scheme := createTestScheme()
 
-	mdaiCR := &v1.MdaiHub{
+	mdaiCR := &mdaiv1.MdaiHub{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-hub",
 			Namespace:  "default",
 			Finalizers: []string{hubFinalizer},
 		},
-		Spec:   v1.MdaiHubSpec{},
-		Status: v1.MdaiHubStatus{Conditions: []metav1.Condition{}},
+		Spec:   mdaiv1.MdaiHubSpec{},
+		Status: mdaiv1.MdaiHubStatus{Conditions: []metav1.Condition{}},
 	}
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
@@ -97,15 +96,15 @@ func TestFinalizeHub_Success(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
 
-	state, err := adapter.finalizeHub(ctx)
+	state, err := adapter.finalize(ctx)
 	if err != nil {
-		t.Fatalf("finalizeHub returned error: %v", err)
+		t.Fatalf("finalize returned error: %v", err)
 	}
 	if state != ObjectModified {
 		t.Errorf("expected state ObjectModified, got %v", state)
 	}
 
-	updatedCR := &v1.MdaiHub{}
+	updatedCR := &mdaiv1.MdaiHub{}
 	if err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-hub", Namespace: "default"}, updatedCR); err != nil {
 		t.Fatalf("failed to get updated CR: %v", err)
 	}
@@ -124,17 +123,17 @@ func TestFinalizeHub_Success(t *testing.T) {
 }
 
 func TestEnsureFinalizerInitialized_AddsFinalizer(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	scheme := createTestScheme()
 
-	mdaiCR := &v1.MdaiHub{
+	mdaiCR := &mdaiv1.MdaiHub{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-hub",
 			Namespace:  "default",
 			Finalizers: []string{},
 		},
-		Spec:   v1.MdaiHubSpec{},
-		Status: v1.MdaiHubStatus{},
+		Spec:   mdaiv1.MdaiHubSpec{},
+		Status: mdaiv1.MdaiHubStatus{},
 	}
 
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
@@ -146,7 +145,7 @@ func TestEnsureFinalizerInitialized_AddsFinalizer(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	updatedCR := &v1.MdaiHub{}
+	updatedCR := &mdaiv1.MdaiHub{}
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-hub", Namespace: "default"}, updatedCR)
 	if err != nil {
 		t.Fatalf("Failed to get updated CR: %v", err)
@@ -157,16 +156,16 @@ func TestEnsureFinalizerInitialized_AddsFinalizer(t *testing.T) {
 }
 
 func TestEnsureFinalizerInitialized_AlreadyPresent(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	scheme := createTestScheme()
-	mdaiCR := &v1.MdaiHub{
+	mdaiCR := &mdaiv1.MdaiHub{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-hub",
 			Namespace:  "default",
 			Finalizers: []string{hubFinalizer},
 		},
-		Spec:   v1.MdaiHubSpec{},
-		Status: v1.MdaiHubStatus{},
+		Spec:   mdaiv1.MdaiHubSpec{},
+		Status: mdaiv1.MdaiHubStatus{},
 	}
 
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
@@ -178,7 +177,7 @@ func TestEnsureFinalizerInitialized_AlreadyPresent(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	updatedCR := &v1.MdaiHub{}
+	updatedCR := &mdaiv1.MdaiHub{}
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-hub", Namespace: "default"}, updatedCR)
 	if err != nil {
 		t.Fatalf("Failed to get updated CR: %v", err)
@@ -189,7 +188,7 @@ func TestEnsureFinalizerInitialized_AlreadyPresent(t *testing.T) {
 }
 
 func TestEnsureStatusInitialized_SetsInitialStatus(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	scheme := createTestScheme()
 	mdaiCR := newTestMdaiCR()
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
@@ -201,13 +200,13 @@ func TestEnsureStatusInitialized_SetsInitialStatus(t *testing.T) {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 
-	updatedCR := &v1.MdaiHub{}
+	updatedCR := &mdaiv1.MdaiHub{}
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-hub", Namespace: "default"}, updatedCR)
 	if err != nil {
 		t.Fatalf("Failed to get updated CR: %v", err)
 	}
 	if len(updatedCR.Status.Conditions) == 0 {
-		t.Errorf("Expected at least one status condition to be set")
+		t.Error("Expected at least one status condition to be set")
 	} else {
 		cond := meta.FindStatusCondition(updatedCR.Status.Conditions, typeAvailableHub)
 		if cond == nil || cond.Status != metav1.ConditionUnknown {
@@ -237,10 +236,10 @@ func TestGetConfigMapSHA(t *testing.T) {
 }
 
 func TestDeleteFinalizer(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	scheme := createTestScheme()
 
-	mdaiCR := &v1.MdaiHub{
+	mdaiCR := &mdaiv1.MdaiHub{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "test-hub",
 			Namespace:  "default",
@@ -265,7 +264,7 @@ func TestDeleteFinalizer(t *testing.T) {
 }
 
 func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	scheme := createTestScheme()
 	mdaiCR := newTestMdaiCR()
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
@@ -273,7 +272,7 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	envMap := map[string]string{"VAR": "value"}
-	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, envConfigMapNamePostfix, "default", false); err != nil {
+	if _, _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, envConfigMapNamePostfix, "default"); err != nil {
 		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
 	}
 
@@ -288,7 +287,7 @@ func TestCreateOrUpdateEnvConfigMap(t *testing.T) {
 }
 
 func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	scheme := createTestScheme()
 	mdaiCR := newTestMdaiCR()
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
@@ -296,36 +295,31 @@ func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	envMap := map[string]string{"VAR": "string"}
-	if _, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, manualEnvConfigMapNamePostfix, "default", true); err != nil {
-		t.Fatalf("createOrUpdateEnvConfigMap returned error: %v", err)
-	}
+	_, cm, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, manualEnvConfigMapNamePostfix, "default")
+	require.NoError(t, err)
+	assert.Equal(t, "string", cm.Data["VAR"])
 
-	cm := &v1core.ConfigMap{}
-	cmName := mdaiCR.Name + manualEnvConfigMapNamePostfix
-	if err := fakeClient.Get(ctx, types.NamespacedName{Name: cmName, Namespace: "default"}, cm); err != nil {
-		t.Fatalf("Failed to get ConfigMap %q: %v", cmName, err)
-	}
-	if cm.Data["VAR"] != "string" {
-		t.Errorf("Expected env var value %q, got %q", "value", cm.Data["VAR"])
-	}
+	err = adapter.ensureControllerRef(cm)
+	require.NoError(t, err)
 }
 
 func TestEnsureVariableSynced(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	scheme := createTestScheme()
-	storageType := v1.VariableSourceTypeBuiltInValkey
+	storageType := mdaiv1.VariableSourceTypeBuiltInValkey
 
-	variableSet := v1.Variable{
+	variableSet := mdaiv1.Variable{
 		StorageType: storageType,
-		Type:        v1.VariableTypeComputed,
-		DataType:    v1.VariableDataTypeSet,
+		Type:        mdaiv1.VariableTypeComputed,
+		DataType:    mdaiv1.VariableDataTypeSet,
 		Key:         "mykey_set",
-		SerializeAs: []v1.Serializer{
+		SerializeAs: []mdaiv1.Serializer{
 			{
 				Name: "MY_ENV_SET",
-				Transformers: []v1.VariableTransformer{
-					{Type: v1.TransformerTypeJoin,
-						Join: &v1.JoinTransformer{
+				Transformers: []mdaiv1.VariableTransformer{
+					{
+						Type: mdaiv1.TransformerTypeJoin,
+						Join: &mdaiv1.JoinTransformer{
 							Delimiter: ",",
 						},
 					},
@@ -333,68 +327,69 @@ func TestEnsureVariableSynced(t *testing.T) {
 			},
 		},
 	}
-	variableString := v1.Variable{
+	variableString := mdaiv1.Variable{
 		StorageType: storageType,
-		Type:        v1.VariableTypeComputed,
-		DataType:    v1.VariableDataTypeString,
+		Type:        mdaiv1.VariableTypeComputed,
+		DataType:    mdaiv1.VariableDataTypeString,
 		Key:         "mykey_string",
-		SerializeAs: []v1.Serializer{
+		SerializeAs: []mdaiv1.Serializer{
 			{
 				Name: "MY_ENV_STR",
 			},
 		},
 	}
-	variableBoolean := v1.Variable{
+	variableBoolean := mdaiv1.Variable{
 		StorageType: storageType,
-		Type:        v1.VariableTypeComputed,
-		DataType:    v1.VariableDataTypeString,
+		Type:        mdaiv1.VariableTypeComputed,
+		DataType:    mdaiv1.VariableDataTypeString,
 		Key:         "mykey_bool",
-		SerializeAs: []v1.Serializer{
+		SerializeAs: []mdaiv1.Serializer{
 			{
 				Name: "MY_ENV_BOOL",
 			},
 		},
 	}
 
-	variableInt := v1.Variable{
+	variableInt := mdaiv1.Variable{
 		StorageType: storageType,
-		Type:        v1.VariableTypeComputed,
-		DataType:    v1.VariableDataTypeInt,
+		Type:        mdaiv1.VariableTypeComputed,
+		DataType:    mdaiv1.VariableDataTypeInt,
 		Key:         "mykey_int",
-		SerializeAs: []v1.Serializer{
+		SerializeAs: []mdaiv1.Serializer{
 			{
 				Name: "MY_ENV_INT",
 			},
 		},
 	}
 
-	variableMap := v1.Variable{
+	variableMap := mdaiv1.Variable{
 		StorageType: storageType,
-		Type:        v1.VariableTypeComputed,
-		DataType:    v1.VariableDataTypeMap,
+		Type:        mdaiv1.VariableTypeComputed,
+		DataType:    mdaiv1.VariableDataTypeMap,
 		Key:         "mykey_map",
-		SerializeAs: []v1.Serializer{
+		SerializeAs: []mdaiv1.Serializer{
 			{
 				Name: "MY_ENV_MAP",
 			},
 		},
 	}
 
-	variablePl := v1.Variable{
+	variablePl := mdaiv1.Variable{
 		StorageType: storageType,
-		Type:        v1.VariableTypeMeta,
-		DataType:    v1.MetaVariableDataTypePriorityList,
+		Type:        mdaiv1.VariableTypeMeta,
+		DataType:    mdaiv1.MetaVariableDataTypePriorityList,
 		Key:         "mykey_pl",
 		VariableRefs: []string{
 			"some_key",
 			"mykey_set",
 		},
-		SerializeAs: []v1.Serializer{
+		SerializeAs: []mdaiv1.Serializer{
 			{
 				Name: "MY_ENV_PL",
-				Transformers: []v1.VariableTransformer{
-					{Type: v1.TransformerTypeJoin,
-						Join: &v1.JoinTransformer{
+				Transformers: []mdaiv1.VariableTransformer{
+					{
+						Type: mdaiv1.TransformerTypeJoin,
+						Join: &mdaiv1.JoinTransformer{
 							Delimiter: ",",
 						},
 					},
@@ -403,16 +398,16 @@ func TestEnsureVariableSynced(t *testing.T) {
 		},
 	}
 
-	variableHs := v1.Variable{
+	variableHs := mdaiv1.Variable{
 		StorageType: storageType,
-		Type:        v1.VariableTypeMeta,
-		DataType:    v1.MetaVariableDataTypeHashSet,
+		Type:        mdaiv1.VariableTypeMeta,
+		DataType:    mdaiv1.MetaVariableDataTypeHashSet,
 		Key:         "mykey_hs",
 		VariableRefs: []string{
 			"some_key",
 			"mykey_set",
 		},
-		SerializeAs: []v1.Serializer{
+		SerializeAs: []mdaiv1.Serializer{
 			{
 				Name: "MY_ENV_HS",
 			},
@@ -420,7 +415,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 	}
 
 	mdaiCR := newTestMdaiCR()
-	mdaiCR.Spec.Variables = []v1.Variable{
+	mdaiCR.Spec.Variables = []mdaiv1.Variable{
 		variableSet,
 		variableString,
 		variableBoolean,
@@ -475,9 +470,9 @@ func TestEnsureVariableSynced(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
 
-	opResult, err := adapter.ensureVariableSynced(ctx)
+	opResult, err := adapter.ensureVariableSynchronized(ctx)
 	if err != nil {
-		t.Fatalf("ensureVariableSynced returned error: %v", err)
+		t.Fatalf("ensureVariableSynchronized returned error: %v", err)
 	}
 	if opResult != ContinueOperationResult() {
 		t.Errorf("expected ContinueProcessing, got: %v", opResult)
@@ -488,14 +483,15 @@ func TestEnsureVariableSynced(t *testing.T) {
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: envCMName, Namespace: "default"}, envCM); err != nil {
 		t.Fatalf("failed to get env ConfigMap %q: %v", envCMName, err)
 	}
-	assert.Equal(t, len(envCM.Data), 7)
-	assert.Equal(t, envCM.Data["MY_ENV_SET"], "service1,service2")
-	assert.Equal(t, envCM.Data["MY_ENV_STR"], "serviceA")
-	assert.Equal(t, envCM.Data["MY_ENV_BOOL"], "true")
-	assert.Equal(t, envCM.Data["MY_ENV_INT"], "10")
-	assert.Equal(t, envCM.Data["MY_ENV_MAP"], "field1: value1\nfield2: value1\n")
-	assert.Equal(t, envCM.Data["MY_ENV_PL"], "service1,service2")
-	assert.Equal(t, envCM.Data["MY_ENV_HS"], "INFO|WARNING")
+
+	assert.Len(t, envCM.Data, 7)
+	assert.Equal(t, "service1,service2", envCM.Data["MY_ENV_SET"])
+	assert.Equal(t, "serviceA", envCM.Data["MY_ENV_STR"])
+	assert.Equal(t, "true", envCM.Data["MY_ENV_BOOL"])
+	assert.Equal(t, "10", envCM.Data["MY_ENV_INT"])
+	assert.Equal(t, "field1: value1\nfield2: value1\n", envCM.Data["MY_ENV_MAP"])
+	assert.Equal(t, "service1,service2", envCM.Data["MY_ENV_PL"])
+	assert.Equal(t, "INFO|WARNING", envCM.Data["MY_ENV_HS"])
 
 	updatedCollector := &v1beta1.OpenTelemetryCollector{}
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: "collector1", Namespace: "default"}, updatedCollector); err != nil {
@@ -506,37 +502,39 @@ func TestEnsureVariableSynced(t *testing.T) {
 		t.Errorf("expected collector to have restart annotation %q set, got: %v", restartAnnotation, updatedCollector.Annotations)
 	}
 }
+
 func TestEnsureManualAndComputedVariableSynced(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	scheme := createTestScheme()
-	storageType := v1.VariableSourceTypeBuiltInValkey
-	variableType := v1.VariableDataTypeSet
-	varWith := v1.Serializer{
+	storageType := mdaiv1.VariableSourceTypeBuiltInValkey
+	variableType := mdaiv1.VariableDataTypeSet
+	varWith := mdaiv1.Serializer{
 		Name: "MY_ENV",
-		Transformers: []v1.VariableTransformer{
-			{Type: v1.TransformerTypeJoin,
-				Join: &v1.JoinTransformer{
+		Transformers: []mdaiv1.VariableTransformer{
+			{
+				Type: mdaiv1.TransformerTypeJoin,
+				Join: &mdaiv1.JoinTransformer{
 					Delimiter: ",",
 				},
 			},
 		},
 	}
-	computedVariable := v1.Variable{
+	computedVariable := mdaiv1.Variable{
 		StorageType: storageType,
-		Type:        v1.VariableTypeComputed,
+		Type:        mdaiv1.VariableTypeComputed,
 		DataType:    variableType,
 		Key:         "mykey",
-		SerializeAs: []v1.Serializer{varWith},
+		SerializeAs: []mdaiv1.Serializer{varWith},
 	}
-	manualVariable := v1.Variable{
+	manualVariable := mdaiv1.Variable{
 		StorageType: storageType,
-		Type:        v1.VariableTypeManual,
+		Type:        mdaiv1.VariableTypeManual,
 		DataType:    variableType,
 		Key:         "mymanualkey",
-		SerializeAs: []v1.Serializer{varWith},
+		SerializeAs: []mdaiv1.Serializer{varWith},
 	}
 	mdaiCR := newTestMdaiCR()
-	mdaiCR.Spec.Variables = []v1.Variable{computedVariable, manualVariable}
+	mdaiCR.Spec.Variables = []mdaiv1.Variable{computedVariable, manualVariable}
 
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
 	recorder := record.NewFakeRecorder(10)
@@ -561,9 +559,9 @@ func TestEnsureManualAndComputedVariableSynced(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
 
-	opResult, err := adapter.ensureVariableSynced(ctx)
+	opResult, err := adapter.ensureVariableSynchronized(ctx)
 	if err != nil {
-		t.Fatalf("ensureVariableSynced returned error: %v", err)
+		t.Fatalf("ensureVariableSynchronized returned error: %v", err)
 	}
 	if opResult != ContinueOperationResult() {
 		t.Errorf("expected ContinueProcessing, got: %v", opResult)
@@ -614,33 +612,33 @@ func (xadd XaddMatcher) String() string {
 }
 
 func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	scheme := createTestScheme()
 
 	alertName := "alert1"
-	var expr = intstr.FromString("up == 0")
+	expr := intstr.FromString("up == 0")
 	var duration1 prometheusv1.Duration = "5m"
-	eval := v1.PrometheusAlert{
+	eval := mdaiv1.PrometheusAlert{
 		Name:     alertName,
 		Expr:     expr,
 		For:      &duration1,
 		Severity: "critical",
 	}
 
-	evals := []v1.PrometheusAlert{eval}
+	evals := []mdaiv1.PrometheusAlert{eval}
 	var interval prometheusv1.Duration = "10m"
-	mdaiCR := &v1.MdaiHub{
+	mdaiCR := &mdaiv1.MdaiHub{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-hub",
 			Namespace: "default",
 		},
-		Spec: v1.MdaiHubSpec{
+		Spec: mdaiv1.MdaiHubSpec{
 			PrometheusAlert: evals,
-			Config: &v1.Config{
+			Config: &mdaiv1.Config{
 				EvaluationInterval: &interval,
 			},
 		},
-		Status: v1.MdaiHubStatus{},
+		Status: mdaiv1.MdaiHubStatus{},
 	}
 
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
@@ -683,7 +681,7 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 }
 
 func TestEnsureEvaluationsSynchronized_NoEvaluations(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	scheme := createTestScheme()
 	mdaiCR := newTestMdaiCR()
 	ruleName := "mdai-" + mdaiCR.Name + "-alert-rules"
@@ -723,18 +721,18 @@ func TestEnsureEvaluationsSynchronized_NoEvaluations(t *testing.T) {
 }
 
 func TestEnsureHubDeletionProcessed_WithDeletion(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	scheme := createTestScheme()
 
-	mdaiCR := &v1.MdaiHub{
+	mdaiCR := &mdaiv1.MdaiHub{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "test-hub",
 			Namespace:         "default",
 			Finalizers:        []string{hubFinalizer},
 			DeletionTimestamp: &metav1.Time{Time: time.Now().Add(-1 * time.Hour)},
 		},
-		Spec:   v1.MdaiHubSpec{},
-		Status: v1.MdaiHubStatus{Conditions: []metav1.Condition{}},
+		Spec:   mdaiv1.MdaiHubSpec{},
+		Status: mdaiv1.MdaiHubStatus{Conditions: []metav1.Condition{}},
 	}
 
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
@@ -750,20 +748,20 @@ func TestEnsureHubDeletionProcessed_WithDeletion(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, fakeValkey, time.Duration(30))
 
-	opResult, err := adapter.ensureHubDeletionProcessed(ctx)
+	opResult, err := adapter.ensureDeletionProcessed(ctx)
 	if err != nil {
-		t.Fatalf("ensureHubDeletionProcessed returned error: %v", err)
+		t.Fatalf("ensureDeletionProcessed returned error: %v", err)
 	}
 
 	if opResult != StopOperationResult() {
 		t.Errorf("expected StopOperationResult, got: %v", opResult)
 	}
 
-	updatedCR := &v1.MdaiHub{}
+	updatedCR := &mdaiv1.MdaiHub{}
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: mdaiCR.Name, Namespace: mdaiCR.Namespace}, updatedCR)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			t.Logf("CR not found after finalization, which is acceptable")
+			t.Log("CR not found after finalization, which is acceptable")
 		} else {
 			t.Fatalf("failed to get updated CR: %v", err)
 		}
@@ -771,7 +769,7 @@ func TestEnsureHubDeletionProcessed_WithDeletion(t *testing.T) {
 }
 
 func TestEnsureStatusSetToDone(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 	scheme := createTestScheme()
 	mdaiCR := newTestMdaiCR()
 	fakeClient := newFakeClientForCR(mdaiCR, scheme)
@@ -787,7 +785,7 @@ func TestEnsureStatusSetToDone(t *testing.T) {
 		t.Errorf("expected ContinueOperationResult, got: %v", opResult)
 	}
 
-	updatedCR := &v1.MdaiHub{}
+	updatedCR := &mdaiv1.MdaiHub{}
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: "test-hub", Namespace: "default"}, updatedCR)
 	if err != nil {
 		t.Fatalf("failed to re-fetch mdaiCR: %v", err)
@@ -806,16 +804,17 @@ func TestEnsureStatusSetToDone(t *testing.T) {
 }
 
 func TestEnsureAutomationsSynchronized(t *testing.T) {
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	mdaiCR := newTestMdaiCR()
-	mdaiCR.Spec.Automations = []v1.Automation{
+	mdaiCR.Spec.Automations = []mdaiv1.Automation{
 		{
 			EventRef: "my-event",
-			Workflow: []v1.AutomationStep{{
-				HandlerRef: "",
-				Arguments:  map[string]string{"key": "value"},
-			},
+			Workflow: []mdaiv1.AutomationStep{
+				{
+					HandlerRef: "",
+					Arguments:  map[string]string{"key": "value"},
+				},
 			},
 		},
 	}
@@ -830,25 +829,26 @@ func TestEnsureAutomationsSynchronized(t *testing.T) {
 	}
 
 	opResult, err := adapter.ensureAutomationsSynchronized(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, ContinueOperationResult(), opResult)
 
 	configMapName := mdaiCR.Name + automationConfigMapNamePostfix
 	cm := &v1core.ConfigMap{}
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: "default"}, cm)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	workflowJSON, _ := json.Marshal(mdaiCR.Spec.Automations[0].Workflow)
+	workflowJSON, err := json.Marshal(mdaiCR.Spec.Automations[0].Workflow)
+	require.NoError(t, err)
 	expectedData := string(workflowJSON)
 	actualData, exists := cm.Data["my-event"]
 	assert.True(t, exists)
-	assert.Equal(t, expectedData, actualData)
+	assert.JSONEq(t, expectedData, actualData)
 
 	mdaiCR.Spec.Automations = nil
 	adapter.mdaiCR = mdaiCR
 
 	opResult, err = adapter.ensureAutomationsSynchronized(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, ContinueOperationResult(), opResult)
 
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: "default"}, cm)
