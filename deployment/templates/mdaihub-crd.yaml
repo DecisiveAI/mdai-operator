@@ -109,6 +109,20 @@ spec:
                             - set
                             - value
                             type: object
+                          setVariable:
+                            properties:
+                              scalar:
+                                description: Target set name
+                                minLength: 1
+                                type: string
+                              value:
+                                description: Value to add (templated string allowed)
+                                minLength: 1
+                                type: string
+                            required:
+                            - scalar
+                            - value
+                            type: object
                         type: object
                       type: array
                     when:

@@ -105,6 +105,8 @@ type Action struct {
 	AddToSet      *SetAction `json:"addToSet,omitempty"`
 	RemoveFromSet *SetAction `json:"removeFromSet,omitempty"`
 
+	SetVariable *ScalarAction `json:"setVariable,omitempty"`
+
 	// TODO add more actions to update variables here
 
 	CallWebhook *CallWebhookAction `json:"callWebhook,omitempty"`
@@ -114,6 +116,15 @@ type SetAction struct {
 	// Target set name
 	// +kubebuilder:validation:MinLength=1
 	Set string `json:"set"`
+	// Value to add (templated string allowed)
+	// +kubebuilder:validation:MinLength=1
+	Value string `json:"value"`
+}
+
+type ScalarAction struct {
+	// Target set name
+	// +kubebuilder:validation:MinLength=1
+	Scalar string `json:"scalar"`
 	// Value to add (templated string allowed)
 	// +kubebuilder:validation:MinLength=1
 	Value string `json:"value"`

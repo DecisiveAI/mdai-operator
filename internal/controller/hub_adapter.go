@@ -514,26 +514,26 @@ func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (Operatio
 
 	c.logger.Info("Creating or updating ConfigMap for automations", "name", c.mdaiCR.Name)
 	automationMap := make(map[string]string, len(c.mdaiCR.Spec.Automations))
-	for _, automation := range c.mdaiCR.Spec.Automations {
-		key := automation.Name
-		trig, err := transformWhenToTrigger(&automation.When)
+	for _, automationRule := range c.mdaiCR.Spec.Automations {
+		key := automationRule.Name
+		trig, err := transformWhenToTrigger(&automationRule.When)
 		if err != nil {
 			return OperationResult{}, fmt.Errorf("failed to transform when to trigger: %w", err)
 		}
-		cmds, err := transformThenToCommands(automation.Then)
+		cmds, err := transformThenToCommands(automationRule.Then)
 		if err != nil {
 			return OperationResult{}, fmt.Errorf("failed to transform then to command: %w", err)
 		}
 		rule := events.Rule{
-			Name:     automation.Name,
+			Name:     automationRule.Name,
 			Trigger:  trig,
 			Commands: cmds,
 		}
-		workflowJSON, err := json.Marshal(rule)
+		ruleJSON, err := json.Marshal(rule)
 		if err != nil {
-			return OperationResult{}, fmt.Errorf("failed to marshal automation workflow: %w", err)
+			return OperationResult{}, fmt.Errorf("failed to marshal automationRule workflow: %w", err)
 		}
-		automationMap[key] = string(workflowJSON)
+		automationMap[key] = string(ruleJSON)
 	}
 
 	operationResult, err := c.createOrUpdateEnvConfigMap(ctx, automationMap, automationConfigMapNamePostfix, c.mdaiCR.Namespace, true)
