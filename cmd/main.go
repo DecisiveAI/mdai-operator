@@ -7,35 +7,33 @@ import (
 	"os"
 	"path/filepath"
 
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/mdai-operator/internal/controller"
+	webhookmdaiv1 "github.com/decisiveai/mdai-operator/internal/webhook/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/go-logr/zapr"
+	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-
-	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	webhookmdaiv1 "github.com/decisiveai/mdai-operator/internal/webhook/v1"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	ctrlzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 const (
@@ -78,9 +76,7 @@ func main() {
 	ctx := context.Background()
 
 	// Set up OpenTelemetry.
-	otelSdkEnabledStr := os.Getenv(otelSdkDisabledEnvVar)
-	otelSdkEnabled := otelSdkEnabledStr != "true"
-	otelShutdown, err := setupOTelSDK(ctx, otelSdkEnabled)
+	otelShutdown, err := setupOTelSDK(ctx)
 	if err != nil {
 		setupLog.Error(err, "Error setting up OpenTelemetry SDK. Set "+otelSdkDisabledEnvVar+` to "true" to bypass this.`)
 		os.Exit(1)
@@ -116,9 +112,10 @@ func main() {
 
 	zapLogger := ctrlzap.NewRaw(ctrlzap.UseFlagOptions(&zapOpts))
 	logger := zapr.NewLogger(zapLogger)
-	if !otelSdkEnabled {
+	if !otelSdkEnabled() {
 		logger.Info("OTEL SDK has been disabled with " + otelSdkDisabledEnvVar + " environment variable")
 	}
+	otelSdkEnabledStr := os.Getenv(otelSdkDisabledEnvVar)
 	otlpEndpointStr := os.Getenv(otelExporterOtlpEndpointEnvVar)
 	if otelSdkEnabledStr == "" && otlpEndpointStr == "" {
 		logger.Info("WARNING: No OTLP endpoint is defined, but OTEL SDK is enabled." +
@@ -294,11 +291,11 @@ func main() {
 		}
 		if err = webhookmdaiv1.SetupMdaiCollectorWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiCollector")
-			os.Exit(1)
+			gracefullyShutdownWithCode(1)
 		}
 		if err = webhookmdaiv1.SetupMdaiObserverWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiObserver")
-			os.Exit(1)
+			gracefullyShutdownWithCode(1)
 		}
 	}
 
@@ -363,4 +360,8 @@ func bindFlags(
 	flag.StringVar(metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+}
+
+func otelSdkEnabled() bool {
+	return os.Getenv(otelSdkDisabledEnvVar) != "true"
 }

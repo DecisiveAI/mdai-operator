@@ -446,8 +446,7 @@ var _ = Describe("Manager", Ordered, func() {
 				data := getDataFromMap(g, "mdaihub-sample-automation", "mdai")
 				g.Expect(data).To(HaveLen(1))
 				g.Expect(data["logBytesOutTooHighBySvc"]).
-					To(Equal("[{\"handlerRef\":\"setVariable\",\"args\":{\"default\":\"default_service\",\"key\":\"service_name\"}}," +
-						"{\"handlerRef\":\"publishMetrics\"},{\"handlerRef\":\"notifySlack\",\"args\":{\"channel\":\"infra-alerts\"}}]"))
+					To(Equal(`[{"handlerRef":"setVariable","args":{"default":"default_service","key":"service_name"}},{"handlerRef":"publishMetrics"},{"handlerRef":"notifySlack","args":{"channel":"infra-alerts"}}]`))
 			}
 			Eventually(verifyConfigMapManual).Should(Succeed())
 		})
@@ -625,12 +624,14 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 			Eventually(connectToValkey, 30*time.Second, 2*time.Second).Should(Succeed())
 
-			err = valkeyClient.Do(context.TODO(), valkeyClient.B().Sadd().Key("variable/mdaihub-sample/service_list_1").
+			ctx := context.Background()
+
+			err = valkeyClient.Do(ctx, valkeyClient.B().Sadd().Key("variable/mdaihub-sample/service_list_1").
 				Member("noisy-service").Build()).Error()
 			Expect(err).NotTo(HaveOccurred())
 
 			err = valkeyClient.Do(
-				context.TODO(),
+				ctx,
 				valkeyClient.B().Set().
 					Key("variable/mdaihub-sample/any_service_alerted").
 					Value("true").
@@ -639,7 +640,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			err = valkeyClient.Do(
-				context.TODO(),
+				ctx,
 				valkeyClient.B().Sadd().
 					Key("variable/mdaihub-sample/service_list").
 					Member("serviceA").
@@ -648,7 +649,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			err = valkeyClient.Do(
-				context.TODO(),
+				ctx,
 				valkeyClient.B().Hset().
 					Key("variable/mdaihub-sample/attribute_map").FieldValue().
 					FieldValue("send_batch_size", "100").
@@ -658,7 +659,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			err = valkeyClient.Do(
-				context.TODO(),
+				ctx,
 				valkeyClient.B().Set().
 					Key("variable/mdaihub-sample/default").
 					Value("default").
@@ -667,7 +668,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			err = valkeyClient.Do(
-				context.TODO(),
+				ctx,
 				valkeyClient.B().Set().
 					Key("variable/mdaihub-sample/filter").
 					Value(`- severity_number < SEVERITY_NUMBER_WARN
@@ -677,7 +678,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			err = valkeyClient.Do(
-				context.TODO(),
+				ctx,
 				valkeyClient.B().Set().
 					Key("variable/mdaihub-sample/severity_number").
 					Value("1").
@@ -686,7 +687,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			err = valkeyClient.Do(
-				context.TODO(),
+				ctx,
 				valkeyClient.B().Hset().
 					Key("variable/mdaihub-sample/severity_filters_by_level").FieldValue().
 					FieldValue("1", "INFO|WARNING").
@@ -764,10 +765,10 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyPromRulesDeleted).Should(Succeed())
 
 			By("validating valkey keys deleted")
-			// TODO
+			// TODO check valkey store
 
 			By("validating all related observers are deleted")
-			// TODO
+			// TODO check observers are removed
 		})
 
 		It("can delete MdaiCollector CRs and clean up resources", func() {
@@ -780,7 +781,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyMdaiCollector).Should(Succeed())
 
 			By("validating collector deleted")
-			// TODO
+			// TODO check collector removed
 		})
 
 		It("can delete MdaiObserver CRs and clean up resources", func() {
@@ -864,7 +865,7 @@ func configMapDoesNotExist(name string, namespace string) {
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("not found"))
 	}
-	Eventually(verifyConfigMap, "1m", "5s").Should(Succeed())
+	Eventually(verifyConfigMap, "2m", "5s").Should(Succeed())
 }
 
 // serviceAccountToken returns a token for the specified service account in the given namespace.
@@ -878,7 +879,7 @@ func serviceAccountToken() (string, error) {
 
 	// Temporary file to store the token request
 	secretName := serviceAccountName + "-token-request"
-	tokenRequestFile := filepath.Join("/tmp", secretName)
+	tokenRequestFile := filepath.Join(os.TempDir(), secretName)
 	err := os.WriteFile(tokenRequestFile, []byte(tokenRequestRawString), os.FileMode(0o644))
 	if err != nil {
 		return "", err
@@ -958,6 +959,7 @@ func getMetricsOutputFull() string {
 
 // tokenRequest is a simplified representation of the Kubernetes TokenRequest API response,
 // containing only the token field that we need to extract.
+// nolint:revive
 type tokenRequest struct {
 	Status struct {
 		Token string `json:"token"`

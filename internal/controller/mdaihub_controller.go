@@ -111,8 +111,8 @@ func (*MdaiHubReconciler) ReconcileHandler(ctx context.Context, adapter Adapter)
 	}
 	for _, operation := range operations {
 		result, err := operation(ctx)
-		if err != nil {
-			return ctrl.Result{}, err
+		if err != nil || result.RequeueRequest {
+			return ctrl.Result{RequeueAfter: result.RequeueDelay}, err
 		}
 		if result.CancelRequest {
 			return ctrl.Result{}, nil
@@ -193,8 +193,8 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func mdaiResourcesPredicate() predicate.Predicate {
 	log := logger.FromContext(context.TODO())
 	return predicate.Funcs{
-		CreateFunc: func(_ event.CreateEvent) bool {
-			// log.Info("<CreateFunc> " + e.Object.GetName() + " ignored")
+		CreateFunc: func(e event.CreateEvent) bool {
+			log.Info("<CreateFunc> " + e.Object.GetName() + " ignored")
 			return false // assuming only mdai operator creates managed resources
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
@@ -202,12 +202,12 @@ func mdaiResourcesPredicate() predicate.Predicate {
 			log.Info("<UpdateFunc> " + e.ObjectNew.GetName() + " shouldReconcile: " + strconv.FormatBool(shouldReconcile))
 			return shouldReconcile
 		},
-		DeleteFunc: func(_ event.DeleteEvent) bool {
-			// log.Info("<DeleteFunc> " + e.Object.GetName() + " ignored")
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			log.Info("<DeleteFunc> " + e.Object.GetName() + " ignored")
 			return false // assuming only mdai operator deletes managed resources
 		},
-		GenericFunc: func(_ event.GenericEvent) bool {
-			// log.Info("<GenericFunc> " + e.Object.GetName() + " ignored")
+		GenericFunc: func(e event.GenericEvent) bool {
+			log.Info("<GenericFunc> " + e.Object.GetName() + " ignored")
 			return false // we do not handle generic events
 		},
 	}
@@ -228,8 +228,9 @@ func (r *MdaiHubReconciler) startValkeySubscription() {
 		// Extract the key from the channel name
 		key := strings.TrimPrefix(msg.Channel, "__keyspace@0__:")
 		// find hub by name from the channel name by prefix
-		parts := strings.SplitN(key, "/", 3)
-		if len(parts) != 3 {
+		const keyPartsExpected = 3
+		parts := strings.SplitN(key, "/", keyPartsExpected)
+		if len(parts) != keyPartsExpected {
 			log.Info("invalid key format, skipping", "key", key)
 			return
 		}
@@ -286,7 +287,7 @@ func (r *MdaiHubReconciler) initializeValkey() error {
 	}
 
 	exponentialBackoff := backoff.NewExponentialBackOff()
-	exponentialBackoff.InitialInterval = 5 * time.Second
+	exponentialBackoff.InitialInterval = 5 * time.Second //nolint:mnd
 
 	notifyFunc := func(err error, duration time.Duration) {
 		log.Error(err, "Failed to initialize ValKey client. Retrying...", "retry_count", retryCount, "duration", duration.String())
@@ -294,7 +295,7 @@ func (r *MdaiHubReconciler) initializeValkey() error {
 
 	if _, err := backoff.Retry(context.TODO(), operation,
 		backoff.WithBackOff(exponentialBackoff),
-		backoff.WithMaxElapsedTime(3*time.Minute),
+		backoff.WithMaxElapsedTime(3*time.Minute), //nolint:mnd
 		backoff.WithNotify(notifyFunc),
 	); err != nil {
 		return fmt.Errorf("failed to initialize ValKey client after retries: %w", err)

@@ -4,11 +4,18 @@ run:
 linters:
   default: all
   disable:
+    - cyclop
     - depguard
+    - dupl
     - err113
+    - funlen
+    - gocognit
+    - godot
+    - gochecknoglobals
     - godox
     - ireturn
     - lll
+    - maintidx
     - nlreturn
     - noctx
     - noinlineerr
@@ -34,6 +41,7 @@ linters:
       enable-all: true
       disabled-checks:
         - hugeParam
+        - unnamedResult
         - paramTypeCombine
         - rangeValCopy
         - whyNoLint
@@ -41,6 +49,7 @@ linters:
       enable-all: true
       disable:
         - fieldalignment
+        - shadow
     exhaustruct:
       include:
         - github.com/decisiveai/mdai-gateway/internal/
@@ -138,19 +147,26 @@ linters:
   exclusions:
     generated: lax
     rules:
+      - path: ^cmd\/main\.go$
+        linters:
+          - forbidigo
       - path: _test\.go
         linters:
           - cyclop
           - dupl
           - funlen
+          - gosec
           - maintidx
           - unparam
+      - path: ^test\/
+        linters:
+          - gosec
+          - mnd
       - linters:
           - lll
         path: internal/*
 formatters:
   enable:
-    - gci
     - gofmt
     - gofumpt
     - goimports

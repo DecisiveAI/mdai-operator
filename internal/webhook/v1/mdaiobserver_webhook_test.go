@@ -109,7 +109,8 @@ func createObserver() *mdaiv1.MdaiObserver {
 					},
 					Requests: corev1.ResourceList{
 						"Cpu":    resource.MustParse("200m"),
-						"Memory": resource.MustParse("256Mi")},
+						"Memory": resource.MustParse("256Mi"),
+					},
 				},
 			},
 		},

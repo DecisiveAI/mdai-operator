@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"github.com/decisiveai/mdai-operator/internal/builder"
 	"github.com/go-logr/logr"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/stretchr/testify/assert"
@@ -134,13 +135,13 @@ func TestGetPipelineWithS3Exporter(t *testing.T) {
 		receiverName  string
 		severityLevel mdaiv1.SeverityLevel
 		exporterName  string
-		expected      ConfigBlock
+		expected      builder.ConfigBlock
 	}{
 		{
 			receiverName:  "routing/logstream",
 			severityLevel: mdaiv1.WarnSeverityLevel,
 			exporterName:  "awss3/collector",
-			expected: ConfigBlock{
+			expected: builder.ConfigBlock{
 				"receivers":  []any{"routing/logstream"},
 				"processors": []any{severityFilterMap[mdaiv1.WarnSeverityLevel], "batch"},
 				"exporters":  []any{"awss3/collector"},
@@ -150,7 +151,7 @@ func TestGetPipelineWithS3Exporter(t *testing.T) {
 			receiverName:  "foobaz",
 			severityLevel: mdaiv1.InfoSeverityLevel,
 			exporterName:  "awss3/hub",
-			expected: ConfigBlock{
+			expected: builder.ConfigBlock{
 				"receivers":  []any{"foobaz"},
 				"processors": []any{severityFilterMap[mdaiv1.InfoSeverityLevel], "batch"},
 				"exporters":  []any{"awss3/hub"},

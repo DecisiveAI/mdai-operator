@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"slices"
-	"time"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
@@ -87,7 +86,7 @@ func (c ObserverAdapter) ensureDeletionProcessed(ctx context.Context) (Operation
 	crState, err := c.finalize(ctx)
 	if crState == ObjectUnchanged || err != nil {
 		c.logger.Info("Has to requeue mdaiobserver")
-		return OperationResult{RequeueDelay: time.Second * 5}, err
+		return RequeueAfter(requeueTime, err)
 	}
 	return StopProcessing()
 }

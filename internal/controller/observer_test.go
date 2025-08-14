@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"github.com/decisiveai/mdai-operator/internal/builder"
 	"github.com/go-logr/logr"
 	"github.com/samber/lo"
 	"github.com/stretchr/testify/assert"
@@ -31,7 +32,7 @@ func TestGetObserverCollectorConfig(t *testing.T) {
 				t.Helper()
 				require.NoError(t, err)
 
-				var config ConfigBlock
+				var config builder.ConfigBlock
 				require.NoError(t, yaml.Unmarshal([]byte(resultConfig), &config))
 
 				serviceBlock := config.MustMap("service")
@@ -45,7 +46,7 @@ func TestGetObserverCollectorConfig(t *testing.T) {
 				require.Len(t, telemetryProcessors, 1)
 				telemetryProcessor, ok := telemetryProcessors[0].(map[string]any)
 				require.True(t, ok)
-				assert.Equal(t, "otlp://my.endpoint:4317", ConfigBlock(telemetryProcessor).MustMap("batch").MustMap("exporter").MustMap("otlp").MustString("endpoint"))
+				assert.Equal(t, "otlp://my.endpoint:4317", builder.ConfigBlock(telemetryProcessor).MustMap("batch").MustMap("exporter").MustMap("otlp").MustString("endpoint"))
 			},
 		},
 		{
@@ -84,7 +85,7 @@ func TestGetObserverCollectorConfig(t *testing.T) {
 				t.Helper()
 				require.NoError(t, err)
 
-				var config ConfigBlock
+				var config builder.ConfigBlock
 				require.NoError(t, yaml.Unmarshal([]byte(resultConfig), &config))
 
 				serviceBlock := config.MustMap("service")
@@ -104,7 +105,7 @@ func TestGetObserverCollectorConfig(t *testing.T) {
 				require.Len(t, telemetryProcessors, 1)
 				telemetryProcessor, ok := telemetryProcessors[0].(map[string]any)
 				require.True(t, ok)
-				assert.Equal(t, "otlp://my.endpoint:4317", ConfigBlock(telemetryProcessor).MustMap("batch").MustMap("exporter").MustMap("otlp").MustString("endpoint"))
+				assert.Equal(t, "otlp://my.endpoint:4317", builder.ConfigBlock(telemetryProcessor).MustMap("batch").MustMap("exporter").MustMap("otlp").MustString("endpoint"))
 
 				// now, validate the observer config was added
 				processors := config.MustMap("processors")

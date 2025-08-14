@@ -167,7 +167,7 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 	return warnings, nil
 }
 
-func (v *MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub, warnings admission.Warnings) (map[string]struct{}, admission.Warnings, error) {
+func (*MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub, warnings admission.Warnings) (map[string]struct{}, admission.Warnings, error) {
 	keys := make(map[string]struct{})
 	exported := make(map[string]struct{})
 	variables := mdaihub.Spec.Variables

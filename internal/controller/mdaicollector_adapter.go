@@ -6,25 +6,23 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"time"
 
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"github.com/decisiveai/mdai-operator/internal/builder"
 	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
-
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type otlpTlsConfig struct {
@@ -262,7 +260,7 @@ func (c MdaiCollectorAdapter) getScopedMdaiCollectorResourceName(postfix string)
 }
 
 func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *mdaiv1.LogsConfig, awsAccessKeySecret *string) (string, error) {
-	var mdaiCollectorConfig ConfigBlock
+	var mdaiCollectorConfig builder.ConfigBlock
 	if err := yaml.Unmarshal([]byte(baseMdaiCollectorYAML), &mdaiCollectorConfig); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base mdai collector config")
 		return "", err
@@ -306,8 +304,8 @@ func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *mdaiv1.LogsConf
 func (c MdaiCollectorAdapter) augmentPipelinesForS3ConfigAndGetOtherLogstreamPipelines(
 	logsConfig *mdaiv1.LogsConfig,
 	awsAccessKeySecret *string,
-	exporters ConfigBlock,
-	pipelines ConfigBlock,
+	exporters builder.ConfigBlock,
+	pipelines builder.ConfigBlock,
 	routingTableMap routingTable,
 ) []string {
 	defaultRoutingPipelines := make([]string, 0)
@@ -364,8 +362,8 @@ func (c MdaiCollectorAdapter) augmentPipelinesForS3ConfigAndGetOtherLogstreamPip
 
 func (c MdaiCollectorAdapter) augmentConfigForOtlpConfigAndGetOtherLogstreamPipelines(
 	logsConfig *mdaiv1.LogsConfig,
-	exporters ConfigBlock,
-	pipelines ConfigBlock,
+	exporters builder.ConfigBlock,
+	pipelines builder.ConfigBlock,
 	routingTableMap routingTable,
 ) []string {
 	defaultRoutingPipelines := make([]string, 0)
@@ -410,9 +408,9 @@ func (c MdaiCollectorAdapter) augmentConfigForOtlpConfigAndGetOtherLogstreamPipe
 func (c MdaiCollectorAdapter) addS3ComponentsAndPipeline(
 	logstream mdaiv1.MDAILogStream,
 	s3Config *mdaiv1.S3LogsConfig,
-	exporters ConfigBlock,
+	exporters builder.ConfigBlock,
 	minSeverity *mdaiv1.SeverityLevel,
-	pipelines ConfigBlock,
+	pipelines builder.ConfigBlock,
 	routingTableMap routingTable,
 ) string {
 	s3ExporterName, s3Exporter := getS3ExporterForLogstream(c.collectorCR.Name, logstream, *s3Config)
@@ -428,7 +426,7 @@ func addPipelineForLogstream(
 	logstreamConfig *mdaiv1.LogstreamConfig,
 	logstream mdaiv1.MDAILogStream,
 	otlpExporterName string,
-	pipelines ConfigBlock,
+	pipelines builder.ConfigBlock,
 	routingTableMap routingTable,
 ) string {
 	var minSeverity *mdaiv1.SeverityLevel
@@ -498,7 +496,7 @@ func getPipelineWithExporterAndSeverityFilter(
 	exporterName string,
 	minSeverity *mdaiv1.SeverityLevel,
 	batchProcessor string,
-) ConfigBlock {
+) builder.ConfigBlock {
 	processors := make([]any, 0)
 	if minSeverity != nil {
 		if filter := severityFilterMap[*minSeverity]; filter != "" {
@@ -508,7 +506,7 @@ func getPipelineWithExporterAndSeverityFilter(
 	if batchProcessor != "" {
 		processors = append(processors, batchProcessor)
 	}
-	return ConfigBlock{
+	return builder.ConfigBlock{
 		"receivers":  []any{receiverName},
 		"processors": processors,
 		"exporters":  []any{exporterName},
@@ -524,7 +522,7 @@ func (c MdaiCollectorAdapter) ensureDeletionProcessed(ctx context.Context) (Oper
 	crState, err := c.finalize(ctx)
 	if crState == ObjectUnchanged || err != nil {
 		c.logger.Info("Has to requeue mdai")
-		return OperationResult{RequeueDelay: 5 * time.Second}, err
+		return RequeueAfter(requeueTime, err)
 	}
 	return StopProcessing()
 }
@@ -552,6 +550,7 @@ func (c MdaiCollectorAdapter) ensureStatusSetToDone(ctx context.Context) (Operat
 	return ContinueProcessing()
 }
 
+//nolint:revive
 func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, namespace string, logsConfig *mdaiv1.LogsConfig, awsAccessKeySecret *string) (string, string, error) {
 	mdaiCollectorConfigConfigMapName := c.getScopedMdaiCollectorResourceName("config")
 	collectorYAML, err := c.getMdaiCollectorConfig(logsConfig, awsAccessKeySecret)
@@ -647,67 +646,30 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, deployment, func() error {
 		if err := controllerutil.SetControllerReference(c.collectorCR, deployment, c.scheme); err != nil {
-			c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorDeploymentName+" Deployment", "deployment", deployment.Name)
 			return err
 		}
 
-		if deployment.Labels == nil {
-			deployment.Labels = make(map[string]string)
-		}
-		deployment.Labels["app"] = mdaiCollectorDeploymentName
-		deployment.Labels[hubNameLabel] = c.collectorCR.Name
-
-		deployment.Spec.Replicas = int32Ptr(1)
-		if deployment.Spec.Selector == nil {
-			deployment.Spec.Selector = &metav1.LabelSelector{}
-		}
-		if deployment.Spec.Selector.MatchLabels == nil {
-			deployment.Spec.Selector.MatchLabels = make(map[string]string)
-		}
-		deployment.Spec.Selector.MatchLabels["app"] = mdaiCollectorDeploymentName
-
-		if deployment.Spec.Template.Labels == nil {
-			deployment.Spec.Template.Labels = make(map[string]string)
-		}
-		deployment.Spec.Template.Labels["app"] = mdaiCollectorDeploymentName
-		deployment.Spec.Template.Labels["app.kubernetes.io/component"] = mdaiCollectorDeploymentName
-
-		if deployment.Spec.Template.Annotations == nil {
-			deployment.Spec.Template.Annotations = make(map[string]string)
-		}
-		deployment.Spec.Template.Annotations["mdai-collector-config/sha256"] = hash
-
-		deployment.Spec.Template.Spec.ServiceAccountName = serviceAccountName
-
-		containerSpec := corev1.Container{
-			Name:  mdaiCollectorDeploymentName,
-			Image: "public.ecr.aws/decisiveai/mdai-collector:0.1.6",
-			Command: []string{
-				"/mdai-collector",
-				"--config=/conf/collector.yaml",
-			},
-			Ports: []corev1.ContainerPort{
-				{ContainerPort: 4317, Name: "otlp-grpc"},
-				{ContainerPort: 4318, Name: "otlp-http"},
-				{ContainerPort: 8899, Name: "prom-http"},
-			},
-			VolumeMounts: []corev1.VolumeMount{
-				{
-					Name:      "config-volume",
-					MountPath: "/conf/collector.yaml",
-					SubPath:   "collector.yaml",
-				},
-			},
-			EnvFrom: []corev1.EnvFromSource{
-				{
-					ConfigMapRef: &corev1.ConfigMapEnvSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: collectorEnvConfigMapName,
-						},
+		container := builder.Container(mdaiCollectorDeploymentName, "public.ecr.aws/decisiveai/mdai-collector:0.1.6").
+			WithCommand("/mdai-collector", "--config=/conf/collector.yaml").
+			WithPorts(
+				corev1.ContainerPort{ContainerPort: otlpGRPCPort, Name: "otlp-grpc"},
+				corev1.ContainerPort{ContainerPort: otlpHTTPPort, Name: "otlp-http"},
+				corev1.ContainerPort{ContainerPort: promHTTPPort, Name: "prom-http"},
+			).
+			WithVolumeMounts(corev1.VolumeMount{
+				Name:      "config-volume",
+				MountPath: "/conf/collector.yaml",
+				SubPath:   "collector.yaml",
+			}).
+			WithEnvFrom(corev1.EnvFromSource{
+				ConfigMapRef: &corev1.ConfigMapEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: collectorEnvConfigMapName,
 					},
 				},
-			},
-			SecurityContext: &corev1.SecurityContext{
+			}).
+			WithAWSSecret(awsAccessKeySecret).
+			WithSecurityContext(&corev1.SecurityContext{
 				SeccompProfile: &corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				},
@@ -716,27 +678,20 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 					Drop: []corev1.Capability{"ALL"},
 				},
 				RunAsNonRoot: ptr.To(true),
-			},
-		}
-		deployment.Spec.Template.Spec.Containers = []corev1.Container{containerSpec}
+			}).
+			Build()
 
-		if awsAccessKeySecret != nil {
-			secretEnvSource := corev1.EnvFromSource{
-				SecretRef: &corev1.SecretEnvSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: *awsAccessKeySecret,
-					},
-				},
-			}
-			containerSpec.EnvFrom = append(containerSpec.EnvFrom, secretEnvSource)
-		}
-
-		deployment.Spec.Template.Spec.Containers = []corev1.Container{
-			containerSpec,
-		}
-
-		deployment.Spec.Template.Spec.Volumes = []corev1.Volume{
-			{
+		builder.Deployment(deployment).
+			WithLabel("app", mdaiCollectorDeploymentName).
+			WithLabel(hubNameLabel, c.collectorCR.Name).
+			WithSelectorLabel("app", mdaiCollectorDeploymentName).
+			WithTemplateLabel("app", mdaiCollectorDeploymentName).
+			WithTemplateLabel("app.kubernetes.io/component", mdaiCollectorDeploymentName).
+			WithTemplateAnnotation("mdai-collector-config/sha256", hash).
+			WithReplicas(1).
+			WithServiceAccount(serviceAccountName).
+			WithContainers(container).
+			WithVolumes(corev1.Volume{
 				Name: "config-volume",
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -745,8 +700,7 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 						},
 					},
 				},
-			},
-		}
+			})
 
 		return nil
 	})
@@ -777,32 +731,18 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorService(ctx context.Con
 	}
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, service, func() error {
-		if service.Labels == nil {
-			service.Labels = make(map[string]string)
+		if err := controllerutil.SetControllerReference(c.collectorCR, service, c.scheme); err != nil {
+			return err
 		}
-		service.Labels["app"] = appName
-		service.Labels[hubNameLabel] = c.collectorCR.Name
 
-		service.Spec = corev1.ServiceSpec{
-			Selector: map[string]string{
-				"app": appName,
-			},
-			Ports: []corev1.ServicePort{
-				{
-					Name:       "otlp-grpc",
-					Protocol:   corev1.ProtocolTCP,
-					Port:       4317,
-					TargetPort: intstr.FromString("otlp-grpc"),
-				},
-				{
-					Name:       "otlp-http",
-					Protocol:   corev1.ProtocolTCP,
-					Port:       4318,
-					TargetPort: intstr.FromString("otlp-http"),
-				},
-			},
-			Type: corev1.ServiceTypeClusterIP,
-		}
+		builder.Service(service).
+			WithLabel("app", appName).
+			WithLabel(hubNameLabel, c.collectorCR.Name).
+			WithSelectorLabel("app", appName).
+			WithPort("otlp-grpc", corev1.ProtocolTCP, otlpGRPCPort, "otlp-grpc").
+			WithPort("otlp-http", corev1.ProtocolTCP, otlpHTTPPort, "otlp-http").
+			WithType(corev1.ServiceTypeClusterIP)
+
 		return nil
 	})
 	if err != nil {

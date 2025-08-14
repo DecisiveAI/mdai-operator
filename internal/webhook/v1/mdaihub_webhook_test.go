@@ -31,7 +31,8 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 						{
 							Name: "SERVICE_LIST_REGEX",
 							Transformers: []mdaiv1.VariableTransformer{
-								{Type: mdaiv1.TransformerTypeJoin,
+								{
+									Type: mdaiv1.TransformerTypeJoin,
 									Join: &mdaiv1.JoinTransformer{
 										Delimiter: "|",
 									},
@@ -41,7 +42,8 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 						{
 							Name: "SERVICE_LIST_CSV",
 							Transformers: []mdaiv1.VariableTransformer{
-								{Type: mdaiv1.TransformerTypeJoin,
+								{
+									Type: mdaiv1.TransformerTypeJoin,
 									Join: &mdaiv1.JoinTransformer{
 										Delimiter: ",",
 									},
@@ -58,7 +60,8 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 						{
 							Name: "SERVICE_LIST_2_REGEX",
 							Transformers: []mdaiv1.VariableTransformer{
-								{Type: mdaiv1.TransformerTypeJoin,
+								{
+									Type: mdaiv1.TransformerTypeJoin,
 									Join: &mdaiv1.JoinTransformer{
 										Delimiter: "|",
 									},
@@ -68,7 +71,8 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 						{
 							Name: "SERVICE_LIST_2_CSV",
 							Transformers: []mdaiv1.VariableTransformer{
-								{Type: mdaiv1.TransformerTypeJoin,
+								{
+									Type: mdaiv1.TransformerTypeJoin,
 									Join: &mdaiv1.JoinTransformer{
 										Delimiter: ",",
 									},
@@ -113,7 +117,8 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 						{
 							Name: "PRIORITY_LIST",
 							Transformers: []mdaiv1.VariableTransformer{
-								{Type: mdaiv1.TransformerTypeJoin,
+								{
+									Type: mdaiv1.TransformerTypeJoin,
 									Join: &mdaiv1.JoinTransformer{
 										Delimiter: ",",
 									},
@@ -273,7 +278,8 @@ var _ = Describe("MdaiHub Webhook", func() {
 		It("Should fail if transformers specified for boolean", func() {
 			obj := createSampleMdaiHub()
 			(obj.Spec.Variables)[3].SerializeAs[0].Transformers = []mdaiv1.VariableTransformer{
-				{Type: mdaiv1.TransformerTypeJoin,
+				{
+					Type: mdaiv1.TransformerTypeJoin,
 					Join: &mdaiv1.JoinTransformer{
 						Delimiter: "|",
 					},

@@ -295,7 +295,12 @@ func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
 
 	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
 	envMap := map[string]string{"VAR": "string"}
-	_, cm, err := adapter.createOrUpdateEnvConfigMap(ctx, envMap, manualEnvConfigMapNamePostfix, "default")
+	_, cm, err := adapter.createOrUpdateEnvConfigMap(
+		ctx,
+		envMap,
+		manualEnvConfigMapNamePostfix,
+		"default",
+		WithOwnerRef(mdaiCR, scheme))
 	require.NoError(t, err)
 	assert.Equal(t, "string", cm.Data["VAR"])
 

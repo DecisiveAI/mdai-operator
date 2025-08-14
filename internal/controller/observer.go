@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"github.com/decisiveai/mdai-operator/internal/builder"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -65,13 +66,13 @@ func (c ObserverAdapter) createOrUpdateObserverResourceService(ctx context.Conte
 				{
 					Name:       "otlp-grpc",
 					Protocol:   corev1.ProtocolTCP,
-					Port:       4317,
+					Port:       otlpGRPCPort,
 					TargetPort: intstr.FromString("otlp-grpc"),
 				},
 				{
 					Name:       "otlp-http",
 					Protocol:   corev1.ProtocolTCP,
-					Port:       4318,
+					Port:       otlpHTTPPort,
 					TargetPort: intstr.FromString("otlp-http"),
 				},
 			},
@@ -186,10 +187,10 @@ func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Co
 			Name:  name,
 			Image: observerDefaultImage,
 			Ports: []corev1.ContainerPort{
-				{ContainerPort: 8888, Name: "otelcol-metrics"},
-				{ContainerPort: 8899, Name: "observe-metrics"},
-				{ContainerPort: 4317, Name: "otlp-grpc"},
-				{ContainerPort: 4318, Name: "otlp-http"},
+				{ContainerPort: otelMetricsPort, Name: "otelcol-metrics"},
+				{ContainerPort: observerMetricsPort, Name: "observe-metrics"},
+				{ContainerPort: otlpGRPCPort, Name: "otlp-grpc"},
+				{ContainerPort: otlpHTTPPort, Name: "otlp-http"},
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
@@ -251,7 +252,7 @@ func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Co
 }
 
 func (c ObserverAdapter) getObserverCollectorConfig(observers []mdaiv1.Observer, observerResource mdaiv1.ObserverResource) (string, error) {
-	var config ConfigBlock
+	var config builder.ConfigBlock
 	if err := yaml.Unmarshal([]byte(baseObserverCollectorYAML), &config); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base collector config")
 		return "", fmt.Errorf(`unmarshal base collector config: %w`, err)

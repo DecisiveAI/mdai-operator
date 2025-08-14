@@ -18,7 +18,8 @@ type shutdownFunc func(context.Context) error
 
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
 // If it does not return an error, make sure to call shutdown for proper cleanup.
-func setupOTelSDK(ctx context.Context, enabled bool) (shutdown shutdownFunc, err error) {
+// nolint: nonamedreturns
+func setupOTelSDK(ctx context.Context) (shutdown shutdownFunc, err error) {
 	var shutdownFuncs []shutdownFunc
 
 	// shutdown calls cleanup functions registered via shutdownFuncs.
@@ -33,7 +34,7 @@ func setupOTelSDK(ctx context.Context, enabled bool) (shutdown shutdownFunc, err
 		return err
 	}
 
-	if !enabled {
+	if !otelSdkEnabled() {
 		return shutdown, nil
 	}
 
@@ -95,19 +96,19 @@ func attachOtelLogger(logger logr.Logger) logr.Logger {
 	otel.SetErrorHandler(&LogrLogHandler{logger})
 	mainSink := logger.GetSink()
 	var otelSink logr.LogSink = otellogr.NewLogSink("github.com/decisiveai/mdai-operator")
-	otelifiedLogger := logger.WithSink(otelMirrorSink{mainSink, &otelSink})
+	otelifiedLogger := logger.WithSink(otelMirrorSink{mainSink, otelSink})
 	return otelifiedLogger
 }
 
 type otelMirrorSink struct {
 	mainSink logr.LogSink
-	otelSink *logr.LogSink
+	otelSink logr.LogSink
 }
 
 func (o otelMirrorSink) Init(info logr.RuntimeInfo) {
 	o.mainSink.Init(info)
 	if o.otelSink != nil {
-		(*o.otelSink).Init(info)
+		o.otelSink.Init(info)
 	}
 }
 
@@ -118,31 +119,35 @@ func (o otelMirrorSink) Enabled(level int) bool {
 func (o otelMirrorSink) Info(level int, msg string, keysAndValues ...any) {
 	o.mainSink.Info(level, msg, keysAndValues...)
 	if o.otelSink != nil {
-		(*o.otelSink).Info(level, msg, keysAndValues...)
+		o.otelSink.Info(level, msg, keysAndValues...)
 	}
 }
 
 func (o otelMirrorSink) Error(err error, msg string, keysAndValues ...any) {
 	o.mainSink.Error(err, msg, keysAndValues...)
 	if o.otelSink != nil {
-		(*o.otelSink).Error(err, msg, keysAndValues...)
+		o.otelSink.Error(err, msg, keysAndValues...)
 	}
 }
 
-func (o otelMirrorSink) WithValues(keysAndValues ...any) logr.LogSink {
-	o.mainSink = o.mainSink.WithValues(keysAndValues...)
+func (o otelMirrorSink) WithValues(kv ...any) logr.LogSink {
+	var newOtel logr.LogSink
 	if o.otelSink != nil {
-		newSink := (*o.otelSink).WithValues(keysAndValues...)
-		o.otelSink = &newSink
+		newOtel = o.otelSink.WithValues(kv...)
 	}
-	return otelMirrorSink{o.mainSink, o.otelSink}
+	return otelMirrorSink{
+		mainSink: o.mainSink.WithValues(kv...),
+		otelSink: newOtel,
+	}
 }
 
 func (o otelMirrorSink) WithName(name string) logr.LogSink {
-	o.mainSink = o.mainSink.WithName(name)
+	var newOtel logr.LogSink
 	if o.otelSink != nil {
-		newSink := (*o.otelSink).WithName(name)
-		o.otelSink = &newSink
+		newOtel = o.otelSink.WithName(name)
 	}
-	return otelMirrorSink{o.mainSink, o.otelSink}
+	return otelMirrorSink{
+		mainSink: o.mainSink.WithName(name),
+		otelSink: newOtel,
+	}
 }

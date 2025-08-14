@@ -85,8 +85,8 @@ func (*MdaiCollectorReconciler) ReconcileHandler(ctx context.Context, adapter Ad
 	}
 	for _, operation := range operations {
 		result, err := operation(ctx)
-		if err != nil {
-			return ctrl.Result{}, err
+		if err != nil || result.RequeueRequest {
+			return ctrl.Result{RequeueAfter: result.RequeueDelay}, err
 		}
 		if result.CancelRequest {
 			return ctrl.Result{}, nil
