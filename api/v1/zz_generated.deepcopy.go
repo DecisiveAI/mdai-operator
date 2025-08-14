@@ -889,6 +889,11 @@ func (in *When) DeepCopyInto(out *When) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.UpdateType != nil {
+		in, out := &in.UpdateType, &out.UpdateType
+		*out = new(string)
+		**out = **in
+	}
 	if in.Condition != nil {
 		in, out := &in.Condition, &out.Condition
 		*out = new(string)

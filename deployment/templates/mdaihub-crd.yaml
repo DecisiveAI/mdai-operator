@@ -138,6 +138,12 @@ spec:
                           type: string
                         status:
                           type: string
+                        updateType:
+                          enum:
+                          - added
+                          - removed
+                          - set
+                          type: string
                         variableUpdated:
                           description: 'Variant 2: variable-driven'
                           type: string

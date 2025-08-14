@@ -102,6 +102,7 @@ spec:
     - name: TrackCriticalRiskLevel
       when:
         variableUpdated: riskLevel
+        updateType: set
         condition: "variable_value == 'critical'"
       then:
         - addToSet:

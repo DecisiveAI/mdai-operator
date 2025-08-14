@@ -225,6 +225,7 @@ func validateWhen(path *field.Path, when mdaiv1.When, knownVarKeys map[string]st
 	hasStatus := strings.TrimSpace(ptr.Deref(when.Status, "")) != ""
 	hasVariableUpdated := strings.TrimSpace(ptr.Deref(when.VariableUpdated, "")) != ""
 	hasCondition := strings.TrimSpace(ptr.Deref(when.Condition, "")) != ""
+	hasUpdateType := strings.TrimSpace(ptr.Deref(when.UpdateType, "")) != ""
 
 	// Each pair must be all-or-nothing
 	if hasAlertName != hasStatus {
@@ -234,25 +235,22 @@ func validateWhen(path *field.Path, when mdaiv1.When, knownVarKeys map[string]st
 		errs = append(errs, field.Invalid(path, "<variable>", "variableUpdated and condition must be set together"))
 	}
 
-	if when.VariableUpdated != nil && !hasVariableKey(knownVarKeys, *when.VariableUpdated) {
-		errs = append(errs, field.Invalid(path, "<variable>", "variable do not exists within hub"))
-	}
-	if when.AlertName != nil && !hasVariableKey(knownAlertNames, *when.AlertName) {
-		errs = append(errs, field.Invalid(path, "<alert>", "alertName do not exists within hub"))
+	if hasUpdateType && !hasVariableUpdated {
+		errs = append(errs, field.Invalid(path.Child("updateType"), *when.UpdateType, "can only be set when variableUpdated is set"))
 	}
 
 	// Existence checks
-	if hasVariableUpdated && !hasVariableKey(knownVarKeys, *when.VariableUpdated) {
+	if hasVariableUpdated && !hasKey(knownVarKeys, *when.VariableUpdated) {
 		errs = append(errs, field.Invalid(path.Child("variableUpdated"), *when.VariableUpdated, "not defined in spec.variables"))
 	}
-	if hasAlertName && !hasVariableKey(knownAlertNames, *when.AlertName) {
+	if hasAlertName && !hasKey(knownAlertNames, *when.AlertName) {
 		errs = append(errs, field.Invalid(path.Child("alertName"), *when.AlertName, "not defined in spec.alerts"))
 	}
 
 	return errs
 }
 
-func hasVariableKey(set map[string]struct{}, key string) bool {
+func hasKey(set map[string]struct{}, key string) bool {
 	_, ok := set[strings.ToLower(strings.TrimSpace(key))]
 	return ok
 }
@@ -285,7 +283,7 @@ func validateAction(actionPath *field.Path, action mdaiv1.Action, knownVarKeys m
 func validateSetAction(p *field.Path, a *mdaiv1.SetAction, knownVarKeys map[string]struct{}) field.ErrorList {
 	var errs field.ErrorList
 	set := strings.TrimSpace(a.Set)
-	if !hasVariableKey(knownVarKeys, set) {
+	if !hasKey(knownVarKeys, set) {
 		errs = append(errs, field.Invalid(p.Child("set"), set, "not defined in spec.variables"))
 	}
 	return errs

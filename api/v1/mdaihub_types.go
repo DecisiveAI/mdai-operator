@@ -162,6 +162,9 @@ type When struct {
 	// Variant 2: variable-driven
 	// +optional
 	VariableUpdated *string `json:"variableUpdated,omitempty"`
+	// +optional
+	// +kubebuilder:validation:Enum=added;removed;set
+	UpdateType *string `json:"updateType,omitempty"`
 	// Condition a template for conditions on variable changes
 	// +optional
 	Condition *string `json:"condition,omitempty"`

@@ -20,6 +20,7 @@ func transformWhenToTrigger(when *mdaiv1.When) (triggers.Trigger, error) {
 	status := strings.TrimSpace(ptr.Deref(when.Status, ""))
 	varUpdated := strings.TrimSpace(ptr.Deref(when.VariableUpdated, ""))
 	cond := strings.TrimSpace(ptr.Deref(when.Condition, ""))
+	updateType := strings.TrimSpace(ptr.Deref(when.UpdateType, ""))
 
 	hasAlert := alertName != ""
 	hasVar := varUpdated != ""
@@ -34,8 +35,9 @@ func transformWhenToTrigger(when *mdaiv1.When) (triggers.Trigger, error) {
 		}, nil
 	case hasVar:
 		return &triggers.VariableTrigger{
-			Name:      varUpdated,
-			Condition: cond,
+			Name:       varUpdated,
+			UpdateType: updateType,
+			Condition:  cond,
 		}, nil
 	default:
 		return nil, fmt.Errorf("when: specify either alertName or variableUpdated")
