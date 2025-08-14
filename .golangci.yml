@@ -31,8 +31,6 @@ linters:
     - wsl_v5
 
   settings:
-    gochecknoglobals:
-
     cyclop:
       max-complexity: 15
     funlen:
@@ -101,7 +99,6 @@ linters:
         - name: var-naming
           disabled: true
     tagliatelle:
-      disabled: true
       case:
         rules:
           json: camel
