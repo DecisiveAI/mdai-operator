@@ -488,7 +488,7 @@ func (c HubAdapter) ensureVariableSynchronized(ctx context.Context) (OperationRe
 		c.logger.Info("No manual variables defined in the MDAI CR", "name", c.mdaiCR.Name)
 		if err := c.deleteEnvConfigMap(ctx, manualEnvConfigMapNamePostfix, c.mdaiCR.Namespace); err != nil {
 			c.logger.Error(err, "Failed to delete manual variables ConfigMap", "name", c.mdaiCR.Name, "namespace", c.mdaiCR.Namespace)
-			return OperationResult{}, err
+			return ContinueWithError(err)
 		}
 	} else {
 		_, _, err := c.createOrUpdateEnvConfigMap(ctx,
@@ -497,7 +497,7 @@ func (c HubAdapter) ensureVariableSynchronized(ctx context.Context) (OperationRe
 			c.mdaiCR.Namespace,
 			WithOwnerRef(c.mdaiCR, c.scheme))
 		if err != nil {
-			return OperationResult{}, err
+			return ContinueWithError(err)
 		}
 	}
 
@@ -555,7 +555,7 @@ func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (Operatio
 		key := automation.EventRef
 		workflowJSON, err := json.Marshal(automation.Workflow)
 		if err != nil {
-			return OperationResult{}, fmt.Errorf("failed to marshal automation workflow: %w", err)
+			return ContinueWithError(fmt.Errorf("failed to marshal automation workflow: %w", err))
 		}
 		automationMap[key] = string(workflowJSON)
 	}
@@ -647,10 +647,6 @@ func (c HubAdapter) createOrUpdateEnvConfigMap(
 
 	c.logger.Info("Successfully created or updated ConfigMap", "name", envConfigMapName, "namespace", namespace, "operation", operationResult)
 	return operationResult, desiredConfigMap, nil
-}
-
-func (c HubAdapter) ensureControllerRef(cm *corev1.ConfigMap) error {
-	return controllerutil.SetControllerReference(c.mdaiCR, cm, c.scheme)
 }
 
 func (c HubAdapter) listOtelCollectorsWithLabel(ctx context.Context, labelSelector string) ([]v1beta1.OpenTelemetryCollector, error) {

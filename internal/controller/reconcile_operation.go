@@ -53,6 +53,14 @@ func RequeueWithError(errIn error) (OperationResult, error) {
 	}, errIn
 }
 
+func ContinueWithError(errIn error) (OperationResult, error) {
+	return OperationResult{
+		RequeueDelay:   0,
+		RequeueRequest: false,
+		CancelRequest:  false,
+	}, errIn
+}
+
 func RequeueOnErrorOrStop(errIn error) (OperationResult, error) {
 	return OperationResult{
 		RequeueDelay:   0,

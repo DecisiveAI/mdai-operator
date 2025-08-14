@@ -303,9 +303,6 @@ func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
 		WithOwnerRef(mdaiCR, scheme))
 	require.NoError(t, err)
 	assert.Equal(t, "string", cm.Data["VAR"])
-
-	err = adapter.ensureControllerRef(cm)
-	require.NoError(t, err)
 }
 
 func TestEnsureVariableSynced(t *testing.T) {
@@ -797,6 +794,9 @@ func TestEnsureStatusSetToDone(t *testing.T) {
 	}
 
 	cond := meta.FindStatusCondition(updatedCR.Status.Conditions, typeAvailableHub)
+	if cond == nil {
+		t.Fatalf("expected condition %q to exist, but it was not found", typeAvailableHub)
+	}
 	if cond.Status != metav1.ConditionTrue {
 		t.Errorf("expected condition %q to be True, got: %v", typeAvailableHub, cond.Status)
 	}
