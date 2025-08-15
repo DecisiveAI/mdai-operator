@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,7 +18,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/valkey-io/valkey-go"
+	"sigs.k8s.io/yaml"
 )
+
+//go:embed testdata/*.yaml
+var testdata embed.FS
 
 // namespace where the project is deployed in
 const (
@@ -473,7 +478,24 @@ var _ = Describe("Manager", Ordered, func() {
 
 		It("can create the config map for observer", func() {
 			configMapExists("mdaihub-sample-mdai-observer-config", namespace)
-			// TODO check configmap content
+			yamlStr, err := configMapYAML("mdaihub-sample-mdai-observer-config", namespace)
+			Expect(err).NotTo(HaveOccurred())
+
+			var (
+				actual   k8sObject
+				expected k8sObject
+			)
+
+			err = yaml.Unmarshal([]byte(yamlStr), &actual)
+			Expect(err).NotTo(HaveOccurred())
+			actual.stripVolatile()
+
+			bytes, err := testdata.ReadFile("testdata/observer-configmap.yaml")
+			Expect(err).NotTo(HaveOccurred())
+			err = yaml.Unmarshal(bytes, &expected)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(actual).To(Equal(expected))
 		})
 
 		It("can deploy the observer", func() {
@@ -590,12 +612,23 @@ var _ = Describe("Manager", Ordered, func() {
 
 		It("can create Prometheus rules", func() {
 			verifyPrometheusRules := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "prometheusrule", "-n", namespace)
+				cmd := exec.Command("kubectl", "get", "prometheusrule", "mdai-mdaihub-sample-alert-rules", "-n", namespace, "-o", "yaml")
 				out, err := utils.Run(cmd)
-				g.Expect(out).To(ContainSubstring("mdai-mdaihub-sample-alert-rules"))
 				g.Expect(err).NotTo(HaveOccurred())
+
+				var (
+					actual   k8sObject
+					expected k8sObject
+				)
+
+				_ = yaml.Unmarshal([]byte(out), &actual)
+				actual.stripVolatile()
+
+				bytes, err := testdata.ReadFile("testdata/prometheus_rule.yaml")
+				Expect(err).NotTo(HaveOccurred())
+				_ = yaml.Unmarshal(bytes, &expected)
+				Expect(actual).To(Equal(expected))
 			}
-			// TODO check prometheus rules content
 			Eventually(verifyPrometheusRules).Should(Succeed())
 		})
 
@@ -781,7 +814,24 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyMdaiCollector).Should(Succeed())
 
 			By("validating collector deleted")
-			// TODO check collector removed
+			verifyCollectorDeleted := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pods",
+					"-n", namespace,
+					"-l", "app=internal-mdai-collector",
+					"-o", "json")
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				expectedYAML := `
+apiVersion: v1
+items: []
+kind: List
+metadata:
+  resourceVersion: ""
+`
+				g.Expect(out).To(MatchYAML(expectedYAML))
+			}
+
+			Eventually(verifyCollectorDeleted, "30s", "3s").Should(Succeed(), "expected all mdai collector pods to be deleted")
 		})
 
 		It("can delete MdaiObserver CRs and clean up resources", func() {
@@ -865,7 +915,18 @@ func configMapDoesNotExist(name string, namespace string) {
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("not found"))
 	}
-	Eventually(verifyConfigMap, "2m", "5s").Should(Succeed())
+	Eventually(verifyConfigMap, "1m", "5s").Should(Succeed())
+}
+
+func configMapYAML(name, namespace string) (string, error) {
+	cmd := exec.Command("kubectl", "get", "configmap", name,
+		"-n", namespace,
+		"-o", "yaml")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
 
 // serviceAccountToken returns a token for the specified service account in the given namespace.
@@ -964,4 +1025,26 @@ type tokenRequest struct {
 	Status struct {
 		Token string `json:"token"`
 	} `json:"status"`
+}
+
+type k8sObject map[string]any
+
+func (obj k8sObject) stripVolatile() {
+	meta, _ := obj["metadata"].(map[string]any)
+	if meta == nil {
+		return
+	}
+	delete(meta, "uid")
+	delete(meta, "resourceVersion")
+	delete(meta, "creationTimestamp")
+	delete(meta, "generation")
+	delete(meta, "managedFields")
+
+	if ors, ok := meta["ownerReferences"].([]any); ok {
+		for _, r := range ors {
+			if m, ok := r.(map[string]any); ok {
+				delete(m, "uid")
+			}
+		}
+	}
 }
