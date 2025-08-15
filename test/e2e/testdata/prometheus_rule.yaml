@@ -1,0 +1,27 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  # creationTimestamp: "2025-08-15T18:32:34Z"
+  # generation: 2
+  labels:
+    app.kubernetes.io/instance: mdai
+    app.kubernetes.io/managed-by: mdai-operator
+    app.kubernetes.io/part-of: kube-prometheus-stack
+  name: mdai-mdaihub-sample-alert-rules
+  namespace: mdai
+  # resourceVersion: "1183"
+  # uid: e1c890f8-465f-452c-b4bb-3258948b2200
+spec:
+  groups:
+  - name: mdai
+    rules:
+    - alert: logBytesOutTooHighBySvc
+      annotations:
+        alert_name: logBytesOutTooHighBySvc
+        current_value: '{{ $value | printf "%.2f" }}'
+        expression: increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024
+        hub_name: mdaihub-sample
+      expr: increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024
+      for: 5m
+      labels:
+        severity: warning

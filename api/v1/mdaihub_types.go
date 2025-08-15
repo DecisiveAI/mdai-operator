@@ -1,9 +1,10 @@
 package v1
 
 import (
+	"k8s.io/apimachinery/pkg/util/intstr"
+
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 type Serializer struct {
@@ -74,7 +75,7 @@ type PrometheusAlert struct {
 	For *prometheusv1.Duration `json:"for,omitempty" yaml:"for,omitempty"`
 	// KeepFiringFor defines how long an alert will continue firing after the condition that triggered it has cleared.
 	// +kubebuilder:validation:Optional
-	KeepFiringFor *prometheusv1.NonEmptyDuration `json:"keep_firing_for,omitempty" yaml:"keep_firing_for,omitempty"`
+	KeepFiringFor *prometheusv1.NonEmptyDuration `json:"keep_firing_for,omitempty" yaml:"keep_firing_for,omitempty"` //nolint:tagliatelle
 	// +kubebuilder:validation:Pattern:="^(warning|critical)$"
 	// +kubebuilder:validation:Required
 	Severity string `json:"severity" yaml:"severity"`
@@ -83,7 +84,7 @@ type PrometheusAlert struct {
 type Config struct {
 	// EvaluationInterval Specify the interval at which all evaluations within this hub are assessed in the Prometheus infrastructure.
 	// +kubebuilder:validation:Optional
-	EvaluationInterval *prometheusv1.Duration `json:"evaluation_interval,omitempty" yaml:"evaluation_interval,omitempty"`
+	EvaluationInterval *prometheusv1.Duration `json:"evaluation_interval,omitempty" yaml:"evaluation_interval,omitempty"` //nolint:tagliatelle
 }
 
 type Automation struct {
@@ -144,10 +145,11 @@ type MdaiHub struct {
 type MdaiHubList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []MdaiHub `json:"items"`
+
+	Items []MdaiHub `json:"items"`
 }
 
-func init() {
+func init() { //nolint:gochecknoinits
 	SchemeBuilder.Register(&MdaiHub{}, &MdaiHubList{})
 }
 

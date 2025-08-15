@@ -2,20 +2,23 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
-
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
+
+var _ Controller = (*MdaiObserverReconciler)(nil)
 
 // MdaiObserverReconciler reconciles a MdaiObserver object
 type MdaiObserverReconciler struct {
 	client.Client
+
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 }
@@ -56,13 +59,18 @@ func (r *MdaiObserverReconciler) Reconcile(ctx context.Context, req ctrl.Request
 }
 
 // ReconcileHandler processes the MdaiObserver CR and performs the necessary operations.
-func (r *MdaiObserverReconciler) ReconcileHandler(ctx context.Context, adapter ObserverAdapter) (ctrl.Result, error) {
+func (*MdaiObserverReconciler) ReconcileHandler(ctx context.Context, adapter Adapter) (ctrl.Result, error) {
+	observerAdapter, ok := adapter.(ObserverAdapter)
+	if !ok {
+		return ctrl.Result{}, fmt.Errorf("unexpected adapter type: %T", adapter)
+	}
+
 	operations := []ReconcileOperation{
-		adapter.ensureObserverDeletionProcessed,
-		adapter.ensureStatusInitialized,
-		adapter.ensureFinalizerInitialized,
-		adapter.ensureObserversSynchronized,
-		adapter.ensureStatusSetToDone,
+		observerAdapter.ensureDeletionProcessed,
+		observerAdapter.ensureStatusInitialized,
+		observerAdapter.ensureFinalizerInitialized,
+		observerAdapter.ensureSynchronized,
+		observerAdapter.ensureStatusSetToDone,
 	}
 	for _, operation := range operations {
 		result, err := operation(ctx)

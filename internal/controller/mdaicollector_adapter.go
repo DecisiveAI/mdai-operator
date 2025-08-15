@@ -3,27 +3,24 @@ package controller
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"slices"
-	"time"
-
-	"errors"
-
-	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"github.com/decisiveai/mdai-operator/internal/builder"
+	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 )
@@ -78,11 +75,13 @@ var (
 		mdaiv1.AuditLogstream:     "log",
 	}
 	routingTableConditionMap = map[mdaiv1.MDAILogStream]string{
-		mdaiv1.CollectorLogstream: "attributes[\"mdai-logstream\"] == \"collector\"",
-		mdaiv1.HubLogstream:       "attributes[\"mdai-logstream\"] == \"hub\"",
-		mdaiv1.AuditLogstream:     "attributes[\"mdai-logstream\"] == \"audit\"",
+		mdaiv1.CollectorLogstream: `attributes["mdai-logstream"] == "collector"`,
+		mdaiv1.HubLogstream:       `attributes["mdai-logstream"] == "hub"`,
+		mdaiv1.AuditLogstream:     `attributes["mdai-logstream"] == "audit"`,
 	}
 )
+
+var _ Adapter = (*MdaiCollectorAdapter)(nil)
 
 type MdaiCollectorAdapter struct {
 	collectorCR *mdaiv1.MdaiCollector
@@ -95,51 +94,51 @@ type MdaiCollectorAdapter struct {
 func NewMdaiCollectorAdapter(
 	cr *mdaiv1.MdaiCollector,
 	log logr.Logger,
-	client client.Client,
+	k8sClient client.Client,
 	recorder record.EventRecorder,
 	scheme *runtime.Scheme,
 ) *MdaiCollectorAdapter {
 	return &MdaiCollectorAdapter{
 		collectorCR: cr,
 		logger:      log,
-		client:      client,
+		client:      k8sClient,
 		recorder:    recorder,
 		scheme:      scheme,
 	}
 }
 
-func (c MdaiCollectorAdapter) ensureMdaiCollectorFinalizerInitialized(ctx context.Context) (OperationResult, error) {
-	if !controllerutil.ContainsFinalizer(c.collectorCR, hubFinalizer) {
-		c.logger.Info("Adding Finalizer for MdaiHub")
-		if ok := controllerutil.AddFinalizer(c.collectorCR, hubFinalizer); !ok {
-			c.logger.Error(nil, "Failed to add finalizer into the custom resource")
-			return RequeueWithError(errors.New("failed to add finalizer " + hubFinalizer))
-		}
-
-		if err := c.client.Update(ctx, c.collectorCR); err != nil {
-			c.logger.Error(err, "Failed to update custom resource to add finalizer")
-			return RequeueWithError(err)
-		}
-		return StopProcessing() // when finalizer is added it will trigger reconciliation
+func (c MdaiCollectorAdapter) ensureFinalizerInitialized(ctx context.Context) (OperationResult, error) {
+	if controllerutil.ContainsFinalizer(c.collectorCR, hubFinalizer) {
+		return ContinueProcessing()
 	}
-	return ContinueProcessing()
+	c.logger.Info("Adding Finalizer for MdaiCollector")
+	if ok := controllerutil.AddFinalizer(c.collectorCR, hubFinalizer); !ok {
+		c.logger.Error(nil, "Failed to add finalizer into the custom resource")
+		return RequeueWithError(errors.New("failed to add finalizer " + hubFinalizer))
+	}
+
+	if err := c.client.Update(ctx, c.collectorCR); err != nil {
+		c.logger.Error(err, "Failed to update custom resource to add finalizer")
+		return RequeueWithError(err)
+	}
+	return StopProcessing() // when finalizer is added it will trigger reconciliation
 }
 
-func (c MdaiCollectorAdapter) ensureMdaiCollectorStatusInitialized(ctx context.Context) (OperationResult, error) {
-	if len(c.collectorCR.Status.Conditions) == 0 {
-		meta.SetStatusCondition(&c.collectorCR.Status.Conditions, metav1.Condition{Type: typeAvailableHub, Status: metav1.ConditionUnknown, Reason: "Reconciling", Message: "Starting reconciliation"})
-		if err := c.client.Status().Update(ctx, c.collectorCR); err != nil {
-			c.logger.Error(err, "Failed to update MDAI Collector status")
-			return RequeueWithError(err)
-		}
-		c.logger.Info("Re-queued to reconcile with updated status")
-		return StopProcessing()
+func (c MdaiCollectorAdapter) ensureStatusInitialized(ctx context.Context) (OperationResult, error) {
+	if len(c.collectorCR.Status.Conditions) != 0 {
+		return ContinueProcessing()
 	}
-	return ContinueProcessing()
+	meta.SetStatusCondition(&c.collectorCR.Status.Conditions, metav1.Condition{Type: typeAvailableHub, Status: metav1.ConditionUnknown, Reason: "Reconciling", Message: "Starting reconciliation"})
+	if err := c.client.Status().Update(ctx, c.collectorCR); err != nil {
+		c.logger.Error(err, "Failed to update MDAI Collector status")
+		return RequeueWithError(err)
+	}
+	c.logger.Info("Re-queued to reconcile with updated status")
+	return StopProcessing()
 }
 
-// finalizeHub handles the deletion of a hub
-func (c MdaiCollectorAdapter) finalizeMdaiCollector(ctx context.Context) (ObjectState, error) {
+// finalize handles the deletion of a hub
+func (c MdaiCollectorAdapter) finalize(ctx context.Context) (ObjectState, error) {
 	if !controllerutil.ContainsFinalizer(c.collectorCR, hubFinalizer) {
 		c.logger.Info("No finalizer found")
 		return ObjectModified, nil
@@ -174,21 +173,21 @@ func (c MdaiCollectorAdapter) finalizeMdaiCollector(ctx context.Context) (Object
 	}
 
 	c.logger.Info("Removing Finalizer for MDAI Collector after successfully perform the operations")
-	if err := c.ensureMdaiCollectorFinalizerDeleted(ctx); err != nil {
+	if err := c.ensureFinalizerDeleted(ctx); err != nil {
 		return ObjectUnchanged, err
 	}
 
 	return ObjectModified, nil
 }
 
-// ensureHubFinalizerDeleted removes finalizer of a Hub
-func (c MdaiCollectorAdapter) ensureMdaiCollectorFinalizerDeleted(ctx context.Context) error {
+// ensureFinalizerDeleted removes finalizer of a Hub
+func (c MdaiCollectorAdapter) ensureFinalizerDeleted(ctx context.Context) error {
 	c.logger.Info("Deleting MDAI Collector Finalizer")
-	return c.deleteMdaiCollectorFinalizer(ctx, c.collectorCR, hubFinalizer)
+	return c.deleteFinalizer(ctx, c.collectorCR, hubFinalizer)
 }
 
 // deleteFinalizer deletes finalizer of a generic CR
-func (c MdaiCollectorAdapter) deleteMdaiCollectorFinalizer(ctx context.Context, object client.Object, finalizer string) error {
+func (c MdaiCollectorAdapter) deleteFinalizer(ctx context.Context, object client.Object, finalizer string) error {
 	metadata, err := meta.Accessor(object)
 	if err != nil {
 		c.logger.Error(err, "Failed to delete finalizer", "finalizer", finalizer)
@@ -202,7 +201,7 @@ func (c MdaiCollectorAdapter) deleteMdaiCollectorFinalizer(ctx context.Context, 
 	return nil
 }
 
-func (c MdaiCollectorAdapter) ensureMdaiCollectorSynchronized(ctx context.Context) (OperationResult, error) {
+func (c MdaiCollectorAdapter) ensureSynchronized(ctx context.Context) (OperationResult, error) {
 	namespace := c.collectorCR.Namespace
 	var (
 		awsConfig          *mdaiv1.AWSConfig
@@ -217,23 +216,24 @@ func (c MdaiCollectorAdapter) ensureMdaiCollectorSynchronized(ctx context.Contex
 
 	collectorConfigMapName, hash, err := c.createOrUpdateMdaiCollectorConfigMap(ctx, namespace, logsConfig, awsAccessKeySecret)
 	if err != nil {
-		return OperationResult{}, err
+		return RequeueOnErrorOrContinue(err)
 	}
+
 	collectorEnvConfigMapName, err := c.createOrUpdateMdaiCollectorEnvVarConfigMap(ctx, namespace)
 	if err != nil {
-		return OperationResult{}, err
+		return RequeueOnErrorOrContinue(err)
 	}
 	serviceAccountName, err := c.createOrUpdateMdaiCollectorServiceAccount(ctx, namespace)
 	if err != nil {
-		return OperationResult{}, err
+		return RequeueOnErrorOrContinue(err)
 	}
 	roleName, err := c.createOrUpdateMdaiCollectorRole(ctx)
 	if err != nil {
-		return OperationResult{}, err
+		return RequeueOnErrorOrContinue(err)
 	}
 	err = c.createOrUpdateMdaiCollectorRoleBinding(ctx, namespace, roleName, serviceAccountName)
 	if err != nil {
-		return OperationResult{}, err
+		return RequeueOnErrorOrContinue(err)
 	}
 
 	deploymentName, err := c.createOrUpdateMdaiCollectorDeployment(ctx, namespace, collectorConfigMapName, collectorEnvConfigMapName, serviceAccountName, awsAccessKeySecret, hash)
@@ -242,11 +242,11 @@ func (c MdaiCollectorAdapter) ensureMdaiCollectorSynchronized(ctx context.Contex
 			c.logger.Info("re-queuing due to resource conflict")
 			return Requeue()
 		}
-		return OperationResult{}, err
+		return RequeueOnErrorOrContinue(err)
 	}
 
 	if _, err := c.createOrUpdateMdaiCollectorService(ctx, namespace, deploymentName); err != nil {
-		return OperationResult{}, err
+		return RequeueOnErrorOrContinue(err)
 	}
 
 	return ContinueProcessing()
@@ -260,18 +260,18 @@ func (c MdaiCollectorAdapter) getScopedMdaiCollectorResourceName(postfix string)
 }
 
 func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *mdaiv1.LogsConfig, awsAccessKeySecret *string) (string, error) {
-	var mdaiCollectorConfig map[string]any
+	var mdaiCollectorConfig builder.ConfigBlock
 	if err := yaml.Unmarshal([]byte(baseMdaiCollectorYAML), &mdaiCollectorConfig); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base mdai collector config")
 		return "", err
 	}
 
 	if logsConfig != nil {
-		exporters := mdaiCollectorConfig["exporters"].(map[string]any)
-		serviceBlock := mdaiCollectorConfig["service"].(map[string]any)
-		pipelines := serviceBlock["pipelines"].(map[string]any)
-		connectors := mdaiCollectorConfig["connectors"].(map[string]any)
-		routingTableMap := make(map[mdaiv1.MDAILogStream]routingConnectorTableEntry)
+		exporters := mdaiCollectorConfig.MustMap("exporters")
+		serviceBlock := mdaiCollectorConfig.MustMap("service")
+		pipelines := serviceBlock.MustMap("pipelines")
+		connectors := mdaiCollectorConfig.MustMap("connectors")
+		routingTableMap := make(routingTable)
 		otherLogstreamPipelines := make([]string, 0)
 
 		otlpOtherLogstreamPipelines := c.augmentConfigForOtlpConfigAndGetOtherLogstreamPipelines(logsConfig, exporters, pipelines, routingTableMap)
@@ -280,12 +280,12 @@ func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *mdaiv1.LogsConf
 		s3OtherLogstreamPipelines := c.augmentPipelinesForS3ConfigAndGetOtherLogstreamPipelines(logsConfig, awsAccessKeySecret, exporters, pipelines, routingTableMap)
 		otherLogstreamPipelines = append(otherLogstreamPipelines, s3OtherLogstreamPipelines...)
 
-		logstreamRouter := connectors["routing/logstream"].(map[string]any)
+		logstreamRouter := connectors.MustMap("routing/logstream")
 		newRoutingTable := make([]routingConnectorTableEntry, 0, len(routingTableMap))
 		for _, entry := range routingTableMap {
 			newRoutingTable = append(newRoutingTable, entry)
 		}
-		logstreamRouter["table"] = newRoutingTable
+		logstreamRouter.Set("table", newRoutingTable)
 		if len(otherLogstreamPipelines) > 0 {
 			logstreamRouter["default_pipelines"] = otherLogstreamPipelines
 		}
@@ -304,100 +304,103 @@ func (c MdaiCollectorAdapter) getMdaiCollectorConfig(logsConfig *mdaiv1.LogsConf
 func (c MdaiCollectorAdapter) augmentPipelinesForS3ConfigAndGetOtherLogstreamPipelines(
 	logsConfig *mdaiv1.LogsConfig,
 	awsAccessKeySecret *string,
-	exporters map[string]any,
-	pipelines map[string]any,
-	routingTableMap map[mdaiv1.MDAILogStream]routingConnectorTableEntry,
+	exporters builder.ConfigBlock,
+	pipelines builder.ConfigBlock,
+	routingTableMap routingTable,
 ) []string {
 	defaultRoutingPipelines := make([]string, 0)
-	if awsAccessKeySecret != nil {
-		s3Config := logsConfig.S3
-		if s3Config != nil {
-			c.logger.Info(fmt.Sprintf("Adding S3 components to mdai-collector config for %s", c.collectorCR.Name))
-			auditLogstreamConfig := s3Config.AuditLogs
-			if auditLogstreamConfig == nil || !auditLogstreamConfig.Disabled {
-				logstream := mdaiv1.AuditLogstream
-				c.addS3ComponentsAndPipeline(logstream, s3Config, exporters, nil, pipelines, routingTableMap)
-			}
-
-			collectorLogstreamConfig := s3Config.CollectorLogs
-			if collectorLogstreamConfig == nil || !collectorLogstreamConfig.Disabled {
-				logstream := mdaiv1.CollectorLogstream
-				s3ExporterName, s3Exporter := getS3ExporterForLogstream(c.collectorCR.Name, logstream, *s3Config)
-				exporters[s3ExporterName] = s3Exporter
-				var minSeverity *mdaiv1.SeverityLevel
-				if collectorLogstreamConfig != nil && collectorLogstreamConfig.MinSeverity != nil {
-					minSeverity = collectorLogstreamConfig.MinSeverity
-				}
-				c.addS3ComponentsAndPipeline(logstream, s3Config, exporters, minSeverity, pipelines, routingTableMap)
-			}
-
-			hubLogstreamConfig := s3Config.HubLogs
-			if hubLogstreamConfig == nil || !hubLogstreamConfig.Disabled {
-				logstream := mdaiv1.HubLogstream
-				var minSeverity *mdaiv1.SeverityLevel
-				if hubLogstreamConfig != nil && hubLogstreamConfig.MinSeverity != nil {
-					minSeverity = hubLogstreamConfig.MinSeverity
-				}
-				c.addS3ComponentsAndPipeline(logstream, s3Config, exporters, minSeverity, pipelines, routingTableMap)
-			}
-
-			otherLogstreamConfig := s3Config.OtherLogs
-			if otherLogstreamConfig == nil || !otherLogstreamConfig.Disabled {
-				logstream := mdaiv1.OtherLogstream
-				var minSeverity *mdaiv1.SeverityLevel
-				if otherLogstreamConfig != nil && otherLogstreamConfig.MinSeverity != nil {
-					minSeverity = otherLogstreamConfig.MinSeverity
-				}
-				pipelineName := c.addS3ComponentsAndPipeline(logstream, s3Config, exporters, minSeverity, pipelines, routingTableMap)
-				defaultRoutingPipelines = append(defaultRoutingPipelines, pipelineName)
-			}
-		}
-	} else {
+	if awsAccessKeySecret == nil {
 		c.logger.Info("Skipped adding s3 components to mdai-collector due to missing s3 configuration", "logsConfig", logsConfig, "awsAccessKeySecret", awsAccessKeySecret)
+		return defaultRoutingPipelines
 	}
+	s3Config := logsConfig.S3
+	if s3Config == nil {
+		return defaultRoutingPipelines
+	}
+	c.logger.Info("Adding S3 components to mdai-collector config for " + c.collectorCR.Name)
+	auditLogstreamConfig := s3Config.AuditLogs
+	if auditLogstreamConfig == nil || !auditLogstreamConfig.Disabled {
+		logstream := mdaiv1.AuditLogstream
+		c.addS3ComponentsAndPipeline(logstream, s3Config, exporters, nil, pipelines, routingTableMap)
+	}
+
+	collectorLogstreamConfig := s3Config.CollectorLogs
+	if collectorLogstreamConfig == nil || !collectorLogstreamConfig.Disabled {
+		logstream := mdaiv1.CollectorLogstream
+		s3ExporterName, s3Exporter := getS3ExporterForLogstream(c.collectorCR.Name, logstream, *s3Config)
+		exporters[s3ExporterName] = s3Exporter
+		var minSeverity *mdaiv1.SeverityLevel
+		if collectorLogstreamConfig != nil && collectorLogstreamConfig.MinSeverity != nil {
+			minSeverity = collectorLogstreamConfig.MinSeverity
+		}
+		c.addS3ComponentsAndPipeline(logstream, s3Config, exporters, minSeverity, pipelines, routingTableMap)
+	}
+
+	hubLogstreamConfig := s3Config.HubLogs
+	if hubLogstreamConfig == nil || !hubLogstreamConfig.Disabled {
+		logstream := mdaiv1.HubLogstream
+		var minSeverity *mdaiv1.SeverityLevel
+		if hubLogstreamConfig != nil && hubLogstreamConfig.MinSeverity != nil {
+			minSeverity = hubLogstreamConfig.MinSeverity
+		}
+		c.addS3ComponentsAndPipeline(logstream, s3Config, exporters, minSeverity, pipelines, routingTableMap)
+	}
+
+	otherLogstreamConfig := s3Config.OtherLogs
+	if otherLogstreamConfig == nil || !otherLogstreamConfig.Disabled {
+		logstream := mdaiv1.OtherLogstream
+		var minSeverity *mdaiv1.SeverityLevel
+		if otherLogstreamConfig != nil && otherLogstreamConfig.MinSeverity != nil {
+			minSeverity = otherLogstreamConfig.MinSeverity
+		}
+		pipelineName := c.addS3ComponentsAndPipeline(logstream, s3Config, exporters, minSeverity, pipelines, routingTableMap)
+		defaultRoutingPipelines = append(defaultRoutingPipelines, pipelineName)
+	}
+
 	return defaultRoutingPipelines
 }
 
 func (c MdaiCollectorAdapter) augmentConfigForOtlpConfigAndGetOtherLogstreamPipelines(
 	logsConfig *mdaiv1.LogsConfig,
-	exporters map[string]any,
-	pipelines map[string]any,
-	routingTableMap map[mdaiv1.MDAILogStream]routingConnectorTableEntry,
+	exporters builder.ConfigBlock,
+	pipelines builder.ConfigBlock,
+	routingTableMap routingTable,
 ) []string {
 	defaultRoutingPipelines := make([]string, 0)
 	otlpConfig := logsConfig.Otlp
-	if otlpConfig != nil && otlpConfig.Endpoint != "" {
-		c.logger.Info(fmt.Sprintf("Adding OTLP components to mdai-collector config for %s", c.collectorCR.Name))
-		otlpExporterName, otlpExporterConfig := getOtlpExporterForLogstream(*otlpConfig)
-		exporters[otlpExporterName] = otlpExporterConfig
+	if otlpConfig == nil || otlpConfig.Endpoint == "" {
+		return defaultRoutingPipelines
+	}
+	c.logger.Info("Adding OTLP components to mdai-collector config for " + c.collectorCR.Name)
+	otlpExporterName, otlpExporterCfg := getOtlpExporterForLogstream(*otlpConfig)
+	exporters[otlpExporterName] = otlpExporterCfg
 
-		auditLogstreamConfig := otlpConfig.AuditLogs
-		if auditLogstreamConfig == nil || !auditLogstreamConfig.Disabled {
-			logstream := mdaiv1.AuditLogstream
-			pipelineName := fmt.Sprintf("logs/otlp_%s", logstream)
-			newPipeline := c.getPipelineWithExporterAndSeverityFilter("routing/logstream", otlpExporterName, nil, "batch/audit")
-			pipelines[pipelineName] = newPipeline
-			c.addOrCreateRoutingTableEntryWithPipeline(logstream, &routingTableMap, pipelineName)
-		}
+	auditLogstreamConfig := otlpConfig.AuditLogs
+	if auditLogstreamConfig == nil || !auditLogstreamConfig.Disabled {
+		logstream := mdaiv1.AuditLogstream
+		pipelineName := fmt.Sprintf("logs/otlp_%s", logstream)
+		newPipeline := getPipelineWithExporterAndSeverityFilter("routing/logstream", otlpExporterName, nil, "batch/audit")
+		pipelines[pipelineName] = newPipeline
+		routingTableMap.addOrCreateRoutingTableEntryWithPipeline(logstream, pipelineName)
+	}
 
-		collectorLogstreamConfig := otlpConfig.CollectorLogs
-		if collectorLogstreamConfig == nil || !collectorLogstreamConfig.Disabled {
-			logstream := mdaiv1.CollectorLogstream
-			c.addPipelineForLogstream(collectorLogstreamConfig, logstream, otlpExporterName, pipelines, &routingTableMap)
-		}
+	collectorLogstreamConfig := otlpConfig.CollectorLogs
+	if collectorLogstreamConfig == nil || !collectorLogstreamConfig.Disabled {
+		logstream := mdaiv1.CollectorLogstream
+		addPipelineForLogstream(collectorLogstreamConfig, logstream, otlpExporterName, pipelines, routingTableMap)
+	}
 
-		hubLogstreamConfig := otlpConfig.HubLogs
-		if hubLogstreamConfig == nil || !hubLogstreamConfig.Disabled {
-			logstream := mdaiv1.HubLogstream
-			c.addPipelineForLogstream(hubLogstreamConfig, logstream, otlpExporterName, pipelines, &routingTableMap)
-		}
+	hubLogstreamConfig := otlpConfig.HubLogs
+	if hubLogstreamConfig == nil || !hubLogstreamConfig.Disabled {
+		logstream := mdaiv1.HubLogstream
+		addPipelineForLogstream(hubLogstreamConfig, logstream, otlpExporterName, pipelines, routingTableMap)
+	}
 
-		otherLogstreamConfig := otlpConfig.OtherLogs
-		if otherLogstreamConfig == nil || !otherLogstreamConfig.Disabled {
-			logstream := mdaiv1.OtherLogstream
-			pipelineName := c.addPipelineForLogstream(otherLogstreamConfig, logstream, otlpExporterName, pipelines, &routingTableMap)
-			defaultRoutingPipelines = append(defaultRoutingPipelines, pipelineName)
-		}
+	otherLogstreamConfig := otlpConfig.OtherLogs
+	if otherLogstreamConfig == nil || !otherLogstreamConfig.Disabled {
+		logstream := mdaiv1.OtherLogstream
+		pipelineName := addPipelineForLogstream(otherLogstreamConfig, logstream, otlpExporterName, pipelines, routingTableMap)
+		defaultRoutingPipelines = append(defaultRoutingPipelines, pipelineName)
 	}
 	return defaultRoutingPipelines
 }
@@ -405,58 +408,60 @@ func (c MdaiCollectorAdapter) augmentConfigForOtlpConfigAndGetOtherLogstreamPipe
 func (c MdaiCollectorAdapter) addS3ComponentsAndPipeline(
 	logstream mdaiv1.MDAILogStream,
 	s3Config *mdaiv1.S3LogsConfig,
-	exporters map[string]any,
+	exporters builder.ConfigBlock,
 	minSeverity *mdaiv1.SeverityLevel,
-	pipelines map[string]any,
-	routingTableMap map[mdaiv1.MDAILogStream]routingConnectorTableEntry,
+	pipelines builder.ConfigBlock,
+	routingTableMap routingTable,
 ) string {
 	s3ExporterName, s3Exporter := getS3ExporterForLogstream(c.collectorCR.Name, logstream, *s3Config)
 	exporters[s3ExporterName] = s3Exporter
 	pipelineName := fmt.Sprintf("logs/s3_%s", logstream)
-	newPipeline := c.getPipelineWithExporterAndSeverityFilter("routing/logstream", s3ExporterName, minSeverity, "batch")
+	newPipeline := getPipelineWithExporterAndSeverityFilter("routing/logstream", s3ExporterName, minSeverity, "batch")
 	pipelines[pipelineName] = newPipeline
-	c.addOrCreateRoutingTableEntryWithPipeline(logstream, &routingTableMap, pipelineName)
+	routingTableMap.addOrCreateRoutingTableEntryWithPipeline(logstream, pipelineName)
 	return pipelineName
 }
 
-func (c MdaiCollectorAdapter) addPipelineForLogstream(
+func addPipelineForLogstream(
 	logstreamConfig *mdaiv1.LogstreamConfig,
 	logstream mdaiv1.MDAILogStream,
 	otlpExporterName string,
-	pipelines map[string]any,
-	routingTableMap *map[mdaiv1.MDAILogStream]routingConnectorTableEntry,
+	pipelines builder.ConfigBlock,
+	routingTableMap routingTable,
 ) string {
 	var minSeverity *mdaiv1.SeverityLevel
 	if logstreamConfig != nil && logstreamConfig.MinSeverity != nil {
 		minSeverity = logstreamConfig.MinSeverity
 	}
 	pipelineName := fmt.Sprintf("logs/otlp_%s", logstream)
-	newPipeline := c.getPipelineWithExporterAndSeverityFilter("routing/logstream", otlpExporterName, minSeverity, "")
+	newPipeline := getPipelineWithExporterAndSeverityFilter("routing/logstream", otlpExporterName, minSeverity, "")
 	pipelines[pipelineName] = newPipeline
-	c.addOrCreateRoutingTableEntryWithPipeline(logstream, routingTableMap, pipelineName)
+	routingTableMap.addOrCreateRoutingTableEntryWithPipeline(logstream, pipelineName)
 	return pipelineName
 }
 
-func (c MdaiCollectorAdapter) addOrCreateRoutingTableEntryWithPipeline(
+type routingTable map[mdaiv1.MDAILogStream]routingConnectorTableEntry
+
+func (rt routingTable) addOrCreateRoutingTableEntryWithPipeline(
 	logstream mdaiv1.MDAILogStream,
-	routingTableMap *map[mdaiv1.MDAILogStream]routingConnectorTableEntry,
 	pipelineName string,
 ) {
-	if logstream != mdaiv1.OtherLogstream {
-		if _, ok := (*routingTableMap)[logstream]; !ok {
-			(*routingTableMap)[logstream] = routingConnectorTableEntry{
-				Context:   routingTableContextMap[logstream],
-				Condition: routingTableConditionMap[logstream],
-				Pipelines: []string{
-					pipelineName,
-				},
-			}
-		} else {
-			routingEntry := (*routingTableMap)[logstream]
-			routingEntry.Pipelines = append((*routingTableMap)[logstream].Pipelines, pipelineName)
-			(*routingTableMap)[logstream] = routingEntry
-		}
+	if logstream == mdaiv1.OtherLogstream {
+		return
 	}
+	entry, ok := rt[logstream]
+	if !ok {
+		rt[logstream] = routingConnectorTableEntry{
+			Context:   routingTableContextMap[logstream],
+			Condition: routingTableConditionMap[logstream],
+			Pipelines: []string{
+				pipelineName,
+			},
+		}
+		return
+	}
+	entry.Pipelines = append(entry.Pipelines, pipelineName)
+	rt[logstream] = entry
 }
 
 func getOtlpExporterForLogstream(otlpLogsConfig mdaiv1.OtlpLogsConfig) (string, otlpExporterConfig) {
@@ -486,42 +491,43 @@ func getS3ExporterForLogstream(hubName string, logstream mdaiv1.MDAILogStream, s
 	return exporterKey, exporter
 }
 
-func (c MdaiCollectorAdapter) getPipelineWithExporterAndSeverityFilter(receiverName string, exporterName string, minSeverity *mdaiv1.SeverityLevel, batchProcessor string) map[string]any {
-	receivers := []any{receiverName}
-	exporters := make([]any, 0)
+func getPipelineWithExporterAndSeverityFilter(
+	receiverName string,
+	exporterName string,
+	minSeverity *mdaiv1.SeverityLevel,
+	batchProcessor string,
+) builder.ConfigBlock {
 	processors := make([]any, 0)
 	if minSeverity != nil {
-		severityFilter := severityFilterMap[*minSeverity]
-		if severityFilter != "" {
-			processors = append(processors, severityFilter)
+		if filter := severityFilterMap[*minSeverity]; filter != "" {
+			processors = append(processors, filter)
 		}
 	}
 	if batchProcessor != "" {
 		processors = append(processors, batchProcessor)
 	}
-	newPipeline := map[string]any{
-		"receivers":  receivers,
+	return builder.ConfigBlock{
+		"receivers":  []any{receiverName},
 		"processors": processors,
-		"exporters":  append(exporters, exporterName),
+		"exporters":  []any{exporterName},
 	}
-	return newPipeline
 }
 
-// ensureHubDeletionProcessed deletes MDAI Collector in cases a deletion was triggered
-func (c MdaiCollectorAdapter) ensureMdaiCollectorDeletionProcessed(ctx context.Context) (OperationResult, error) {
-	if !c.collectorCR.DeletionTimestamp.IsZero() {
-		c.logger.Info("Deleting Cluster:" + c.collectorCR.Name)
-		crState, err := c.finalizeMdaiCollector(ctx)
-		if crState == ObjectUnchanged || err != nil {
-			c.logger.Info("Has to requeue mdai")
-			return RequeueAfter(5*time.Second, err)
-		}
-		return StopProcessing()
+// ensureDeletionProcessed deletes MDAI Collector in cases a deletion was triggered
+func (c MdaiCollectorAdapter) ensureDeletionProcessed(ctx context.Context) (OperationResult, error) {
+	if c.collectorCR.DeletionTimestamp.IsZero() {
+		return ContinueProcessing()
 	}
-	return ContinueProcessing()
+	c.logger.Info("Deleting Cluster:" + c.collectorCR.Name)
+	crState, err := c.finalize(ctx)
+	if crState == ObjectUnchanged || err != nil {
+		c.logger.Info("Has to requeue mdai")
+		return RequeueAfter(requeueTime, err)
+	}
+	return StopProcessing()
 }
 
-func (c MdaiCollectorAdapter) ensureMdaiCollectorStatusSetToDone(ctx context.Context) (OperationResult, error) {
+func (c MdaiCollectorAdapter) ensureStatusSetToDone(ctx context.Context) (OperationResult, error) {
 	// Re-fetch the Custom Resource after update or create
 	if err := c.client.Get(ctx, types.NamespacedName{Name: c.collectorCR.Name, Namespace: c.collectorCR.Namespace}, c.collectorCR); err != nil {
 		c.logger.Error(err, "Failed to re-fetch MDAI Collector")
@@ -544,6 +550,7 @@ func (c MdaiCollectorAdapter) ensureMdaiCollectorStatusSetToDone(ctx context.Con
 	return ContinueProcessing()
 }
 
+//nolint:revive
 func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.Context, namespace string, logsConfig *mdaiv1.LogsConfig, awsAccessKeySecret *string) (string, string, error) {
 	mdaiCollectorConfigConfigMapName := c.getScopedMdaiCollectorResourceName("config")
 	collectorYAML, err := c.getMdaiCollectorConfig(logsConfig, awsAccessKeySecret)
@@ -566,6 +573,7 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorConfigMap(ctx context.C
 			"collector.yaml": collectorYAML,
 		},
 	}
+
 	if err := controllerutil.SetControllerReference(c.collectorCR, desiredConfigMap, c.scheme); err != nil {
 		c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorConfigConfigMapName+" ConfigMap", "configmap", mdaiCollectorConfigConfigMapName)
 		return "", "", err
@@ -638,67 +646,30 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, deployment, func() error {
 		if err := controllerutil.SetControllerReference(c.collectorCR, deployment, c.scheme); err != nil {
-			c.logger.Error(err, "Failed to set owner reference on "+mdaiCollectorDeploymentName+" Deployment", "deployment", deployment.Name)
 			return err
 		}
 
-		if deployment.Labels == nil {
-			deployment.Labels = make(map[string]string)
-		}
-		deployment.Labels["app"] = mdaiCollectorDeploymentName
-		deployment.Labels[hubNameLabel] = c.collectorCR.Name
-
-		deployment.Spec.Replicas = int32Ptr(1)
-		if deployment.Spec.Selector == nil {
-			deployment.Spec.Selector = &metav1.LabelSelector{}
-		}
-		if deployment.Spec.Selector.MatchLabels == nil {
-			deployment.Spec.Selector.MatchLabels = make(map[string]string)
-		}
-		deployment.Spec.Selector.MatchLabels["app"] = mdaiCollectorDeploymentName
-
-		if deployment.Spec.Template.Labels == nil {
-			deployment.Spec.Template.Labels = make(map[string]string)
-		}
-		deployment.Spec.Template.Labels["app"] = mdaiCollectorDeploymentName
-		deployment.Spec.Template.Labels["app.kubernetes.io/component"] = mdaiCollectorDeploymentName
-
-		if deployment.Spec.Template.Annotations == nil {
-			deployment.Spec.Template.Annotations = make(map[string]string)
-		}
-		deployment.Spec.Template.Annotations["mdai-collector-config/sha256"] = hash
-
-		deployment.Spec.Template.Spec.ServiceAccountName = serviceAccountName
-
-		containerSpec := corev1.Container{
-			Name:  mdaiCollectorDeploymentName,
-			Image: "public.ecr.aws/decisiveai/mdai-collector:0.1.6",
-			Command: []string{
-				"/mdai-collector",
-				"--config=/conf/collector.yaml",
-			},
-			Ports: []corev1.ContainerPort{
-				{ContainerPort: 4317, Name: "otlp-grpc"},
-				{ContainerPort: 4318, Name: "otlp-http"},
-				{ContainerPort: 8899, Name: "prom-http"},
-			},
-			VolumeMounts: []corev1.VolumeMount{
-				{
-					Name:      "config-volume",
-					MountPath: "/conf/collector.yaml",
-					SubPath:   "collector.yaml",
-				},
-			},
-			EnvFrom: []corev1.EnvFromSource{
-				{
-					ConfigMapRef: &corev1.ConfigMapEnvSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: collectorEnvConfigMapName,
-						},
+		container := builder.Container(mdaiCollectorDeploymentName, "public.ecr.aws/decisiveai/mdai-collector:0.1.6").
+			WithCommand("/mdai-collector", "--config=/conf/collector.yaml").
+			WithPorts(
+				corev1.ContainerPort{ContainerPort: otlpGRPCPort, Name: "otlp-grpc"},
+				corev1.ContainerPort{ContainerPort: otlpHTTPPort, Name: "otlp-http"},
+				corev1.ContainerPort{ContainerPort: promHTTPPort, Name: "prom-http"},
+			).
+			WithVolumeMounts(corev1.VolumeMount{
+				Name:      "config-volume",
+				MountPath: "/conf/collector.yaml",
+				SubPath:   "collector.yaml",
+			}).
+			WithEnvFrom(corev1.EnvFromSource{
+				ConfigMapRef: &corev1.ConfigMapEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: collectorEnvConfigMapName,
 					},
 				},
-			},
-			SecurityContext: &corev1.SecurityContext{
+			}).
+			WithAWSSecret(awsAccessKeySecret).
+			WithSecurityContext(&corev1.SecurityContext{
 				SeccompProfile: &corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				},
@@ -707,27 +678,20 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 					Drop: []corev1.Capability{"ALL"},
 				},
 				RunAsNonRoot: ptr.To(true),
-			},
-		}
-		deployment.Spec.Template.Spec.Containers = []corev1.Container{containerSpec}
+			}).
+			Build()
 
-		if awsAccessKeySecret != nil {
-			secretEnvSource := corev1.EnvFromSource{
-				SecretRef: &corev1.SecretEnvSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: *awsAccessKeySecret,
-					},
-				},
-			}
-			containerSpec.EnvFrom = append(containerSpec.EnvFrom, secretEnvSource)
-		}
-
-		deployment.Spec.Template.Spec.Containers = []corev1.Container{
-			containerSpec,
-		}
-
-		deployment.Spec.Template.Spec.Volumes = []corev1.Volume{
-			{
+		builder.Deployment(deployment).
+			WithLabel("app", mdaiCollectorDeploymentName).
+			WithLabel(hubNameLabel, c.collectorCR.Name).
+			WithSelectorLabel("app", mdaiCollectorDeploymentName).
+			WithTemplateLabel("app", mdaiCollectorDeploymentName).
+			WithTemplateLabel("app.kubernetes.io/component", mdaiCollectorDeploymentName).
+			WithTemplateAnnotation("mdai-collector-config/sha256", hash).
+			WithReplicas(1).
+			WithServiceAccount(serviceAccountName).
+			WithContainers(container).
+			WithVolumes(corev1.Volume{
 				Name: "config-volume",
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -736,8 +700,7 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 						},
 					},
 				},
-			},
-		}
+			})
 
 		return nil
 	})
@@ -768,32 +731,18 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorService(ctx context.Con
 	}
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, service, func() error {
-		if service.Labels == nil {
-			service.Labels = make(map[string]string)
+		if err := controllerutil.SetControllerReference(c.collectorCR, service, c.scheme); err != nil {
+			return err
 		}
-		service.Labels["app"] = appName
-		service.Labels[hubNameLabel] = c.collectorCR.Name
 
-		service.Spec = corev1.ServiceSpec{
-			Selector: map[string]string{
-				"app": appName,
-			},
-			Ports: []corev1.ServicePort{
-				{
-					Name:       "otlp-grpc",
-					Protocol:   corev1.ProtocolTCP,
-					Port:       4317,
-					TargetPort: intstr.FromString("otlp-grpc"),
-				},
-				{
-					Name:       "otlp-http",
-					Protocol:   corev1.ProtocolTCP,
-					Port:       4318,
-					TargetPort: intstr.FromString("otlp-http"),
-				},
-			},
-			Type: corev1.ServiceTypeClusterIP,
-		}
+		builder.Service(service).
+			WithLabel("app", appName).
+			WithLabel(hubNameLabel, c.collectorCR.Name).
+			WithSelectorLabel("app", appName).
+			WithPort("otlp-grpc", corev1.ProtocolTCP, otlpGRPCPort, "otlp-grpc").
+			WithPort("otlp-http", corev1.ProtocolTCP, otlpHTTPPort, "otlp-http").
+			WithType(corev1.ServiceTypeClusterIP)
+
 		return nil
 	})
 	if err != nil {
@@ -825,7 +774,6 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorServiceAccount(ctx cont
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, serviceAccount, func() error {
 		return nil
 	})
-
 	if err != nil {
 		return "", err
 	}
@@ -924,7 +872,6 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorRole(ctx context.Contex
 
 		return nil
 	})
-
 	if err != nil {
 		return "", err
 	}
@@ -960,7 +907,6 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorRoleBinding(ctx context
 		}
 		return nil
 	})
-
 	if err != nil {
 		return err
 	}

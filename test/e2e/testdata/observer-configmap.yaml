@@ -1,0 +1,187 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mdaihub-sample-mdai-observer-config
+  namespace: mdai
+  labels:
+    app: mdaihub-sample-mdai-observer
+    app.kubernetes.io/managed-by: mdai-operator
+    mydecisive.ai/hub-component: mdai-observer
+    mydecisive.ai/hub-name: mdaihub-sample
+  # Volatile fields (usually strip for tests):
+  # creationTimestamp: "2025-08-15T16:37:02Z"
+  # resourceVersion: "1309"
+  # uid: e0364e1b-cd31-47fd-b22c-7981df3ec163
+  ownerReferences:
+    - apiVersion: hub.mydecisive.ai/v1
+      kind: MdaiObserver
+      name: mdaihub-sample
+      controller: true
+      blockOwnerDeletion: true
+      # uid: f637b614-d457-4505-92a6-db307cbba674   # (volatile)
+data:
+  collector.yaml: |
+    connectors:
+        datavolume/observer1:
+            bytes_metric_name: mdai_observer_one_bytes_total
+            count_metric_name: mdai_observer_one_count_total
+            label_resource_attributes:
+                - service.name
+        datavolume/observer2:
+            count_metric_name: mdai_observer_two_count_total
+            label_resource_attributes:
+                - team
+                - log_level
+        datavolume/observer3:
+            bytes_metric_name: mdai_observer_three_count_total
+            label_resource_attributes:
+                - region
+                - log_level
+        datavolume/observer4:
+            bytes_metric_name: mdai_observer_four_bytes_total
+            count_metric_name: mdai_observer_four_count_total
+            label_resource_attributes:
+                - service.name
+                - team
+                - region
+    exporters:
+        prometheus:
+            endpoint: 0.0.0.0:8899
+            metric_expiration: 180m
+            resource_to_telemetry_conversion:
+                enabled: true
+    extensions:
+        cgroupruntime:
+            gomaxprocs:
+                enabled: true
+            gomemlimit:
+                enabled: true
+    processors:
+        batch: {}
+        deltatocumulative: {}
+        filter/observer4:
+            error_mode: ignore
+            logs:
+                log_record:
+                    - attributes["log_level"] == "INFO"
+        groupbyattrs/observer1:
+            keys:
+                - service.name
+        groupbyattrs/observer2:
+            keys:
+                - team
+                - log_level
+        groupbyattrs/observer3:
+            keys:
+                - region
+                - log_level
+        groupbyattrs/observer4:
+            keys:
+                - service.name
+                - team
+                - region
+    receivers:
+        otlp:
+            protocols:
+                grpc:
+                    endpoint: 0.0.0.0:4317
+                    max_recv_msg_size_mib: 32
+                http:
+                    endpoint: 0.0.0.0:4318
+    service:
+        extensions:
+            - cgroupruntime
+        pipelines:
+            logs/observer1:
+                exporters:
+                    - datavolume/observer1
+                processors:
+                    - batch
+                    - groupbyattrs/observer1
+                receivers:
+                    - otlp
+            logs/observer2:
+                exporters:
+                    - datavolume/observer2
+                processors:
+                    - batch
+                    - groupbyattrs/observer2
+                receivers:
+                    - otlp
+            logs/observer3:
+                exporters:
+                    - datavolume/observer3
+                processors:
+                    - batch
+                    - groupbyattrs/observer3
+                receivers:
+                    - otlp
+            logs/observer4:
+                exporters:
+                    - datavolume/observer4
+                processors:
+                    - filter/observer4
+                    - batch
+                    - groupbyattrs/observer4
+                receivers:
+                    - otlp
+            metrics/observeroutput:
+                exporters:
+                    - prometheus
+                processors:
+                    - deltatocumulative
+                receivers:
+                    - datavolume/observer1
+                    - datavolume/observer2
+                    - datavolume/observer3
+                    - datavolume/observer4
+            traces/observer1:
+                exporters:
+                    - datavolume/observer1
+                processors:
+                    - batch
+                    - groupbyattrs/observer1
+                receivers:
+                    - otlp
+            traces/observer2:
+                exporters:
+                    - datavolume/observer2
+                processors:
+                    - batch
+                    - groupbyattrs/observer2
+                receivers:
+                    - otlp
+            traces/observer3:
+                exporters:
+                    - datavolume/observer3
+                processors:
+                    - batch
+                    - groupbyattrs/observer3
+                receivers:
+                    - otlp
+            traces/observer4:
+                exporters:
+                    - datavolume/observer4
+                processors:
+                    - filter/observer4
+                    - batch
+                    - groupbyattrs/observer4
+                receivers:
+                    - otlp
+        telemetry:
+            logs:
+                processors:
+                    - batch:
+                        exporter:
+                            otlp:
+                                endpoint: http://hub-monitor-mdai-collector-service.mdai.svc.cluster.local:4318
+                                protocol: http/protobuf
+            metrics:
+                readers:
+                    - pull:
+                        exporter:
+                            prometheus:
+                                host: 0.0.0.0
+                                port: 8888
+            resource:
+                mdai-logstream: hub
