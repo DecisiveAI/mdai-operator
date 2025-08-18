@@ -800,8 +800,34 @@ var _ = Describe("Manager", Ordered, func() {
 			By("validating valkey keys deleted")
 			// TODO check valkey store
 
-			By("validating all related observers are deleted")
-			// TODO check observers are removed
+			By("validating all related observers are not deleted")
+			verifyObserver := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployment", "mdaihub-sample-mdai-observer",
+					"-n", namespace,
+					"-o", "jsonpath={.status.readyReplicas}")
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "failed to get observer deployment status")
+				g.Expect(out).To(Equal("2"), "observer deployment should have 2 ready replicas")
+			}
+			Eventually(verifyObserver, "1m", "5s").Should(Succeed())
+			verifyObserverPods := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pods",
+					"-n", namespace,
+					"-l", "app=mdaihub-sample-mdai-observer",
+					"-o", "jsonpath={range .items[*]}{.metadata.name}:{.status.phase}{\"\\n\"}{end}")
+				out, err := utils.Run(cmd)
+
+				g.Expect(err).NotTo(HaveOccurred(), "failed to get observer pods")
+				lines := strings.Split(strings.TrimSpace(out), "\n")
+
+				g.Expect(lines).To(HaveLen(2), "expected 2 observer pods")
+				for _, line := range lines {
+					parts := strings.Split(line, ":")
+					g.Expect(parts).To(HaveLen(2), "unexpected pod output format")
+					g.Expect(parts[1]).To(Equal("Running"), "expected pod to be in Running state")
+				}
+			}
+			Eventually(verifyObserverPods, "1m", "5s").Should(Succeed())
 		})
 
 		It("can delete MdaiCollector CRs and clean up resources", func() {
