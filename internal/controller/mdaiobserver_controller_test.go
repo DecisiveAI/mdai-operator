@@ -5,12 +5,14 @@ import (
 	"strings"
 	"testing"
 
+	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -18,10 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
 
 var _ = Describe("MdaiObserver Controller", func() {
@@ -155,10 +153,10 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 	adapter := NewObserverAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme)
 
-	// Call ensureObserversSynchronized.
-	opResult, err := adapter.ensureObserversSynchronized(ctx)
+	// Call ensureSynchronized.
+	opResult, err := adapter.ensureSynchronized(ctx)
 	if err != nil {
-		t.Fatalf("ensureObserversSynchronized returned error: %v", err)
+		t.Fatalf("ensureSynchronized returned error: %v", err)
 	}
 	if opResult != ContinueOperationResult() {
 		t.Errorf("expected ContinueOperationResult, got: %v", opResult)

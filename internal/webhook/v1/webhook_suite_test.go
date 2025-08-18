@@ -10,12 +10,10 @@ import (
 	"testing"
 	"time"
 
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/kubernetes/scheme"
-
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,14 +37,13 @@ var (
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
-
 	RunSpecs(t, "Webhook Suite")
 }
 
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
-	ctx, cancel = context.WithCancel(context.TODO())
+	ctx, cancel = context.WithCancel(context.TODO()) //nolint:fatcontext
 
 	var err error
 	err = mdaiv1.AddToScheme(scheme.Scheme)

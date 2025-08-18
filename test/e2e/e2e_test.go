@@ -2,7 +2,9 @@ package e2e
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,16 +14,21 @@ import (
 	"time"
 
 	"github.com/decisiveai/mdai-operator/internal/controller"
-
 	"github.com/decisiveai/mdai-operator/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/valkey-io/valkey-go"
+	"sigs.k8s.io/yaml"
 )
 
+//go:embed testdata/*.yaml
+var testdata embed.FS
+
 // namespace where the project is deployed in
-const namespace = "mdai"
-const otelNamespace = "otel"
+const (
+	namespace     = "mdai"
+	otelNamespace = "otel"
+)
 
 // serviceAccountName created for the project
 const serviceAccountName = "mdai-operator-controller-manager"
@@ -84,7 +91,7 @@ var _ = Describe("Manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Failed to create secret")
 
 		By("deploying the controller-manager")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+		cmd = exec.Command("make", "deploy", "IMG="+projectImage)
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 	})
@@ -111,7 +118,6 @@ var _ = Describe("Manager", Ordered, func() {
 		By("removing otel namespace")
 		cmd = exec.Command("kubectl", "delete", "ns", otelNamespace)
 		_, _ = utils.Run(cmd)
-
 	})
 
 	// After each test, check for failures and collect logs, events,
@@ -123,36 +129,36 @@ var _ = Describe("Manager", Ordered, func() {
 			cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
 			controllerLogs, err := utils.Run(cmd)
 			if err == nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Controller logs:\n %s", controllerLogs)
+				GinkgoWriter.Printf("Controller logs:\n %s", controllerLogs)
 			} else {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get Controller logs: %s", err)
+				GinkgoWriter.Printf("Failed to get Controller logs: %s", err)
 			}
 
 			By("Fetching Kubernetes events")
 			cmd = exec.Command("kubectl", "get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
 			eventsOutput, err := utils.Run(cmd)
 			if err == nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Kubernetes events:\n%s", eventsOutput)
+				GinkgoWriter.Printf("Kubernetes events:\n%s", eventsOutput)
 			} else {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get Kubernetes events: %s", err)
+				GinkgoWriter.Printf("Failed to get Kubernetes events: %s", err)
 			}
 
 			By("Fetching curl-metrics logs")
 			cmd = exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
 			metricsOutput, err := utils.Run(cmd)
 			if err == nil {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Metrics logs:\n %s", metricsOutput)
+				GinkgoWriter.Printf("Metrics logs:\n %s", metricsOutput)
 			} else {
-				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get curl-metrics logs: %s", err)
+				GinkgoWriter.Printf("Failed to get curl-metrics logs: %s", err)
 			}
 
 			By("Fetching controller manager pod description")
 			cmd = exec.Command("kubectl", "describe", "pod", controllerPodName, "-n", namespace)
 			podDescription, err := utils.Run(cmd)
 			if err == nil {
-				fmt.Println("Pod description:\n", podDescription)
+				GinkgoWriter.Println("Pod description:\n", podDescription)
 			} else {
-				fmt.Println("Failed to describe controller pod")
+				GinkgoWriter.Println("Failed to describe controller pod")
 			}
 		}
 	})
@@ -219,7 +225,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("waiting for the metrics endpoint to be ready")
 			verifyMetricsEndpointReady := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "endpoints", metricsServiceName, "-n", namespace)
+				cmd = exec.Command("kubectl", "get", "endpoints", metricsServiceName, "-n", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(ContainSubstring("8443"), "Metrics endpoint is not ready")
@@ -370,7 +376,6 @@ var _ = Describe("Manager", Ordered, func() {
 				))
 			}
 			Eventually(verifyMetrics, "30s", "10s").Should(Succeed())
-
 		})
 
 		It("can trigger another reconcile on managed OTEL CR created", func() {
@@ -446,8 +451,7 @@ var _ = Describe("Manager", Ordered, func() {
 				data := getDataFromMap(g, "mdaihub-sample-automation", "mdai")
 				g.Expect(data).To(HaveLen(1))
 				g.Expect(data["logBytesOutTooHighBySvc"]).
-					To(Equal("[{\"handlerRef\":\"setVariable\",\"args\":{\"default\":\"default_service\",\"key\":\"service_name\"}}," +
-						"{\"handlerRef\":\"publishMetrics\"},{\"handlerRef\":\"notifySlack\",\"args\":{\"channel\":\"infra-alerts\"}}]"))
+					To(Equal(`[{"handlerRef":"setVariable","args":{"default":"default_service","key":"service_name"}},{"handlerRef":"publishMetrics"},{"handlerRef":"notifySlack","args":{"channel":"infra-alerts"}}]`))
 			}
 			Eventually(verifyConfigMapManual).Should(Succeed())
 		})
@@ -474,7 +478,24 @@ var _ = Describe("Manager", Ordered, func() {
 
 		It("can create the config map for observer", func() {
 			configMapExists("mdaihub-sample-mdai-observer-config", namespace)
-			// TODO check configmap content
+			yamlStr, err := configMapYAML("mdaihub-sample-mdai-observer-config", namespace)
+			Expect(err).NotTo(HaveOccurred())
+
+			var (
+				actual   k8sObject
+				expected k8sObject
+			)
+
+			err = yaml.Unmarshal([]byte(yamlStr), &actual)
+			Expect(err).NotTo(HaveOccurred())
+			actual.stripVolatile()
+
+			bytes, err := testdata.ReadFile("testdata/observer-configmap.yaml")
+			Expect(err).NotTo(HaveOccurred())
+			err = yaml.Unmarshal(bytes, &expected)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(actual).To(Equal(expected))
 		})
 
 		It("can deploy the observer", func() {
@@ -591,12 +612,23 @@ var _ = Describe("Manager", Ordered, func() {
 
 		It("can create Prometheus rules", func() {
 			verifyPrometheusRules := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "prometheusrule", "-n", namespace)
+				cmd := exec.Command("kubectl", "get", "prometheusrule", "mdai-mdaihub-sample-alert-rules", "-n", namespace, "-o", "yaml")
 				out, err := utils.Run(cmd)
-				g.Expect(out).To(ContainSubstring("mdai-mdaihub-sample-alert-rules"))
 				g.Expect(err).NotTo(HaveOccurred())
+
+				var (
+					actual   k8sObject
+					expected k8sObject
+				)
+
+				_ = yaml.Unmarshal([]byte(out), &actual)
+				actual.stripVolatile()
+
+				bytes, err := testdata.ReadFile("testdata/prometheus_rule.yaml")
+				Expect(err).NotTo(HaveOccurred())
+				_ = yaml.Unmarshal(bytes, &expected)
+				Expect(actual).To(Equal(expected))
 			}
-			// TODO check prometheus rules content
 			Eventually(verifyPrometheusRules).Should(Succeed())
 		})
 
@@ -625,12 +657,14 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 			Eventually(connectToValkey, 30*time.Second, 2*time.Second).Should(Succeed())
 
-			err = valkeyClient.Do(context.TODO(), valkeyClient.B().Sadd().Key("variable/mdaihub-sample/service_list_1").
+			ctx := context.Background()
+
+			err = valkeyClient.Do(ctx, valkeyClient.B().Sadd().Key("variable/mdaihub-sample/service_list_1").
 				Member("noisy-service").Build()).Error()
 			Expect(err).NotTo(HaveOccurred())
 
 			err = valkeyClient.Do(
-				context.TODO(),
+				ctx,
 				valkeyClient.B().Set().
 					Key("variable/mdaihub-sample/any_service_alerted").
 					Value("true").
@@ -639,7 +673,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			err = valkeyClient.Do(
-				context.TODO(),
+				ctx,
 				valkeyClient.B().Sadd().
 					Key("variable/mdaihub-sample/service_list").
 					Member("serviceA").
@@ -648,7 +682,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			err = valkeyClient.Do(
-				context.TODO(),
+				ctx,
 				valkeyClient.B().Hset().
 					Key("variable/mdaihub-sample/attribute_map").FieldValue().
 					FieldValue("send_batch_size", "100").
@@ -658,7 +692,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			err = valkeyClient.Do(
-				context.TODO(),
+				ctx,
 				valkeyClient.B().Set().
 					Key("variable/mdaihub-sample/default").
 					Value("default").
@@ -667,7 +701,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			err = valkeyClient.Do(
-				context.TODO(),
+				ctx,
 				valkeyClient.B().Set().
 					Key("variable/mdaihub-sample/filter").
 					Value(`- severity_number < SEVERITY_NUMBER_WARN
@@ -677,7 +711,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			err = valkeyClient.Do(
-				context.TODO(),
+				ctx,
 				valkeyClient.B().Set().
 					Key("variable/mdaihub-sample/severity_number").
 					Value("1").
@@ -686,7 +720,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			err = valkeyClient.Do(
-				context.TODO(),
+				ctx,
 				valkeyClient.B().Hset().
 					Key("variable/mdaihub-sample/severity_filters_by_level").FieldValue().
 					FieldValue("1", "INFO|WARNING").
@@ -714,7 +748,6 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(data["SEVERITY_NUMBER"]).To(Equal("1"))
 				g.Expect(data["SERVICE_LIST_REGEX_MANUAL"]).To(Equal(""))
 				g.Expect(data["SERVICE_LIST_CSV_MANUAL"]).To(Equal(""))
-
 			}
 			Eventually(verifyConfigMap).Should(Succeed())
 
@@ -756,7 +789,7 @@ var _ = Describe("Manager", Ordered, func() {
 				out, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				var result struct {
-					Items []interface{} `json:"items"`
+					Items []any `json:"items"`
 				}
 				err = json.Unmarshal([]byte(out), &result)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -765,11 +798,36 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyPromRulesDeleted).Should(Succeed())
 
 			By("validating valkey keys deleted")
-			// TODO
+			// TODO check valkey store
 
-			By("validating all related observers are deleted")
-			// TODO
+			By("validating all related observers are not deleted")
+			verifyObserver := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployment", "mdaihub-sample-mdai-observer",
+					"-n", namespace,
+					"-o", "jsonpath={.status.readyReplicas}")
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "failed to get observer deployment status")
+				g.Expect(out).To(Equal("2"), "observer deployment should have 2 ready replicas")
+			}
+			Eventually(verifyObserver, "1m", "5s").Should(Succeed())
+			verifyObserverPods := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pods",
+					"-n", namespace,
+					"-l", "app=mdaihub-sample-mdai-observer",
+					"-o", "jsonpath={range .items[*]}{.metadata.name}:{.status.phase}{\"\\n\"}{end}")
+				out, err := utils.Run(cmd)
 
+				g.Expect(err).NotTo(HaveOccurred(), "failed to get observer pods")
+				lines := strings.Split(strings.TrimSpace(out), "\n")
+
+				g.Expect(lines).To(HaveLen(2), "expected 2 observer pods")
+				for _, line := range lines {
+					parts := strings.Split(line, ":")
+					g.Expect(parts).To(HaveLen(2), "unexpected pod output format")
+					g.Expect(parts[1]).To(Equal("Running"), "expected pod to be in Running state")
+				}
+			}
+			Eventually(verifyObserverPods, "1m", "5s").Should(Succeed())
 		})
 
 		It("can delete MdaiCollector CRs and clean up resources", func() {
@@ -782,8 +840,24 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyMdaiCollector).Should(Succeed())
 
 			By("validating collector deleted")
-			// TODO
+			verifyCollectorDeleted := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pods",
+					"-n", namespace,
+					"-l", "app=internal-mdai-collector",
+					"-o", "json")
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				expectedYAML := `
+apiVersion: v1
+items: []
+kind: List
+metadata:
+  resourceVersion: ""
+`
+				g.Expect(out).To(MatchYAML(expectedYAML))
+			}
 
+			Eventually(verifyCollectorDeleted, "30s", "3s").Should(Succeed(), "expected all mdai collector pods to be deleted")
 		})
 
 		It("can delete MdaiObserver CRs and clean up resources", func() {
@@ -807,13 +881,12 @@ var _ = Describe("Manager", Ordered, func() {
 					return err
 				}
 				if strings.Contains(out, `"items": [`) && !strings.Contains(out, `"items": []`) {
-					return fmt.Errorf("observer pods still present")
+					return errors.New("observer pods still present")
 				}
 				return nil
 			}
 
 			Eventually(verifyObserverDeleted, "30s", "3s").Should(Succeed(), "expected all observer pods to be deleted")
-
 		})
 
 		It("can delete OTEL CRs", func() {
@@ -833,10 +906,10 @@ func getDataFromMap(g Gomega, cmName string, namespace string) map[string]any {
 	out, err := utils.Run(cmd)
 	g.Expect(err).NotTo(HaveOccurred())
 
-	var cm map[string]interface{}
+	var cm map[string]any
 	err = json.Unmarshal([]byte(out), &cm)
 	g.Expect(err).NotTo(HaveOccurred())
-	data, ok := cm["data"].(map[string]interface{})
+	data, ok := cm["data"].(map[string]any)
 	g.Expect(ok).To(BeTrue(), "Expected 'data' field to be a map")
 	return data
 }
@@ -871,6 +944,17 @@ func configMapDoesNotExist(name string, namespace string) {
 	Eventually(verifyConfigMap, "1m", "5s").Should(Succeed())
 }
 
+func configMapYAML(name, namespace string) (string, error) {
+	cmd := exec.Command("kubectl", "get", "configmap", name,
+		"-n", namespace,
+		"-o", "yaml")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
 // serviceAccountToken returns a token for the specified service account in the given namespace.
 // It uses the Kubernetes TokenRequest API to generate a token by directly sending a request
 // and parsing the resulting token from the API response.
@@ -881,8 +965,8 @@ func serviceAccountToken() (string, error) {
 	}`
 
 	// Temporary file to store the token request
-	secretName := fmt.Sprintf("%s-token-request", serviceAccountName)
-	tokenRequestFile := filepath.Join("/tmp", secretName)
+	secretName := serviceAccountName + "-token-request"
+	tokenRequestFile := filepath.Join(os.TempDir(), secretName)
 	err := os.WriteFile(tokenRequestFile, []byte(tokenRequestRawString), os.FileMode(0o644))
 	if err != nil {
 		return "", err
@@ -930,7 +1014,7 @@ func getMetricsOutputFull() string {
 		"--restart=Never",
 		"--namespace", namespace,
 		"--image=curlimages/curl:latest",
-		fmt.Sprintf("--overrides=%s",
+		"--overrides="+
 			fmt.Sprintf(`{
 					"spec": {
 						"containers": [{
@@ -952,7 +1036,7 @@ func getMetricsOutputFull() string {
 						}],
 						"serviceAccount": "%s"
 					}
-				}`, token, metricsServiceName, namespace, serviceAccountName)),
+				}`, token, metricsServiceName, namespace, serviceAccountName),
 	)
 
 	metricsOutput, err := utils.Run(cmd)
@@ -962,8 +1046,31 @@ func getMetricsOutputFull() string {
 
 // tokenRequest is a simplified representation of the Kubernetes TokenRequest API response,
 // containing only the token field that we need to extract.
+// nolint:revive
 type tokenRequest struct {
 	Status struct {
 		Token string `json:"token"`
 	} `json:"status"`
+}
+
+type k8sObject map[string]any
+
+func (obj k8sObject) stripVolatile() {
+	meta, _ := obj["metadata"].(map[string]any)
+	if meta == nil {
+		return
+	}
+	delete(meta, "uid")
+	delete(meta, "resourceVersion")
+	delete(meta, "creationTimestamp")
+	delete(meta, "generation")
+	delete(meta, "managedFields")
+
+	if ors, ok := meta["ownerReferences"].([]any); ok {
+		for _, r := range ors {
+			if m, ok := r.(map[string]any); ok {
+				delete(m, "uid")
+			}
+		}
+	}
 }
