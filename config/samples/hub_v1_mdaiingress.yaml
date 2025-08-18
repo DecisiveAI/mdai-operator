@@ -1,0 +1,12 @@
+apiVersion: hub.mydecisive.ai/v1
+kind: MdaiIngress
+metadata:
+  labels:
+    app.kubernetes.io/name: mdaiingress
+    app.kubernetes.io/instance: mdaiingress-sample
+    app.kubernetes.io/part-of: mdai-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: mdai-operator
+  name: mdaiingress-sample
+spec:
+  # TODO(user): Add fields here

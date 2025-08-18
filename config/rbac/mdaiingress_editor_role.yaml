@@ -1,0 +1,31 @@
+# permissions for end users to edit mdaiingresses.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: mdaiingress-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: mdai-operator
+    app.kubernetes.io/part-of: mdai-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: mdaiingress-editor-role
+rules:
+- apiGroups:
+  - hub.mydecisive.ai
+  resources:
+  - mdaiingresses
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - hub.mydecisive.ai
+  resources:
+  - mdaiingresses/status
+  verbs:
+  - get

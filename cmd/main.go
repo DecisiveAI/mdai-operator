@@ -34,6 +34,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/mdai-operator/internal/controller"
 	webhookmdaiv1 "github.com/decisiveai/mdai-operator/internal/webhook/v1"
@@ -57,6 +58,7 @@ func init() {
 	utilruntime.Must(mdaiv1.AddToScheme(scheme))
 	utilruntime.Must(v1beta1.AddToScheme(scheme))
 	utilruntime.Must(prometheusv1.AddToScheme(scheme))
+	utilruntime.Must(hubv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -71,7 +73,7 @@ func main() {
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8082", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -182,6 +184,7 @@ func main() {
 	}
 	webhookServer := webhook.NewServer(webhook.Options{
 		TLSOpts: webhookTLSOpts,
+		Port:    9444,
 	})
 
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
@@ -314,6 +317,14 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiObserver")
 			os.Exit(1)
 		}
+	}
+	if err = (&controller.MdaiIngressReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Cache:  mgr.GetCache(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MdaiIngress")
+		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 
