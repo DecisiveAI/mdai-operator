@@ -150,8 +150,8 @@ spec:
                       type: object
                       x-kubernetes-validations:
                       - message: exactly one variant must be set
-                        rule: (has(self.alertName) && has(self.status)) != (has(self.variableUpdated)
-                          && has(self.condition))
+                        rule: (has(self.alertName)) != (has(self.variableUpdated) &&
+                          has(self.condition))
                   required:
                   - name
                   - then
