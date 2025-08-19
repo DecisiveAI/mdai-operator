@@ -1,6 +1,11 @@
 package controller
 
-import "time"
+import (
+	"context"
+	"time"
+)
+
+type ReconcileOperation func(context.Context) (OperationResult, error)
 
 type OperationResult struct {
 	RequeueDelay   time.Duration
@@ -44,6 +49,14 @@ func RequeueWithError(errIn error) (OperationResult, error) {
 	return OperationResult{
 		RequeueDelay:   0,
 		RequeueRequest: true,
+		CancelRequest:  false,
+	}, errIn
+}
+
+func ContinueWithError(errIn error) (OperationResult, error) {
+	return OperationResult{
+		RequeueDelay:   0,
+		RequeueRequest: false,
 		CancelRequest:  false,
 	}, errIn
 }

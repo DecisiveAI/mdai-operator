@@ -1,15 +1,13 @@
 package v1
 
 import (
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	// TODO (user): Add any additional imports if needed
 )
 
 func createSampleMdaiHub() *mdaiv1.MdaiHub {
@@ -33,7 +31,8 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 						{
 							Name: "SERVICE_LIST_REGEX",
 							Transformers: []mdaiv1.VariableTransformer{
-								{Type: mdaiv1.TransformerTypeJoin,
+								{
+									Type: mdaiv1.TransformerTypeJoin,
 									Join: &mdaiv1.JoinTransformer{
 										Delimiter: "|",
 									},
@@ -43,7 +42,8 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 						{
 							Name: "SERVICE_LIST_CSV",
 							Transformers: []mdaiv1.VariableTransformer{
-								{Type: mdaiv1.TransformerTypeJoin,
+								{
+									Type: mdaiv1.TransformerTypeJoin,
 									Join: &mdaiv1.JoinTransformer{
 										Delimiter: ",",
 									},
@@ -60,7 +60,8 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 						{
 							Name: "SERVICE_LIST_2_REGEX",
 							Transformers: []mdaiv1.VariableTransformer{
-								{Type: mdaiv1.TransformerTypeJoin,
+								{
+									Type: mdaiv1.TransformerTypeJoin,
 									Join: &mdaiv1.JoinTransformer{
 										Delimiter: "|",
 									},
@@ -70,7 +71,8 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 						{
 							Name: "SERVICE_LIST_2_CSV",
 							Transformers: []mdaiv1.VariableTransformer{
-								{Type: mdaiv1.TransformerTypeJoin,
+								{
+									Type: mdaiv1.TransformerTypeJoin,
 									Join: &mdaiv1.JoinTransformer{
 										Delimiter: ",",
 									},
@@ -115,7 +117,8 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 						{
 							Name: "PRIORITY_LIST",
 							Transformers: []mdaiv1.VariableTransformer{
-								{Type: mdaiv1.TransformerTypeJoin,
+								{
+									Type: mdaiv1.TransformerTypeJoin,
 									Join: &mdaiv1.JoinTransformer{
 										Delimiter: ",",
 									},
@@ -228,7 +231,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			obj := createSampleMdaiHub()
 			(obj.Spec.Variables)[6].VariableRefs[0] = "service_list_3"
 			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
-			Expect(err).To(MatchError(ContainSubstring(`meta variable references must not change, delete and recreate the variable to update references`)))
+			Expect(err).To(MatchError(ContainSubstring(`meta variable references must not change; delete and recreate the variable to update references`)))
 			Expect(warnings).To(BeEmpty())
 		})
 
@@ -275,7 +278,8 @@ var _ = Describe("MdaiHub Webhook", func() {
 		It("Should fail if transformers specified for boolean", func() {
 			obj := createSampleMdaiHub()
 			(obj.Spec.Variables)[3].SerializeAs[0].Transformers = []mdaiv1.VariableTransformer{
-				{Type: mdaiv1.TransformerTypeJoin,
+				{
+					Type: mdaiv1.TransformerTypeJoin,
 					Join: &mdaiv1.JoinTransformer{
 						Delimiter: "|",
 					},
@@ -286,5 +290,4 @@ var _ = Describe("MdaiHub Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 	})
-
 })

@@ -1,7 +1,7 @@
 package v1
 
 import (
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -20,12 +20,12 @@ type Observer struct {
 
 type ObserverLogsFilter struct {
 	// +kubebuilder:validation:Required
-	LogRecord []string `json:"log_record" yaml:"log_record"`
+	LogRecord []string `json:"log_record" yaml:"log_record"` //nolint:tagliatelle
 }
 
 type ObserverFilter struct {
 	// +kubebuilder:validation:Optional
-	ErrorMode *string `json:"error_mode" yaml:"error_mode"`
+	ErrorMode *string `json:"error_mode" yaml:"error_mode"` //nolint:tagliatelle
 	// +kubebuilder:validation:Optional
 	Logs *ObserverLogsFilter `json:"logs" yaml:"logs"`
 }
@@ -38,7 +38,7 @@ type ObserverResource struct {
 	// +kubebuilder:validation:Optional
 	Replicas *int32 `json:"replicas,omitempty" yaml:"replicas,omitempty"`
 	// +kubebuilder:validation:Optional
-	Resources *v1.ResourceRequirements `json:"resources,omitempty" yaml:"resources,omitempty"`
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty" yaml:"resources,omitempty"`
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Minimum=1
 	GrpcReceiverMaxMsgSize *uint64 `json:"grpcReceiverMaxMsgSize,omitempty" yaml:"grpcReceiverMaxMsgSize,omitempty"`
@@ -84,9 +84,10 @@ type MdaiObserver struct {
 type MdaiObserverList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []MdaiObserver `json:"items"`
+
+	Items []MdaiObserver `json:"items"`
 }
 
-func init() {
+func init() { //nolint:gochecknoinits
 	SchemeBuilder.Register(&MdaiObserver{}, &MdaiObserverList{})
 }

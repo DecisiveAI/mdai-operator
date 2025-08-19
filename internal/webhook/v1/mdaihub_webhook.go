@@ -14,12 +14,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/utils/ptr"
-	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // nolint:unused
@@ -50,7 +50,7 @@ type MdaiHubCustomDefaulter struct {
 var _ webhook.CustomDefaulter = &MdaiHubCustomDefaulter{}
 
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind MdaiHub.
-func (d *MdaiHubCustomDefaulter) Default(_ context.Context, obj runtime.Object) error {
+func (*MdaiHubCustomDefaulter) Default(_ context.Context, obj runtime.Object) error {
 	mdaihub, ok := obj.(*mdaiv1.MdaiHub)
 
 	if !ok {
@@ -129,12 +129,12 @@ func (v *MdaiHubCustomValidator) ValidateUpdate(_ context.Context, oldObj, newOb
 		}
 	}
 
-	mdaihublog.Info("Validation for MdaiHub update", "name", newHub.GetName())
+	mdaihublog.Info("Validation for MdaiHub upon update", "name", newHub.GetName())
 	return v.Validate(newHub)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type MdaiHub.
-func (v *MdaiHubCustomValidator) ValidateDelete(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (*MdaiHubCustomValidator) ValidateDelete(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	mdaihub, ok := obj.(*mdaiv1.MdaiHub)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiHub object but got %T", obj)
@@ -324,7 +324,7 @@ func (v *MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub) (adm
 
 	variables := mdaihub.Spec.Variables
 	if len(variables) == 0 {
-		return append(warnings, "no `Variables` configuration provided."), nil
+		return append(warnings, "variables are not specified"), nil
 	}
 
 	vPath := field.NewPath("spec", "variables")

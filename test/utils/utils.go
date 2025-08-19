@@ -20,7 +20,7 @@ const (
 )
 
 func warnError(err error) {
-	_, _ = fmt.Fprintf(ginkgov2.GinkgoWriter, "warning: %v\n", err)
+	ginkgov2.GinkgoWriter.Printf("warning: %v\n", err)
 }
 
 // Run executes the provided command within this context
@@ -29,15 +29,15 @@ func Run(cmd *exec.Cmd) (string, error) {
 	cmd.Dir = dir
 
 	if err := os.Chdir(cmd.Dir); err != nil {
-		_, _ = fmt.Fprintf(ginkgov2.GinkgoWriter, "chdir dir: %s\n", err)
+		ginkgov2.GinkgoWriter.Printf("chdir dir: %s\n", err)
 	}
 
 	cmd.Env = append(os.Environ(), "GO111MODULE=on")
 	command := strings.Join(cmd.Args, " ")
-	_, _ = fmt.Fprintf(ginkgov2.GinkgoWriter, "running: %s\n", command)
+	ginkgov2.GinkgoWriter.Printf("running: %s\n", command)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return string(output), fmt.Errorf("%s failed with error: (%v) %s", command, err, string(output))
+		return string(output), fmt.Errorf("%s failed with error: (%w) %s", command, err, string(output))
 	}
 
 	return string(output), nil
@@ -186,7 +186,7 @@ func UncommentCode(filename, target, prefix string) error {
 	}
 	// false positive
 	// nolint:gosec
-	return os.WriteFile(filename, out.Bytes(), 0644)
+	return os.WriteFile(filename, out.Bytes(), 0o644)
 }
 
 func InstallValkey() error {
