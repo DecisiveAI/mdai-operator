@@ -43,24 +43,119 @@ spec:
               automations:
                 items:
                   properties:
-                    eventRef:
+                    name:
+                      description: Name How this rule will be referred to elsewhere
+                        in the config and audit.
+                      minLength: 1
                       type: string
-                    workflow:
+                    then:
+                      description: Then specifies the actions to be taken when the rule
+                        is triggered.
                       items:
                         properties:
-                          args:
-                            additionalProperties:
-                              type: string
+                          addToSet:
+                            description: Payloads (one required depending on Type)
+                            properties:
+                              set:
+                                description: Target set name
+                                minLength: 1
+                                type: string
+                              value:
+                                description: Value to add (templated string allowed)
+                                minLength: 1
+                                type: string
+                            required:
+                            - set
+                            - value
                             type: object
-                          handlerRef:
-                            type: string
-                        required:
-                        - handlerRef
+                          callWebhook:
+                            properties:
+                              body:
+                                description: Arbitrary JSON body (map/array/string/number),
+                                  templates allowed in strings.
+                                x-kubernetes-preserve-unknown-fields: true
+                              headers:
+                                additionalProperties:
+                                  type: string
+                                description: Optional headers
+                                type: object
+                              method:
+                                default: POST
+                                enum:
+                                - GET
+                                - POST
+                                - PUT
+                                - PATCH
+                                - DELETE
+                                type: string
+                              url:
+                                description: URL may be a template
+                                minLength: 1
+                                type: string
+                            required:
+                            - url
+                            type: object
+                          removeFromSet:
+                            properties:
+                              set:
+                                description: Target set name
+                                minLength: 1
+                                type: string
+                              value:
+                                description: Value to add (templated string allowed)
+                                minLength: 1
+                                type: string
+                            required:
+                            - set
+                            - value
+                            type: object
+                          setVariable:
+                            properties:
+                              scalar:
+                                description: Target set name
+                                minLength: 1
+                                type: string
+                              value:
+                                description: Value to add (templated string allowed)
+                                minLength: 1
+                                type: string
+                            required:
+                            - scalar
+                            - value
+                            type: object
                         type: object
                       type: array
+                    when:
+                      description: When specifies the conditions under which the rule
+                        is triggered.
+                      properties:
+                        alertName:
+                          description: 'Variant 1: alert'
+                          type: string
+                        condition:
+                          description: Condition a template for conditions on variable
+                            changes
+                          type: string
+                        status:
+                          type: string
+                        updateType:
+                          enum:
+                          - added
+                          - removed
+                          - set
+                          type: string
+                        variableUpdated:
+                          description: 'Variant 2: variable-driven'
+                          type: string
+                      type: object
+                      x-kubernetes-validations:
+                      - message: exactly one variant must be set
+                        rule: (has(self.alertName)) != (has(self.variableUpdated) &&
+                          has(self.condition))
                   required:
-                  - eventRef
-                  - workflow
+                  - name
+                  - then
+                  - when
                   type: object
                 type: array
               config:

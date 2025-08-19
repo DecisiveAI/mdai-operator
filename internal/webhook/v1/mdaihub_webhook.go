@@ -2,12 +2,18 @@ package v1
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"net/url"
 	"reflect"
+	"strings"
 
 	"github.com/prometheus/prometheus/promql/parser"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/validation/field"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -19,6 +25,8 @@ import (
 // nolint:unused
 // log is for logging in this package.
 var mdaihublog = logf.Log.WithName("mdaihub-resource")
+
+var allowedHTTP = sets.NewString("GET", "POST", "PUT", "PATCH", "DELETE")
 
 // SetupMdaiHubWebhookWithManager registers the webhook for MdaiHub in the manager.
 func SetupMdaiHubWebhookWithManager(mgr ctrl.Manager) error {
@@ -50,12 +58,11 @@ func (d *MdaiHubCustomDefaulter) Default(_ context.Context, obj runtime.Object) 
 	}
 	mdaihublog.Info("Defaulting for MdaiHub", "name", mdaihub.GetName())
 
-	// TODO(user): fill in your defaulting logic.
+	// a placeholder for defaulting logic.
 
 	return nil
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 // NOTE: The 'path' attribute must follow a specific pattern and should not be modified directly here.
 // Modifying the path for an invalid path can cause API server errors; failing to locate the webhook.
 // +kubebuilder:webhook:path=/validate-hub-mydecisive-ai-v1-mdaihub,mutating=false,failurePolicy=fail,sideEffects=None,groups=hub.mydecisive.ai,resources=mdaihubs,verbs=create;update,versions=v1,name=vmdaihub-v1.kb.io,admissionReviewVersions=v1
@@ -84,39 +91,46 @@ func (v *MdaiHubCustomValidator) ValidateCreate(_ context.Context, obj runtime.O
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type MdaiHub.
 func (v *MdaiHubCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	mdaihub, ok := newObj.(*mdaiv1.MdaiHub)
+	newHub, ok := newObj.(*mdaiv1.MdaiHub)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiHub object for the newObj but got %T", newObj)
 	}
-	oldMdaihub, ok := oldObj.(*mdaiv1.MdaiHub)
+	oldHub, ok := oldObj.(*mdaiv1.MdaiHub)
 	if !ok {
-		return nil, fmt.Errorf("expected a MdaiHub object for the oldObj but got %T", oldMdaihub)
+		return nil, fmt.Errorf("expected a MdaiHub object for the oldObj but got %T", oldHub)
 	}
 
 	// validate that meta variables keep the same references. Meta variables are immutable.
-	if oldMdaihub.Spec.Variables != nil && mdaihub.Spec.Variables != nil {
-		oldVariablesMap := make(map[string]mdaiv1.Variable)
-		for _, oldVariables := range oldMdaihub.Spec.Variables {
+	if len(oldHub.Spec.Variables) > 0 && len(newHub.Spec.Variables) > 0 {
+		oldVariablesMap := make(map[string]mdaiv1.Variable, len(oldHub.Spec.Variables))
+		for _, oldVariables := range oldHub.Spec.Variables {
 			if oldVariables.Type == mdaiv1.VariableTypeMeta {
 				oldVariablesMap[oldVariables.Key] = oldVariables
 			}
 		}
 
-		for _, newVariable := range mdaihub.Spec.Variables {
+		errorList := field.ErrorList{}
+		for index, newVariable := range newHub.Spec.Variables {
 			if newVariable.Type != mdaiv1.VariableTypeMeta {
 				continue
 			}
 			if oldVariable, found := oldVariablesMap[newVariable.Key]; found {
 				if !reflect.DeepEqual(oldVariable.VariableRefs, newVariable.VariableRefs) {
-					return nil, errors.New("meta variable references must not change, delete and recreate the variable to update references")
+					variableRefsPath := field.NewPath("spec", "variables").Index(index).Child("variableRefs")
+					errorList = append(errorList, field.Forbidden(
+						variableRefsPath,
+						"meta variable references are immutable; delete and recreate the variable to change references",
+					))
 				}
 			}
 		}
+		if len(errorList) > 0 {
+			return nil, apierrors.NewInvalid(schema.GroupKind{Group: mdaiv1.GroupVersion.Group, Kind: "MdaiHub"}, newHub.GetName(), errorList)
+		}
 	}
 
-	mdaihublog.Info("Validation for MdaiHub upon update", "name", mdaihub.GetName())
-
-	return v.Validate(mdaihub)
+	mdaihublog.Info("Validation for MdaiHub update", "name", newHub.GetName())
+	return v.Validate(newHub)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type MdaiHub.
@@ -132,85 +146,253 @@ func (v *MdaiHubCustomValidator) ValidateDelete(_ context.Context, obj runtime.O
 }
 
 func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Warnings, error) {
-	warnings := admission.Warnings{}
-
-	_, warnings, err := v.validateVariables(mdaihub, warnings)
-	if err != nil {
-		return warnings, err
-	}
+	allWarnings, allErrs := v.validateVariables(mdaihub)
 
 	evaluations := mdaihub.Spec.PrometheusAlert
 	if len(evaluations) == 0 {
-		warnings = append(warnings, "Evaluations are not specified")
+		allWarnings = append(allWarnings, "no `PrometheusAlert` provided; MdaiHub will not setup alerts")
 	} else {
 		for _, evaluation := range evaluations {
 			if _, err := parser.ParseExpr(evaluation.Expr.StrVal); err != nil {
-				return warnings, err
+				return allWarnings, err
 			}
 		}
 	}
 
-	eventRefsMap := map[string]any{}
-	if mdaihub.Spec.Automations != nil {
-		for _, automation := range mdaihub.Spec.Automations {
-			if _, exists := eventRefsMap[automation.EventRef]; exists {
-				return warnings, fmt.Errorf("hub %s, automationevent reference %s is duplicated", mdaihub.GetName(), automation.EventRef)
-			}
-			eventRefsMap[automation.EventRef] = struct{}{}
+	warnings, errs := v.validateAutomations(mdaihub)
+	allWarnings = append(allWarnings, warnings...)
+	allErrs = append(allErrs, errs...)
+
+	if len(allErrs) == 0 {
+		return allWarnings, nil
+	}
+
+	return allWarnings, apierrors.NewInvalid(schema.GroupKind{Group: mdaiv1.GroupVersion.Group, Kind: "MdaiHub"}, mdaihub.GetName(), allErrs)
+}
+
+func (v *MdaiHubCustomValidator) validateAutomations(mdaihub *mdaiv1.MdaiHub) (admission.Warnings, field.ErrorList) {
+	warnings := admission.Warnings{}
+	errs := field.ErrorList{}
+
+	automations := mdaihub.Spec.Automations
+	if len(automations) == 0 {
+		warnings = append(warnings, "no `Automations` provided; MdaiHub will perform no actions")
+		return warnings, nil
+	}
+
+	// TODO create a map with variable names and alert names for faster lookup
+	vars := mdaihub.Spec.Variables
+	varKeys := make(map[string]struct{}, len(vars))
+	for i := range vars {
+		key := strings.TrimSpace(vars[i].Key)
+		if key == "" {
+			continue
 		}
+		varKeys[strings.ToLower(key)] = struct{}{}
+	}
+
+	alerts := mdaihub.Spec.PrometheusAlert
+	alertNames := make(map[string]struct{}, len(alerts))
+	for i := range alerts {
+		key := strings.TrimSpace(alerts[i].Name)
+		if key == "" {
+			continue
+		}
+		alertNames[strings.ToLower(key)] = struct{}{}
+	}
+
+	specPath := field.NewPath("spec")
+	for i, rule := range mdaihub.Spec.Automations {
+		rulePath := specPath.Child("automations").Index(i)
+		errs = append(errs, validateWhen(rulePath.Child("when"), rule.When, varKeys, alertNames)...)
+
+		if len(rule.Then) == 0 {
+			errs = append(errs, field.Required(rulePath.Child("then"), "at least 1 action is required"))
+			continue
+		}
+		for j, act := range rule.Then {
+			errs = append(errs, validateAction(rulePath.Child("then").Index(j), act, varKeys)...)
+		}
+	}
+
+	return warnings, errs
+}
+
+func validateWhen(path *field.Path, when mdaiv1.When, knownVarKeys map[string]struct{}, knownAlertNames map[string]struct{}) field.ErrorList {
+	var errs field.ErrorList
+
+	hasAlertName := strings.TrimSpace(ptr.Deref(when.AlertName, "")) != ""
+	hasStatus := strings.TrimSpace(ptr.Deref(when.Status, "")) != ""
+	hasVariableUpdated := strings.TrimSpace(ptr.Deref(when.VariableUpdated, "")) != ""
+	hasCondition := strings.TrimSpace(ptr.Deref(when.Condition, "")) != ""
+	hasUpdateType := strings.TrimSpace(ptr.Deref(when.UpdateType, "")) != ""
+
+	if hasStatus && !hasAlertName {
+		errs = append(errs, field.Invalid(path, "<alert>", "alertName and status must be set together"))
+	}
+	if hasVariableUpdated != hasCondition {
+		errs = append(errs, field.Invalid(path, "<variable>", "variableUpdated and condition must be set together"))
+	}
+
+	if hasUpdateType && !hasVariableUpdated {
+		errs = append(errs, field.Invalid(path.Child("updateType"), *when.UpdateType, "can only be set when variableUpdated is set"))
+	}
+
+	// Existence checks
+	if hasVariableUpdated && !hasKey(knownVarKeys, *when.VariableUpdated) {
+		errs = append(errs, field.Invalid(path.Child("variableUpdated"), *when.VariableUpdated, "not defined in spec.variables"))
+	}
+	if hasAlertName && !hasKey(knownAlertNames, *when.AlertName) {
+		errs = append(errs, field.Invalid(path.Child("alertName"), *when.AlertName, "not defined in spec.alerts"))
+	}
+
+	return errs
+}
+
+func hasKey(set map[string]struct{}, key string) bool {
+	_, ok := set[strings.ToLower(strings.TrimSpace(key))]
+	return ok
+}
+
+func validateAction(actionPath *field.Path, action mdaiv1.Action, knownVarKeys map[string]struct{}) field.ErrorList {
+	var errs field.ErrorList
+	present := 0
+
+	if action.AddToSet != nil {
+		present++
+		errs = append(errs, validateSetAction(actionPath.Child("addToSet"), action.AddToSet, knownVarKeys)...)
+	}
+
+	if action.RemoveFromSet != nil {
+		present++
+		errs = append(errs, validateSetAction(actionPath.Child("removeFromSet"), action.RemoveFromSet, knownVarKeys)...)
+	}
+
+	if action.CallWebhook != nil {
+		present++
+		errs = append(errs, validateWebhookCall(actionPath.Child("callWebhook"), action.CallWebhook)...)
+	}
+
+	if present == 0 {
+		errs = append(errs, field.Invalid(actionPath, "<action>", "at least one action must be specified"))
+	}
+	return errs
+}
+
+func validateSetAction(p *field.Path, a *mdaiv1.SetAction, knownVarKeys map[string]struct{}) field.ErrorList {
+	var errs field.ErrorList
+	set := strings.TrimSpace(a.Set)
+	if !hasKey(knownVarKeys, set) {
+		errs = append(errs, field.Invalid(p.Child("set"), set, "not defined in spec.variables"))
+	}
+	return errs
+}
+
+func validateWebhookCall(callPath *field.Path, call *mdaiv1.CallWebhookAction) field.ErrorList {
+	var errs field.ErrorList
+
+	endpoint := strings.TrimSpace(call.URL)
+	if endpoint == "" {
+		errs = append(errs, field.Required(callPath.Child("url"), "required"))
+	} else if !isValidURL(endpoint) {
+		errs = append(errs, field.Invalid(callPath.Child("url"), endpoint, "must be an absolute http(s) URL or a template"))
+	}
+
+	if m := strings.TrimSpace(call.Method); m != "" && !allowedHTTP.Has(m) {
+		errs = append(errs, field.NotSupported(callPath.Child("method"), m, allowedHTTP.UnsortedList()))
+	}
+
+	return errs
+}
+
+func isValidURL(s string) bool {
+	u, err := url.ParseRequestURI(s)
+	if err != nil {
+		return false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	return u.Host != ""
+}
+
+func (v *MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub) (admission.Warnings, field.ErrorList) {
+	warnings := admission.Warnings{}
+	errs := field.ErrorList{}
+	keys := map[string]struct{}{}
+	exportedVariableNames := map[string]struct{}{}
+
+	variables := mdaihub.Spec.Variables
+	if len(variables) == 0 {
+		return append(warnings, "no `Variables` configuration provided."), nil
+	}
+
+	vPath := field.NewPath("spec", "variables")
+
+	for i, variable := range variables {
+		varIndex := vPath.Index(i)
+
+		if variable.StorageType != mdaiv1.VariableSourceTypeBuiltInValkey {
+			errs = append(errs, field.NotSupported(
+				varIndex.Child("storageType"),
+				string(variable.StorageType),
+				[]string{string(mdaiv1.VariableSourceTypeBuiltInValkey)},
+			))
+		}
+
+		if _, exists := keys[variable.Key]; exists {
+			errs = append(errs, field.Duplicate(varIndex.Child("key"), variable.Key))
+		} else {
+			keys[variable.Key] = struct{}{}
+		}
+
+		refs := variable.VariableRefs
+		if variable.Type == mdaiv1.VariableTypeMeta {
+			if len(refs) == 0 {
+				errs = append(errs, field.Required(varIndex.Child("variableRefs"), "required for meta variable"))
+			}
+			if variable.DataType == mdaiv1.MetaVariableDataTypeHashSet && len(refs) != 2 {
+				errs = append(errs, field.Invalid(varIndex.Child("variableRefs"), refs, "Meta HashSet must have exactly 2 elements"))
+			}
+		} else if len(refs) > 0 {
+			errs = append(errs, field.Forbidden(varIndex.Child("variableRefs"), "not supported for non-meta variables"))
+		}
+
+		for j, with := range variable.SerializeAs {
+			serializeIndex := varIndex.Child("serializeAs").Index(j)
+
+			if _, exists := exportedVariableNames[with.Name]; exists {
+				errs = append(errs, field.Duplicate(serializeIndex.Child("name"), with.Name))
+			} else {
+				exportedVariableNames[with.Name] = struct{}{}
+			}
+
+			switch variable.DataType {
+			case mdaiv1.VariableDataTypeSet, mdaiv1.MetaVariableDataTypePriorityList:
+				if len(with.Transformers) == 0 {
+					errs = append(errs, field.Required(serializeIndex.Child("transformers"), "at least one transformer (e.g., 'join')"))
+				}
+			case mdaiv1.VariableDataTypeString,
+				mdaiv1.VariableDataTypeFloat,
+				mdaiv1.VariableDataTypeInt,
+				mdaiv1.VariableDataTypeBoolean,
+				mdaiv1.VariableDataTypeMap,
+				mdaiv1.MetaVariableDataTypeHashSet:
+				if len(with.Transformers) > 0 {
+					errs = append(errs, field.Forbidden(
+						serializeIndex.Child("transformers"),
+						fmt.Sprintf("transformers are not supported for variable type %s", variable.DataType),
+					))
+				}
+			default:
+				errs = append(errs, field.Invalid(varIndex.Child("dataType"), variable.DataType, "unsupported variable type"))
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return warnings, errs
 	}
 
 	return warnings, nil
-}
-
-func (v *MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub, warnings admission.Warnings) (map[string]struct{}, admission.Warnings, error) {
-	keys := map[string]struct{}{}
-	exportedVariableNames := map[string]struct{}{}
-	variables := mdaihub.Spec.Variables
-	if len(variables) == 0 {
-		warnings = append(warnings, "variables are not specified")
-	} else {
-		for _, variable := range variables {
-			if variable.StorageType != mdaiv1.VariableSourceTypeBuiltInValkey {
-				return nil, warnings, fmt.Errorf("hub %s, variable %s: unsupported storage type %s", mdaihub.GetName(), variable.Key, variable.StorageType)
-			}
-			if _, exists := keys[variable.Key]; exists {
-				return nil, warnings, fmt.Errorf("hub %s, variable key %s is duplicated", mdaihub.GetName(), variable.Key)
-			}
-			keys[variable.Key] = struct{}{}
-
-			refs := variable.VariableRefs
-			if len(refs) == 0 && mdaiv1.VariableTypeMeta == variable.Type {
-				return nil, warnings, fmt.Errorf("hub %s, variable %s: no variable references provided for meta variable", mdaihub.GetName(), variable.Key)
-			}
-			if len(refs) > 0 && mdaiv1.VariableTypeMeta != variable.Type {
-				return nil, warnings, fmt.Errorf("hub %s, variable %s: variable references are not supported for non-meta variables", mdaihub.GetName(), variable.Key)
-			}
-			if len(refs) != 2 && mdaiv1.VariableTypeMeta == variable.Type && mdaiv1.MetaVariableDataTypeHashSet == variable.DataType {
-				return nil, warnings, fmt.Errorf("hub %s, variable %s: variable references for Meta HashSet must have exactly 2 elements", mdaihub.GetName(), variable.Key)
-			}
-
-			for _, with := range variable.SerializeAs {
-				if _, exists := exportedVariableNames[with.Name]; exists {
-					return nil, warnings, fmt.Errorf("hub %s, variable %s: exported variable name %s is duplicated", mdaihub.GetName(), variable.Key, with.Name)
-				}
-				exportedVariableNames[with.Name] = struct{}{}
-
-				transformers := with.Transformers
-				switch variable.DataType {
-				case mdaiv1.VariableDataTypeSet, mdaiv1.MetaVariableDataTypePriorityList:
-					if len(transformers) == 0 {
-						return nil, warnings, fmt.Errorf("hub %s, variable %s: at least one transformer must be provided, such as 'join'", mdaihub.GetName(), variable.Key)
-					}
-				case mdaiv1.VariableDataTypeString, mdaiv1.VariableDataTypeFloat, mdaiv1.VariableDataTypeInt, mdaiv1.VariableDataTypeBoolean, mdaiv1.VariableDataTypeMap, mdaiv1.MetaVariableDataTypeHashSet:
-					if len(transformers) > 0 {
-						return nil, warnings, fmt.Errorf("hub %s, variable %s: transformers are not supported for variable type %s", mdaihub.GetName(), variable.Key, variable.DataType)
-					}
-				default:
-					return nil, warnings, fmt.Errorf("hub %s, variable %s: unsupported variable type", mdaihub.GetName(), variable.Key)
-				}
-			}
-		}
-	}
-	return keys, warnings, nil
 }

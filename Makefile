@@ -293,7 +293,7 @@ local-deploy: manifests install
 	make lint
 	make helm-update
 	make docker-build IMG=mdai-operator:${VERSION}
-	kind load docker-image mdai-operator:${VERSION} --name mdai-operator-test
+	kind load docker-image mdai-operator:${VERSION} --name mdai
 	make deploy IMG=mdai-operator:${VERSION}
 	kubectl rollout restart deployment mdai-operator-controller-manager -n mdai
 

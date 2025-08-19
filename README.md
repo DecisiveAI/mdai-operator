@@ -27,17 +27,6 @@ MDAI k8s operator:
 - Creates immutable meta variables that have references to other variables
 
 ## Getting Started
-### Importing opentelemetry-operator module from private repo
-1. make sure the following env variable is set
-```shell
-export GOPRIVATE=github.com/decisiveai/*
-```
-2. Add the following section to your git client config:
-```shell
-[url "ssh://git@github.com/"]
-	insteadOf = https://github.com/
-```
-
 ### Prerequisites
 - go version v1.22.0+
 - docker version 17.03+.
@@ -51,7 +40,7 @@ export GOPRIVATE=github.com/decisiveai/*
 ### To Deploy on the local cluster
 **Create cluster & Deploy Cert manager**
 ```shell
-kind create cluster -n mdai-operator-test
+kind create cluster -n mdai
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.1/cert-manager.yaml
 kubectl wait --for=condition=available --timeout=600s deployment --all -n cert-manager
 ```
