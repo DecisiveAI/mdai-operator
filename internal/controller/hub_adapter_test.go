@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -809,20 +810,26 @@ func TestEnsureStatusSetToDone(t *testing.T) {
 }
 
 func TestEnsureAutomationsSynchronized(t *testing.T) {
-	// ctx := t.Context()
+	ctx := t.Context()
 
 	mdaiCR := newTestMdaiCR()
-	//mdaiCR.Spec.Automations = []mdaiv1.AutomationRule{
-	//	{ // FIXME
-	//		// EventRef: "my-event",
-	//		// Workflow: []mdaiv1.AutomationStep{
-	//			{
-	//			//	HandlerRef: "",
-	//			//	Arguments:  map[string]string{"key": "value"},
-	//			// },
-	//		// },
-	//	},
-	//}
+	mdaiCR.Spec.Automations = []mdaiv1.AutomationRule{
+		{
+			Name: "automation-1",
+			When: mdaiv1.When{
+				AlertName: ptr.To("my-alert"),
+				Status:    ptr.To("firing"),
+			},
+			Then: []mdaiv1.Action{
+				{
+					AddToSet: &mdaiv1.SetAction{
+						Set:   "my-set",
+						Value: "my-value",
+					},
+				},
+			},
+		},
+	}
 
 	scheme := createTestScheme()
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(mdaiCR).Build()
@@ -833,30 +840,27 @@ func TestEnsureAutomationsSynchronized(t *testing.T) {
 		scheme: scheme,
 	}
 
-	//opResult, err := adapter.ensureAutomationsSynchronized(ctx)
-	//require.NoError(t, err)
-	//assert.Equal(t, ContinueOperationResult(), opResult)
-	//
-	//configMapName := mdaiCR.Name + automationConfigMapNamePostfix
-	//cm := &v1core.ConfigMap{}
-	//err = fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: "default"}, cm)
-	//require.NoError(t, err)
+	opResult, err := adapter.ensureAutomationsSynchronized(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, ContinueOperationResult(), opResult)
 
-	// FIXME
-	// workflowJSON, err := json.Marshal(mdaiCR.Spec.Automations[0].Workflow)
-	//require.NoError(t, err)
-	// expectedData := string(workflowJSON)
-	// actualData, exists := cm.Data["my-event"]
-	// assert.True(t, exists)
-	// assert.JSONEq(t, expectedData, actualData)
+	configMapName := mdaiCR.Name + automationConfigMapNamePostfix
+	cm := &v1core.ConfigMap{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: "default"}, cm)
+	require.NoError(t, err)
+
+	expectedData := string(`{"name":"automation-1","trigger":{"kind":"alert","spec":{"name":"my-alert","status":"firing"}},"commands":[{"type":"variable.set.add","inputs":{"valueFrom":"my-value","variableRef":"my-set"}}]}`)
+	actualData, exists := cm.Data["automation-1"]
+	assert.True(t, exists)
+	assert.JSONEq(t, expectedData, actualData)
 
 	mdaiCR.Spec.Automations = nil
 	adapter.mdaiCR = mdaiCR
 
-	//opResult, err = adapter.ensureAutomationsSynchronized(ctx)
-	//require.NoError(t, err)
-	//assert.Equal(t, ContinueOperationResult(), opResult)
-	//
-	//err = fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: "default"}, cm)
-	//assert.True(t, apierrors.IsNotFound(err))
+	opResult, err = adapter.ensureAutomationsSynchronized(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, ContinueOperationResult(), opResult)
+
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: "default"}, cm)
+	assert.True(t, apierrors.IsNotFound(err))
 }
