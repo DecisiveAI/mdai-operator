@@ -84,6 +84,11 @@ Deploy test OTEL collectors:
 kubectl apply -k test/test-samples/
 ```
 
+### Run E2E test locally
+```sh
+clear ; kind delete cluster ; kind create cluster ; sleep 30 ; IMG=mdai-operator:v0.0.1 make test-e2e
+```
+
 >**NOTE**: Ensure that the samples has default values to test it out.
 
 ### To Uninstall

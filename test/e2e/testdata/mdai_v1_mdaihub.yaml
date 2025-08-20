@@ -107,13 +107,10 @@ spec:
       keep_firing_for: 10m
 
   automations:
-    - eventRef: logBytesOutTooHighBySvc
-      workflow:
-        - handlerRef: setVariable
-          args:
-            key: service_name
-            default: default_service
-        - handlerRef: publishMetrics
-        - handlerRef: notifySlack
-          args:
-            channel: infra-alerts
+    - name: HandleAddNoisyServiceToSet
+      when:
+        alertName: logBytesOutTooHighBySvc
+      then:
+        - addToSet:
+            set: service_list_1
+            value: "{{ service_name }}"
