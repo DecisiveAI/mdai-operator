@@ -160,9 +160,9 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	if err := ctrl.NewControllerManagedBy(mgr).
 		For(&mdaiv1.MdaiHub{}).
-		Owns(&corev1.ConfigMap{}, builder.WithPredicates(mdaiResourcesPredicate(r.Scheme, log))).
-		Owns(&corev1.Service{}, builder.WithPredicates(mdaiResourcesPredicate(r.Scheme, log))).
-		Owns(&appsv1.Deployment{}, builder.WithPredicates(mdaiResourcesPredicate(r.Scheme, log))).
+		Owns(&corev1.ConfigMap{}, builder.WithPredicates(mdaiResourcesPredicate())).
+		Owns(&corev1.Service{}, builder.WithPredicates(mdaiResourcesPredicate())).
+		Owns(&appsv1.Deployment{}, builder.WithPredicates(mdaiResourcesPredicate())).
 		Watches(
 			// we are watching OpenTelemetryCollector resources to detect if new ones have been created
 			// if new ones are created, we have to provide mdai variables for new collectors
@@ -190,38 +190,16 @@ func (r *MdaiHubReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-func mdaiResourcesPredicate(scheme *runtime.Scheme, log logr.Logger) predicate.Predicate {
+func mdaiResourcesPredicate() predicate.Predicate {
+	log := logger.FromContext(context.TODO())
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			log.Info("<CreateFunc> " + e.Object.GetName() + " ignored")
-			return false // only mdai operator creates managed resources
+			return false // assuming only mdai operator creates managed resources
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			shouldReconcile := predicate.GenerationChangedPredicate{}.Update(e)
-
-			kind := ""
-			apiVersion := ""
-
-			if groupVersionKind, err := apiutil.GVKForObject(e.ObjectNew, scheme); err == nil && !groupVersionKind.Empty() {
-				kind = groupVersionKind.Kind
-				apiVersion = groupVersionKind.GroupVersion().String()
-			} else if u, ok := e.ObjectNew.(*unstructured.Unstructured); ok {
-				k := u.GroupVersionKind()
-				kind = k.Kind
-				apiVersion = k.GroupVersion().String()
-			} else {
-				kind = "unknown"
-				apiVersion = "unknown"
-			}
-
-			log.Info("<UpdateFunc> update event",
-				"kind", kind,
-				"apiVersion", apiVersion,
-				"namespace", e.ObjectNew.GetNamespace(),
-				"name", e.ObjectNew.GetName(),
-				"shouldReconcile", shouldReconcile,
-			)
-
+			log.Info("<UpdateFunc> " + e.ObjectNew.GetName() + " shouldReconcile: " + strconv.FormatBool(shouldReconcile))
 			return shouldReconcile
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {

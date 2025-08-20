@@ -100,37 +100,47 @@ func (v *MdaiHubCustomValidator) ValidateUpdate(_ context.Context, oldObj, newOb
 		return nil, fmt.Errorf("expected a MdaiHub object for the oldObj but got %T", oldHub)
 	}
 
-	// validate that meta variables keep the same references. Meta variables are immutable.
-	if len(oldHub.Spec.Variables) > 0 && len(newHub.Spec.Variables) > 0 {
-		oldVariablesMap := make(map[string]mdaiv1.Variable, len(oldHub.Spec.Variables))
-		for _, oldVariables := range oldHub.Spec.Variables {
-			if oldVariables.Type == mdaiv1.VariableTypeMeta {
-				oldVariablesMap[oldVariables.Key] = oldVariables
-			}
-		}
-
-		errorList := field.ErrorList{}
-		for index, newVariable := range newHub.Spec.Variables {
-			if newVariable.Type != mdaiv1.VariableTypeMeta {
-				continue
-			}
-			if oldVariable, found := oldVariablesMap[newVariable.Key]; found {
-				if !reflect.DeepEqual(oldVariable.VariableRefs, newVariable.VariableRefs) {
-					variableRefsPath := field.NewPath("spec", "variables").Index(index).Child("variableRefs")
-					errorList = append(errorList, field.Forbidden(
-						variableRefsPath,
-						"meta variable references are immutable; delete and recreate the variable to change references",
-					))
-				}
-			}
-		}
-		if len(errorList) > 0 {
-			return nil, apierrors.NewInvalid(schema.GroupKind{Group: mdaiv1.GroupVersion.Group, Kind: "MdaiHub"}, newHub.GetName(), errorList)
-		}
+	if errorList := validateMetaVarRefs(oldHub.Spec.Variables, newHub.Spec.Variables); len(errorList) > 0 {
+		return nil, apierrors.NewInvalid(
+			schema.GroupKind{Group: mdaiv1.GroupVersion.Group, Kind: "MdaiHub"},
+			newHub.GetName(),
+			errorList,
+		)
 	}
 
 	mdaihublog.Info("Validation for MdaiHub upon update", "name", newHub.GetName())
 	return v.Validate(newHub)
+}
+
+// validateMetaVarRefs ensures meta variable references are immutable between old and new.
+func validateMetaVarRefs(oldVars, newVars []mdaiv1.Variable) field.ErrorList {
+	if len(oldVars) == 0 || len(newVars) == 0 {
+		return nil
+	}
+
+	oldVariablesMap := make(map[string]mdaiv1.Variable, len(oldVars))
+	for _, oldVariables := range oldVars {
+		if oldVariables.Type == mdaiv1.VariableTypeMeta {
+			oldVariablesMap[oldVariables.Key] = oldVariables
+		}
+	}
+
+	errorList := field.ErrorList{}
+	for index, newVariable := range newVars {
+		if newVariable.Type != mdaiv1.VariableTypeMeta {
+			continue
+		}
+		if oldVariable, found := oldVariablesMap[newVariable.Key]; found {
+			if !reflect.DeepEqual(oldVariable.VariableRefs, newVariable.VariableRefs) {
+				variableRefsPath := field.NewPath("spec", "variables").Index(index).Child("variableRefs")
+				errorList = append(errorList, field.Forbidden(
+					variableRefsPath,
+					"meta variable references are immutable; delete and recreate the variable to change references",
+				))
+			}
+		}
+	}
+	return errorList
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type MdaiHub.
@@ -170,7 +180,7 @@ func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Wa
 	return allWarnings, apierrors.NewInvalid(schema.GroupKind{Group: mdaiv1.GroupVersion.Group, Kind: "MdaiHub"}, mdaihub.GetName(), allErrs)
 }
 
-func (v *MdaiHubCustomValidator) validateAutomations(mdaihub *mdaiv1.MdaiHub) (admission.Warnings, field.ErrorList) {
+func (*MdaiHubCustomValidator) validateAutomations(mdaihub *mdaiv1.MdaiHub) (admission.Warnings, field.ErrorList) {
 	warnings := admission.Warnings{}
 	errs := field.ErrorList{}
 
@@ -316,7 +326,7 @@ func isValidURL(s string) bool {
 	return u.Host != ""
 }
 
-func (v *MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub) (admission.Warnings, field.ErrorList) {
+func (*MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub) (admission.Warnings, field.ErrorList) {
 	warnings := admission.Warnings{}
 	errs := field.ErrorList{}
 	keys := map[string]struct{}{}

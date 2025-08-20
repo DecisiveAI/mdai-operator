@@ -22,7 +22,7 @@ import (
 	"github.com/go-logr/logr"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/valkey-io/valkey-go"
-	"go.uber.org/zap"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -313,7 +313,7 @@ func (c HubAdapter) deletePrometheusRule(ctx context.Context) error {
 	return nil
 }
 
-func (c HubAdapter) handleComputedVariable(ctx context.Context, dataAdapter *datacore.ValkeyAdapter, variable mdaiv1.Variable, envMap map[string]string) error {
+func (c HubAdapter) handleComputedVariable(ctx context.Context, dataAdapter *vars.ValkeyAdapter, variable mdaiv1.Variable, envMap map[string]string) error {
 	//nolint: exhaustive
 	switch variable.DataType {
 	case mdaiv1.VariableDataTypeSet:
@@ -346,7 +346,7 @@ func (c HubAdapter) handleComputedVariable(ctx context.Context, dataAdapter *dat
 	return nil
 }
 
-func (c HubAdapter) handleMetaVariable(ctx context.Context, dataAdapter *datacore.ValkeyAdapter, variable mdaiv1.Variable, envMap map[string]string) error {
+func (c HubAdapter) handleMetaVariable(ctx context.Context, dataAdapter *vars.ValkeyAdapter, variable mdaiv1.Variable, envMap map[string]string) error {
 	//nolint: exhaustive
 	switch variable.DataType {
 	case mdaiv1.MetaVariableDataTypePriorityList:
@@ -374,7 +374,7 @@ func (c HubAdapter) handleMetaVariable(ctx context.Context, dataAdapter *datacor
 }
 
 func (c HubAdapter) syncValkeyVariables(ctx context.Context, envMap, manualEnvMap map[string]string, valkeyKeysToKeep map[string]struct{}) error {
-	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.zapLogger)
+	dataAdapter := vars.NewValkeyAdapter(c.valKeyClient, c.zapLogger)
 
 	for _, variable := range c.mdaiCR.Spec.Variables {
 		c.logger.Info("Processing variable", "key", variable.Key)
@@ -474,7 +474,7 @@ func (c HubAdapter) ensureVariableSynchronized(ctx context.Context) (OperationRe
 
 	envMap := make(map[string]string)
 	manualEnvMap := make(map[string]string)
-	dataAdapter := datacore.NewValkeyAdapter(c.valKeyClient, c.zapLogger)
+	dataAdapter := vars.NewValkeyAdapter(c.valKeyClient, c.zapLogger)
 	valkeyKeysToKeep := map[string]struct{}{}
 
 	if err := c.syncValkeyVariables(ctx, envMap, manualEnvMap, valkeyKeysToKeep); err != nil {
@@ -577,7 +577,7 @@ func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (Operatio
 		automationMap[key] = string(ruleJSON)
 	}
 
-	operationResult,_, err := c.createOrUpdateEnvConfigMap(ctx,
+	operationResult, _, err := c.createOrUpdateEnvConfigMap(ctx,
 		automationMap,
 		automationConfigMapNamePostfix,
 		c.mdaiCR.Namespace,
