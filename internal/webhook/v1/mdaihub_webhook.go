@@ -135,7 +135,7 @@ func validateMetaVarRefs(oldVars, newVars []mdaiv1.Variable) field.ErrorList {
 				variableRefsPath := field.NewPath("spec", "variables").Index(index).Child("variableRefs")
 				errorList = append(errorList, field.Forbidden(
 					variableRefsPath,
-					"meta variable references are immutable; delete and recreate the variable to change references",
+					"meta variable references must not change; delete and recreate the variable to update references",
 				))
 			}
 		}
