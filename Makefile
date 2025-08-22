@@ -288,6 +288,7 @@ endef
 .PHONY: local-deploy
 local-deploy: manifests install
 	go mod vendor
+	make tidy-check
 	make manifests
 	make generate
 	make lint
