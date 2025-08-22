@@ -559,7 +559,7 @@ func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (Operatio
 		key := automationRule.Name
 		trig, err := transformWhenToTrigger(&automationRule.When)
 		if err != nil {
-			return OperationResult{}, fmt.Errorf("failed to transform when to trigger: %w", err)
+			return ContinueWithError(fmt.Errorf("failed to transform when to trigger: %w", err))
 		}
 		cmds, err := transformThenToCommands(automationRule.Then)
 		if err != nil {
