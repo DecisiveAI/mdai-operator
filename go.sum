@@ -53,8 +53,8 @@ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/decisiveai/mdai-data-core v0.1.12-0.20250822005933-4ae52a9b1759 h1:baJ3N7LROt8XqLOSQQg6icKrI/Tf/8RHZ277V9GF87I=
-github.com/decisiveai/mdai-data-core v0.1.12-0.20250822005933-4ae52a9b1759/go.mod h1:lssMBvOBW1/NgHDM/jfJQIrBRBDgUGO0XvptyRgKq58=
+github.com/decisiveai/mdai-data-core v0.2.0 h1:nfG5kTKcEKcEvrafe7G1AZ007ZzfLymVfPMXtUZChGM=
+github.com/decisiveai/mdai-data-core v0.2.0/go.mod h1:lssMBvOBW1/NgHDM/jfJQIrBRBDgUGO0XvptyRgKq58=
 github.com/decisiveai/opentelemetry-operator v0.113.0 h1:IWW4WmXR1QR2FAs2GIz8h3WPzh2hqoVQqsbKsVz/1nc=
 github.com/decisiveai/opentelemetry-operator v0.113.0/go.mod h1:fzTghQy29Mahmh/nqD2ORMHfJ57nqsvuxmxpdDfkQ90=
 github.com/dennwc/varint v1.0.0 h1:kGNFFSSw8ToIy3obO/kKr8U9GZYUAxQEVuix4zfDWzE=

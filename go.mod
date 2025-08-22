@@ -6,7 +6,7 @@ godebug default=go1.24
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.2
-	github.com/decisiveai/mdai-data-core v0.1.12-0.20250822005933-4ae52a9b1759
+	github.com/decisiveai/mdai-data-core v0.2.0
 	github.com/decisiveai/opentelemetry-operator v0.113.0
 	github.com/go-logr/logr v1.4.2
 	github.com/go-logr/zapr v1.3.0
@@ -35,8 +35,6 @@ require (
 	sigs.k8s.io/controller-runtime v0.20.2
 	sigs.k8s.io/yaml v1.4.0
 )
-
-//replace github.com/decisiveai/mdai-data-core => ../mdai-data-core
 
 require (
 	cel.dev/expr v0.19.1 // indirect
