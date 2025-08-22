@@ -149,10 +149,10 @@ type CallWebhookAction struct {
 // When represents one of two trigger variants:
 //
 //  1. alertName + status
-//  2. variableUpdated + condition
+//  2. variableUpdated + UpdateType
 //
 // Exactly one variant must be set. TODO check the validation logic for this.
-// +kubebuilder:validation:XValidation:rule="(has(self.alertName)) != (has(self.variableUpdated) && has(self.condition))",message="exactly one variant must be set"
+// +kubebuilder:validation:XValidation:rule="(has(self.alertName)) != (has(self.variableUpdated))",message="exactly one variant must be set"
 type When struct {
 	// Variant 1: alert
 	// +optional
@@ -166,9 +166,6 @@ type When struct {
 	// +optional
 	// +kubebuilder:validation:Enum=added;removed;set
 	UpdateType *string `json:"updateType,omitempty"`
-	// Condition a template for conditions on variable changes
-	// +optional
-	Condition *string `json:"condition,omitempty"`
 }
 
 // MdaiHubSpec defines the desired state of MdaiHub.

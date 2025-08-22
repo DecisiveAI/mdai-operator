@@ -234,14 +234,10 @@ func validateWhen(path *field.Path, when mdaiv1.When, knownVarKeys map[string]st
 	hasAlertName := strings.TrimSpace(ptr.Deref(when.AlertName, "")) != ""
 	hasStatus := strings.TrimSpace(ptr.Deref(when.Status, "")) != ""
 	hasVariableUpdated := strings.TrimSpace(ptr.Deref(when.VariableUpdated, "")) != ""
-	hasCondition := strings.TrimSpace(ptr.Deref(when.Condition, "")) != ""
 	hasUpdateType := strings.TrimSpace(ptr.Deref(when.UpdateType, "")) != ""
 
 	if hasStatus && !hasAlertName {
 		errs = append(errs, field.Invalid(path, "<alert>", "alertName and status must be set together"))
-	}
-	if hasVariableUpdated != hasCondition {
-		errs = append(errs, field.Invalid(path, "<variable>", "variableUpdated and condition must be set together"))
 	}
 
 	if hasUpdateType && !hasVariableUpdated {

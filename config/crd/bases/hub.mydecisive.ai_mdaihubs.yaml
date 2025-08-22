@@ -131,10 +131,6 @@ spec:
                         alertName:
                           description: 'Variant 1: alert'
                           type: string
-                        condition:
-                          description: Condition a template for conditions on variable
-                            changes
-                          type: string
                         status:
                           type: string
                         updateType:
@@ -149,8 +145,7 @@ spec:
                       type: object
                       x-kubernetes-validations:
                       - message: exactly one variant must be set
-                        rule: (has(self.alertName)) != (has(self.variableUpdated)
-                          && has(self.condition))
+                        rule: (has(self.alertName)) != (has(self.variableUpdated))
                   required:
                   - name
                   - then

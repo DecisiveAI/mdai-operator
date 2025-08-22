@@ -103,7 +103,6 @@ spec:
       when:
         variableUpdated: riskLevel
         updateType: set
-        condition: "variable_value == 'critical'"
       then:
         - addToSet:
             set: highRiskStates
