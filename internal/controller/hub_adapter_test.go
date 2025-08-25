@@ -636,7 +636,7 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: mdaiv1.MdaiHubSpec{
-			PrometheusAlert: evals,
+			PrometheusAlerts: evals,
 			Config: &mdaiv1.Config{
 				EvaluationInterval: &interval,
 			},
@@ -813,7 +813,7 @@ func TestEnsureAutomationsSynchronized(t *testing.T) {
 	ctx := t.Context()
 
 	mdaiCR := newTestMdaiCR()
-	mdaiCR.Spec.Automations = []mdaiv1.AutomationRule{
+	mdaiCR.Spec.Rules = []mdaiv1.AutomationRule{
 		{
 			Name: "automation-1",
 			When: mdaiv1.When{
@@ -854,7 +854,7 @@ func TestEnsureAutomationsSynchronized(t *testing.T) {
 	assert.True(t, exists)
 	assert.JSONEq(t, expectedData, actualData)
 
-	mdaiCR.Spec.Automations = nil
+	mdaiCR.Spec.Rules = nil
 	adapter.mdaiCR = mdaiCR
 
 	opResult, err = adapter.ensureAutomationsSynchronized(ctx)

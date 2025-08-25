@@ -396,15 +396,15 @@ func (in *MdaiHubSpec) DeepCopyInto(out *MdaiHubSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	if in.PrometheusAlert != nil {
-		in, out := &in.PrometheusAlert, &out.PrometheusAlert
+	if in.PrometheusAlerts != nil {
+		in, out := &in.PrometheusAlerts, &out.PrometheusAlerts
 		*out = make([]PrometheusAlert, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	if in.Automations != nil {
-		in, out := &in.Automations, &out.Automations
+	if in.Rules != nil {
+		in, out := &in.Rules, &out.Rules
 		*out = make([]AutomationRule, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])

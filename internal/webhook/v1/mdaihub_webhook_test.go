@@ -141,7 +141,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					},
 				},
 			},
-			PrometheusAlert: []mdaiv1.PrometheusAlert{
+			PrometheusAlerts: []mdaiv1.PrometheusAlert{
 				{
 					Name:     "logBytesOutTooHighBySvc",
 					Expr:     intstr.FromString("increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024"),
@@ -149,7 +149,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					For:      &duration1,
 				},
 			},
-			Automations: []mdaiv1.AutomationRule{
+			Rules: []mdaiv1.AutomationRule{
 				{
 					Name: "automation-1",
 					When: mdaiv1.When{
@@ -227,7 +227,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 		It("Should fail creation if expr does not validate", func() {
 			By("simulating an invalid creation scenario")
 			obj := createSampleMdaiHub()
-			(obj.Spec.PrometheusAlert)[0].Expr = intstr.FromString("increaser(mdai_log_bytes_sent_total[1h]) > 100*1024*1024")
+			(obj.Spec.PrometheusAlerts)[0].Expr = intstr.FromString("increaser(mdai_log_bytes_sent_total[1h]) > 100*1024*1024")
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(MatchError(ContainSubstring(`parse error: unknown function with name "increaser"`)))

@@ -202,7 +202,7 @@ func (c HubAdapter) ensurePrometheusAlertsSynchronized(ctx context.Context) (Ope
 	defaultPrometheusRuleName := "mdai-" + c.mdaiCR.Name + "-alert-rules"
 	c.logger.Info("EnsurePrometheusRuleSynchronized")
 
-	evals := c.mdaiCR.Spec.PrometheusAlert
+	evals := c.mdaiCR.Spec.PrometheusAlerts
 
 	prometheusRule := &prometheusv1.PrometheusRule{}
 	err := c.client.Get(
@@ -544,7 +544,7 @@ func (c HubAdapter) applySetTransformation(variable mdaiv1.Variable, envMap map[
 }
 
 func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (OperationResult, error) {
-	if c.mdaiCR.Spec.Automations == nil {
+	if c.mdaiCR.Spec.Rules == nil {
 		c.logger.Info("No automations defined in the MDAI CR", "name", c.mdaiCR.Name)
 		if err := c.deleteEnvConfigMap(ctx, automationConfigMapNamePostfix, c.mdaiCR.Namespace); err != nil {
 			c.logger.Error(err, "Failed to delete automations ConfigMap", "name", c.mdaiCR.Name)
@@ -554,8 +554,8 @@ func (c HubAdapter) ensureAutomationsSynchronized(ctx context.Context) (Operatio
 	}
 
 	c.logger.Info("Creating or updating ConfigMap for automations", "name", c.mdaiCR.Name)
-	automationMap := make(map[string]string, len(c.mdaiCR.Spec.Automations))
-	for _, automationRule := range c.mdaiCR.Spec.Automations {
+	automationMap := make(map[string]string, len(c.mdaiCR.Spec.Rules))
+	for _, automationRule := range c.mdaiCR.Spec.Rules {
 		key := automationRule.Name
 		trig, err := transformWhenToTrigger(&automationRule.When)
 		if err != nil {

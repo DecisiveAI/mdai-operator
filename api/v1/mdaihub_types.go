@@ -175,9 +175,9 @@ type MdaiHubSpec struct {
 	// +optional
 	Variables []Variable `json:"variables,omitempty"`
 	// +optional
-	PrometheusAlert []PrometheusAlert `json:"prometheusAlert,omitempty"` // evaluation configuration (alerting rules)
+	PrometheusAlerts []PrometheusAlert `json:"prometheusAlerts,omitempty"` // evaluation configuration (alerting rules)
 	// +optional
-	Automations []AutomationRule `json:"automations,omitempty"`
+	Rules []AutomationRule `json:"rules,omitempty"`
 }
 
 // MdaiHubStatus defines the observed state of MdaiHub.

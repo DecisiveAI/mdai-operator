@@ -158,9 +158,9 @@ func (*MdaiHubCustomValidator) ValidateDelete(_ context.Context, obj runtime.Obj
 func (v *MdaiHubCustomValidator) Validate(mdaihub *mdaiv1.MdaiHub) (admission.Warnings, error) {
 	allWarnings, allErrs := v.validateVariables(mdaihub)
 
-	evaluations := mdaihub.Spec.PrometheusAlert
+	evaluations := mdaihub.Spec.PrometheusAlerts
 	if len(evaluations) == 0 {
-		allWarnings = append(allWarnings, "no `PrometheusAlert` provided; MdaiHub will not setup alerts")
+		allWarnings = append(allWarnings, "no `PrometheusAlerts` provided; MdaiHub will not setup alerts")
 	} else {
 		for _, evaluation := range evaluations {
 			if _, err := parser.ParseExpr(evaluation.Expr.StrVal); err != nil {
@@ -184,9 +184,9 @@ func (*MdaiHubCustomValidator) validateAutomations(mdaihub *mdaiv1.MdaiHub) (adm
 	warnings := admission.Warnings{}
 	errs := field.ErrorList{}
 
-	automations := mdaihub.Spec.Automations
-	if len(automations) == 0 {
-		warnings = append(warnings, "no `Automations` provided; MdaiHub will perform no actions")
+	rules := mdaihub.Spec.Rules
+	if len(rules) == 0 {
+		warnings = append(warnings, "no `Rules` provided; MdaiHub will perform no actions")
 		return warnings, nil
 	}
 
@@ -201,7 +201,7 @@ func (*MdaiHubCustomValidator) validateAutomations(mdaihub *mdaiv1.MdaiHub) (adm
 		varKeys[strings.ToLower(key)] = struct{}{}
 	}
 
-	alerts := mdaihub.Spec.PrometheusAlert
+	alerts := mdaihub.Spec.PrometheusAlerts
 	alertNames := make(map[string]struct{}, len(alerts))
 	for i := range alerts {
 		key := strings.TrimSpace(alerts[i].Name)
@@ -212,8 +212,8 @@ func (*MdaiHubCustomValidator) validateAutomations(mdaihub *mdaiv1.MdaiHub) (adm
 	}
 
 	specPath := field.NewPath("spec")
-	for i, rule := range mdaihub.Spec.Automations {
-		rulePath := specPath.Child("automations").Index(i)
+	for i, rule := range mdaihub.Spec.Rules {
+		rulePath := specPath.Child("rules").Index(i)
 		errs = append(errs, validateWhen(rulePath.Child("when"), rule.When, varKeys, alertNames)...)
 
 		if len(rule.Then) == 0 {
