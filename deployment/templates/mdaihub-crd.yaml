@@ -40,29 +40,6 @@ spec:
           spec:
             description: MdaiHubSpec defines the desired state of MdaiHub.
             properties:
-              automations:
-                items:
-                  properties:
-                    eventRef:
-                      type: string
-                    workflow:
-                      items:
-                        properties:
-                          args:
-                            additionalProperties:
-                              type: string
-                            type: object
-                          handlerRef:
-                            type: string
-                        required:
-                        - handlerRef
-                        type: object
-                      type: array
-                  required:
-                  - eventRef
-                  - workflow
-                  type: object
-                type: array
               config:
                 properties:
                   evaluation_interval:
@@ -71,7 +48,7 @@ spec:
                     pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
                     type: string
                 type: object
-              prometheusAlert:
+              prometheusAlerts:
                 items:
                   properties:
                     expr:
@@ -103,6 +80,119 @@ spec:
                   - expr
                   - name
                   - severity
+                  type: object
+                type: array
+              rules:
+                items:
+                  properties:
+                    name:
+                      description: Name How this rule will be referred to elsewhere
+                        in the config and audit.
+                      minLength: 1
+                      type: string
+                    then:
+                      description: Then specifies the actions to be taken when the rule
+                        is triggered.
+                      items:
+                        properties:
+                          addToSet:
+                            description: Payloads (one required depending on Type)
+                            properties:
+                              set:
+                                description: Target set name
+                                minLength: 1
+                                type: string
+                              value:
+                                description: Value to add (templated string allowed)
+                                minLength: 1
+                                type: string
+                            required:
+                            - set
+                            - value
+                            type: object
+                          callWebhook:
+                            properties:
+                              body:
+                                description: Arbitrary JSON body (map/array/string/number),
+                                  templates allowed in strings.
+                                x-kubernetes-preserve-unknown-fields: true
+                              headers:
+                                additionalProperties:
+                                  type: string
+                                description: Optional headers
+                                type: object
+                              method:
+                                default: POST
+                                enum:
+                                - GET
+                                - POST
+                                - PUT
+                                - PATCH
+                                - DELETE
+                                type: string
+                              url:
+                                description: URL may be a template
+                                minLength: 1
+                                type: string
+                            required:
+                            - url
+                            type: object
+                          removeFromSet:
+                            properties:
+                              set:
+                                description: Target set name
+                                minLength: 1
+                                type: string
+                              value:
+                                description: Value to add (templated string allowed)
+                                minLength: 1
+                                type: string
+                            required:
+                            - set
+                            - value
+                            type: object
+                          setVariable:
+                            properties:
+                              scalar:
+                                description: Target set name
+                                minLength: 1
+                                type: string
+                              value:
+                                description: Value to add (templated string allowed)
+                                minLength: 1
+                                type: string
+                            required:
+                            - scalar
+                            - value
+                            type: object
+                        type: object
+                      type: array
+                    when:
+                      description: When specifies the conditions under which the rule
+                        is triggered.
+                      properties:
+                        alertName:
+                          description: 'Variant 1: alert'
+                          type: string
+                        status:
+                          type: string
+                        updateType:
+                          enum:
+                          - added
+                          - removed
+                          - set
+                          type: string
+                        variableUpdated:
+                          description: 'Variant 2: variable-driven'
+                          type: string
+                      type: object
+                      x-kubernetes-validations:
+                      - message: exactly one variant must be set
+                        rule: (has(self.alertName)) != (has(self.variableUpdated))
+                  required:
+                  - name
+                  - then
+                  - when
                   type: object
                 type: array
               variables:

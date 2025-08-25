@@ -7,6 +7,7 @@ import (
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -140,12 +141,29 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					},
 				},
 			},
-			PrometheusAlert: []mdaiv1.PrometheusAlert{
+			PrometheusAlerts: []mdaiv1.PrometheusAlert{
 				{
 					Name:     "logBytesOutTooHighBySvc",
 					Expr:     intstr.FromString("increase(mdai_log_bytes_sent_total[1h]) > 100*1024*1024"),
 					Severity: "warning",
 					For:      &duration1,
+				},
+			},
+			Rules: []mdaiv1.AutomationRule{
+				{
+					Name: "automation-1",
+					When: mdaiv1.When{
+						AlertName: ptr.To("logBytesOutTooHighBySvc"),
+						Status:    ptr.To("firing"),
+					},
+					Then: []mdaiv1.Action{
+						{
+							AddToSet: &mdaiv1.SetAction{
+								Set:   "service_list_1",
+								Value: "service_name",
+							},
+						},
+					},
 				},
 			},
 		},
@@ -209,7 +227,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 		It("Should fail creation if expr does not validate", func() {
 			By("simulating an invalid creation scenario")
 			obj := createSampleMdaiHub()
-			(obj.Spec.PrometheusAlert)[0].Expr = intstr.FromString("increaser(mdai_log_bytes_sent_total[1h]) > 100*1024*1024")
+			(obj.Spec.PrometheusAlerts)[0].Expr = intstr.FromString("increaser(mdai_log_bytes_sent_total[1h]) > 100*1024*1024")
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(MatchError(ContainSubstring(`parse error: unknown function with name "increaser"`)))
@@ -239,7 +257,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			obj := createSampleMdaiHub()
 			(obj.Spec.Variables)[6].VariableRefs = nil
 			warnings, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).To(MatchError(ContainSubstring(`hub mdaihub-sample, variable priority_list: no variable references provided for meta variable`)))
+			Expect(err).To(MatchError(ContainSubstring(`spec.variables[6].variableRefs: Required value: required for meta variable`)))
 			Expect(warnings).To(BeEmpty())
 		})
 
@@ -247,7 +265,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			obj := createSampleMdaiHub()
 			(obj.Spec.Variables)[1].VariableRefs = []string{"ref1"}
 			warnings, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).To(MatchError(ContainSubstring(`hub mdaihub-sample, variable service_list_2: variable references are not supported for non-meta variables`)))
+			Expect(err).To(MatchError(ContainSubstring(`MdaiHub.hub.mydecisive.ai "mdaihub-sample" is invalid: spec.variables[1].variableRefs: Forbidden: not supported for non-meta variables`)))
 			Expect(warnings).To(BeEmpty())
 		})
 
@@ -255,7 +273,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			obj := createSampleMdaiHub()
 			(obj.Spec.Variables)[7].VariableRefs = []string{"ref1", "ref2", "ref3"}
 			warnings, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).To(MatchError(ContainSubstring(`hub mdaihub-sample, variable hashset: variable references for Meta HashSet must have exactly 2 elements`)))
+			Expect(err).To(MatchError(ContainSubstring(`MdaiHub.hub.mydecisive.ai "mdaihub-sample" is invalid: spec.variables[7].variableRefs: Invalid value: []string{"ref1", "ref2", "ref3"}: Meta HashSet must have exactly 2 elements`)))
 			Expect(warnings).To(BeEmpty())
 		})
 
@@ -263,7 +281,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			obj := createSampleMdaiHub()
 			(obj.Spec.Variables)[7].SerializeAs[0].Name = "SERVICE_LIST_CSV"
 			warnings, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).To(MatchError(ContainSubstring(`hub mdaihub-sample, variable hashset: exported variable name SERVICE_LIST_CSV is duplicated`)))
+			Expect(err).To(MatchError(ContainSubstring(`MdaiHub.hub.mydecisive.ai "mdaihub-sample" is invalid: spec.variables[7].serializeAs[0].name: Duplicate value: "SERVICE_LIST_CSV"`)))
 			Expect(warnings).To(BeEmpty())
 		})
 
@@ -271,7 +289,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			obj := createSampleMdaiHub()
 			(obj.Spec.Variables)[6].SerializeAs[0].Transformers = nil
 			warnings, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).To(MatchError(ContainSubstring("hub mdaihub-sample, variable priority_list: at least one transformer must be provided, such as 'join'")))
+			Expect(err).To(MatchError(ContainSubstring("MdaiHub.hub.mydecisive.ai \"mdaihub-sample\" is invalid: spec.variables[6].serializeAs[0].transformers: Required value: at least one transformer (e.g., 'join')")))
 			Expect(warnings).To(BeEmpty())
 		})
 
@@ -286,7 +304,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 				},
 			}
 			warnings, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).To(MatchError(ContainSubstring("hub mdaihub-sample, variable bool: transformers are not supported for variable type boolean")))
+			Expect(err).To(MatchError(ContainSubstring(`MdaiHub.hub.mydecisive.ai "mdaihub-sample" is invalid: spec.variables[3].serializeAs[0].transformers: Forbidden: transformers are not supported for variable type boolean`)))
 			Expect(warnings).To(BeEmpty())
 		})
 	})

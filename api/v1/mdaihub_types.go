@@ -4,6 +4,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -87,18 +88,84 @@ type Config struct {
 	EvaluationInterval *prometheusv1.Duration `json:"evaluation_interval,omitempty" yaml:"evaluation_interval,omitempty"` //nolint:tagliatelle
 }
 
-type Automation struct {
-	// + required
-	EventRef string `json:"eventRef"`
-	// + required
-	Workflow []AutomationStep `json:"workflow"` // we are using a slice here to keep the order
+type AutomationRule struct {
+	// Name How this rule will be referred to elsewhere in the config and audit.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// When specifies the conditions under which the rule is triggered.
+	// +kubebuilder:validation:Required
+	When When `json:"when"`
+	// Then specifies the actions to be taken when the rule is triggered.
+	// +kubebuilder:validation:Required
+	Then []Action `json:"then"`
 }
 
-type AutomationStep struct {
-	// +required
-	HandlerRef string `json:"handlerRef"`
+type Action struct {
+	// Payloads (one required depending on Type)
+	AddToSet      *SetAction `json:"addToSet,omitempty"`
+	RemoveFromSet *SetAction `json:"removeFromSet,omitempty"`
+
+	SetVariable *ScalarAction `json:"setVariable,omitempty"`
+
+	// TODO add more actions to update variables here
+
+	CallWebhook *CallWebhookAction `json:"callWebhook,omitempty"`
+}
+
+type SetAction struct {
+	// Target set name
+	// +kubebuilder:validation:MinLength=1
+	Set string `json:"set"`
+	// Value to add (templated string allowed)
+	// +kubebuilder:validation:MinLength=1
+	Value string `json:"value"`
+}
+
+type ScalarAction struct {
+	// Target set name
+	// +kubebuilder:validation:MinLength=1
+	Scalar string `json:"scalar"`
+	// Value to add (templated string allowed)
+	// +kubebuilder:validation:MinLength=1
+	Value string `json:"value"`
+}
+type CallWebhookAction struct {
+	// URL may be a template
+	// +kubebuilder:validation:MinLength=1
+	URL string `json:"url"`
+
+	// +kubebuilder:default=POST
+	// +kubebuilder:validation:Enum=GET;POST;PUT;PATCH;DELETE
+	Method string `json:"method,omitempty"`
+
+	// Arbitrary JSON body (map/array/string/number), templates allowed in strings.
+	Body *apiextensionsv1.JSON `json:"body,omitempty"`
+
+	// Optional headers
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// When represents one of two trigger variants:
+//
+//  1. alertName + status
+//  2. variableUpdated + UpdateType
+//
+// Exactly one variant must be set. TODO check the validation logic for this.
+// +kubebuilder:validation:XValidation:rule="(has(self.alertName)) != (has(self.variableUpdated))",message="exactly one variant must be set"
+type When struct {
+	// Variant 1: alert
 	// +optional
-	Arguments map[string]string `json:"args,omitempty"`
+	AlertName *string `json:"alertName,omitempty"`
+	// +optional
+	Status *string `json:"status,omitempty"`
+
+	// Variant 2: variable-driven
+	// +optional
+	VariableUpdated *string `json:"variableUpdated,omitempty"`
+	// +optional
+	// +kubebuilder:validation:Enum=added;removed;set
+	UpdateType *string `json:"updateType,omitempty"`
 }
 
 // MdaiHubSpec defines the desired state of MdaiHub.
@@ -108,9 +175,9 @@ type MdaiHubSpec struct {
 	// +optional
 	Variables []Variable `json:"variables,omitempty"`
 	// +optional
-	PrometheusAlert []PrometheusAlert `json:"prometheusAlert,omitempty"` // evaluation configuration (alerting rules)
+	PrometheusAlerts []PrometheusAlert `json:"prometheusAlerts,omitempty"` // evaluation configuration (alerting rules)
 	// +optional
-	Automations []Automation `json:"automations,omitempty"`
+	Rules []AutomationRule `json:"rules,omitempty"`
 }
 
 // MdaiHubStatus defines the observed state of MdaiHub.

@@ -450,8 +450,8 @@ var _ = Describe("Manager", Ordered, func() {
 			verifyConfigMapManual := func(g Gomega) {
 				data := getDataFromMap(g, "mdaihub-sample-automation", "mdai")
 				g.Expect(data).To(HaveLen(1))
-				g.Expect(data["logBytesOutTooHighBySvc"]).
-					To(Equal(`[{"handlerRef":"setVariable","args":{"default":"default_service","key":"service_name"}},{"handlerRef":"publishMetrics"},{"handlerRef":"notifySlack","args":{"channel":"infra-alerts"}}]`))
+				g.Expect(data["HandleAddNoisyServiceToSet"]).
+					To(Equal(`{"name":"HandleAddNoisyServiceToSet","trigger":{"kind":"alert","spec":{"name":"logBytesOutTooHighBySvc"}},"commands":[{"type":"variable.set.add","inputs":{"valueFrom":"{{ service_name }}","variableRef":"service_list_1"}}]}`))
 			}
 			Eventually(verifyConfigMapManual).Should(Succeed())
 		})
