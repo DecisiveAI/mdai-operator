@@ -1,5 +1,8 @@
 #!/bin/bash
 
+HELM_CHART_ROOT='deployment'
+FILES_DIR="${HELM_CHART_ROOT}/files"
+TEMPLATES_DIR="${HELM_CHART_ROOT}/templates"
 
 WEBHOOK_TEMPLATE_NAME="^.*-webhook-configuration\.yaml$"
 ISSUER_TEMPLATE_NAME="^.*-issuer\.yaml$"
@@ -20,17 +23,17 @@ CRT_MGR_OFF_HEADER=$(cat <<'EOF'
 EOF
 )
 
-#  copies secrets template to templates
-#cp files/cert_secret.yaml templates/
+#  copy secrets template to templates
+cp ${FILES_DIR}/cert_secret.yaml ${TEMPLATES_DIR}/cert-secret.yaml
 
-#  adds _helpers.tpl addition
-#cat files/no_cm_helpers.tpl >> templates/_helpers.tpl
+#  add _helpers.tpl addition
+cat ${FILES_DIR}/no_cm_helpers.tpl >> ${TEMPLATES_DIR}/_helpers.tpl
 
-#  adds volumes.yaml addition
-#cat files/no_cm_values.yaml >> templates/values.yaml
+#  add volumes.yaml addition
+cat ${FILES_DIR}/no_cm_values.yaml >> ${HELM_CHART_ROOT}/values.yaml
 
 # - creates copies for webhook templates with no-cert-manager conditional
-for file in templates/*; do
+for file in ${TEMPLATES_DIR}/*; do
   base=$(basename "$file")
   name="${base%.*}"
   if [[ "$base" =~ $WEBHOOK_TEMPLATE_NAME ]]; then
@@ -38,7 +41,7 @@ for file in templates/*; do
       printf "%s\n" "$CRT_MGR_OFF_HEADER"
       cat "$file"
       printf "\n%s" "$CRT_MGR_FOOTER"
-    } > templates/tmp_file
+    } > ${TEMPLATES_DIR}/.tmp_file
 
     awk -v key="$CERT_MGR_ANNOTATION" '
     # Skip lines matching the annotation
@@ -55,19 +58,19 @@ for file in templates/*; do
 
     # Default case: print the line
     { print }
-    ' templates/tmp_file > "templates/${name}-no-cm.yaml"
+    ' ${TEMPLATES_DIR}/.tmp_file > "${TEMPLATES_DIR}/${name}-no-cm.yaml"
   fi
 done
 
 # - add cert-manager conditional header/footer to webhook, issuer, certs templates
-for file in templates/*; do
+for file in ${TEMPLATES_DIR}/*; do
   base=$(basename "$file")
   if [[ "$base" =~ $WEBHOOK_TEMPLATE_NAME || "$base" =~ $ISSUER_TEMPLATE_NAME || "$base" =~ $CERT_TEMPLATE_NAME ]]; then
     {
       printf "%s\n" "$CRT_MGR_ON_HEADER"
       cat "$file"
       printf "\n%s" "$CRT_MGR_FOOTER"
-    } > templates/tmp_file
-    mv templates/tmp_file "$file"
+    } > ${TEMPLATES_DIR}/.tmp_file
+    mv ${TEMPLATES_DIR}/.tmp_file "$file"
   fi
 done
