@@ -26,11 +26,22 @@ EOF
 #  copy secrets template to templates
 cp ${FILES_DIR}/cert_secret.yaml ${TEMPLATES_DIR}/cert-secret.yaml
 
-#  add _helpers.tpl addition
-cat ${FILES_DIR}/no_cm_helpers.tpl >> ${TEMPLATES_DIR}/_helpers.tpl
-
 #  add volumes.yaml addition
 cat ${FILES_DIR}/no_cm_values.yaml >> ${HELM_CHART_ROOT}/values.yaml
+
+# delete previously added block
+awk '
+/{{\/\* __addon_cut_line__ \*\/}}/ {
+    if (!skip) { skip = 1; next }
+    else { skip = 0; next }
+}
+!skip
+' ${TEMPLATES_DIR}/_helpers.tpl > ${TEMPLATES_DIR}/.tmp_file
+mv ${TEMPLATES_DIR}/.tmp_file ${TEMPLATES_DIR}/_helpers.tpl
+
+#  add _helpers.tpl block
+cat ${FILES_DIR}/no_cm_helpers.tpl >> ${TEMPLATES_DIR}/_helpers.tpl
+
 
 # - creates copies for webhook templates with no-cert-manager conditional
 for file in ${TEMPLATES_DIR}/*; do
