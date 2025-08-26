@@ -28,4 +28,4 @@ webhooks:
     resources:
     - mdaihubs
   sideEffects: None
-{{- and }}
+{{- end }}

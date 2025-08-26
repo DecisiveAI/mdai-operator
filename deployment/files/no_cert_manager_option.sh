@@ -9,7 +9,7 @@ ISSUER_TEMPLATE_NAME="^.*-issuer\.yaml$"
 CERT_TEMPLATE_NAME="^.*-certs?\.yaml$"
 
 CRT_MGR_ON_HEADER="{{- if and (.Values.admissionWebhooks.create) (.Values.admissionWebhooks.certManager.enabled) }}"
-CRT_MGR_FOOTER="{{- and }}"
+CRT_MGR_FOOTER="{{- end }}"
 
 CA_BUNDLE="caBundle: {{ $caCertEnc }}"
 CERT_MGR_ANNOTATION="cert-manager.io/inject-ca-from"

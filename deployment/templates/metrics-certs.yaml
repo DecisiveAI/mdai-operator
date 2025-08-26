@@ -15,4 +15,4 @@ spec:
     kind: Issuer
     name: '{{ include "deployment.fullname" . }}-selfsigned-issuer'
   secretName: metrics-server-cert
-{{- and }}
+{{- end }}
