@@ -111,29 +111,105 @@ spec:
                             - value
                             type: object
                           callWebhook:
+                            description: CallWebhookAction is used to call a webhook
+                              with the provided template.
                             properties:
-                              body:
-                                description: Arbitrary JSON body (map/array/string/number),
-                                  templates allowed in strings.
-                                x-kubernetes-preserve-unknown-fields: true
                               headers:
                                 additionalProperties:
                                   type: string
-                                description: Optional headers
                                 type: object
                               method:
                                 default: POST
+                                description: Method defaults to POST if not provided.
+                                  If template is used, POST method has to be used.
                                 enum:
-                                - GET
                                 - POST
                                 - PUT
                                 - PATCH
-                                - DELETE
+                                type: string
+                              templateRef:
+                                description: TemplateRef uses built-in templates.
+                                  Custom templates will be supported in the future.
+                                enum:
+                                - slackAlertTemplate
+                                type: string
+                              templateValues:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                              timeout:
+                                description: |-
+                                  Timeout specifies the maximum time to wait for the response from the webhook before retry.
+                                  Default is 0s, means no timeout should be applied.
                                 type: string
                               url:
-                                description: URL may be a template
-                                minLength: 1
-                                type: string
+                                description: URL provided as string or read from secret
+                                  or configmap
+                                properties:
+                                  value:
+                                    type: string
+                                  valueFrom:
+                                    description: ValueFromSource refers to a key in
+                                      a Secret or ConfigMap.
+                                    properties:
+                                      configMapKeyRef:
+                                        description: Selects a key from a ConfigMap.
+                                        properties:
+                                          key:
+                                            description: The key to select.
+                                            type: string
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                          optional:
+                                            description: Specify whether the ConfigMap
+                                              or its key must be defined
+                                            type: boolean
+                                        required:
+                                        - key
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                      secretKeyRef:
+                                        description: SecretKeySelector selects a key
+                                          of a Secret.
+                                        properties:
+                                          key:
+                                            description: The key of the secret to
+                                              select from.  Must be a valid secret
+                                              key.
+                                            type: string
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                          optional:
+                                            description: Specify whether the Secret
+                                              or its key must be defined
+                                            type: boolean
+                                        required:
+                                        - key
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                    type: object
+                                    x-kubernetes-validations:
+                                    - message: set exactly one of secretKeyRef or
+                                        configMapKeyRef
+                                      rule: (has(self.secretKeyRef)?1:0)+(has(self.configMapKeyRef)?1:0)==1
+                                type: object
+                                x-kubernetes-validations:
+                                - message: set exactly one of value or valueFrom
+                                  rule: (has(self.value)?1:0)+(has(self.valueFrom)?1:0)==1
                             required:
                             - url
                             type: object

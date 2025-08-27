@@ -1,10 +1,10 @@
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -130,20 +130,49 @@ type ScalarAction struct {
 	// +kubebuilder:validation:MinLength=1
 	Value string `json:"value"`
 }
-type CallWebhookAction struct {
-	// URL may be a template
-	// +kubebuilder:validation:MinLength=1
-	URL string `json:"url"`
 
+// CallWebhookAction is used to call a webhook with the provided template.
+type CallWebhookAction struct {
+	// URL provided as string or read from secret or configmap within hub namespace.
+	// +kubebuilder: required
+	URL StringOrFrom `json:"url"`
+
+	// Method defaults to POST if not provided. If template is used, POST method has to be used.
 	// +kubebuilder:default=POST
-	// +kubebuilder:validation:Enum=GET;POST;PUT;PATCH;DELETE
+	// +kubebuilder:validation:Enum=POST;PUT;PATCH
 	Method string `json:"method,omitempty"`
 
-	// Arbitrary JSON body (map/array/string/number), templates allowed in strings.
-	Body *apiextensionsv1.JSON `json:"body,omitempty"`
+	// +kubebuilder:validation:Enum=slackAlertTemplate
+	// TemplateRef uses built-in templates. Custom templates will be supported in the future.
+	TemplateRef string `json:"templateRef,omitempty"`
 
-	// Optional headers
+	TemplateValues map[string]string `json:"templateValues,omitempty"`
+
+	// +optional
 	Headers map[string]string `json:"headers,omitempty"`
+
+	// Timeout specifies the maximum time to wait for the response from the webhook before retry.
+	// Default is 0s, means no timeout should be applied.
+	// +kubebuilder: default= 0s
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+}
+
+// StringOrFrom represents a string value or a reference to a value in a Secret or ConfigMap.
+// +kubebuilder:validation:XValidation:rule="(has(self.value)?1:0)+(has(self.valueFrom)?1:0)==1",message="set exactly one of value or valueFrom"
+type StringOrFrom struct {
+	// +optional
+	Value *string `json:"value,omitempty"`
+	// +optional
+	ValueFrom *ValueFromSource `json:"valueFrom,omitempty"`
+}
+
+// ValueFromSource refers to a key in a Secret or ConfigMap.
+// +kubebuilder:validation:XValidation:rule="(has(self.secretKeyRef)?1:0)+(has(self.configMapKeyRef)?1:0)==1",message="set exactly one of secretKeyRef or configMapKeyRef"
+type ValueFromSource struct {
+	// +optional
+	SecretKeyRef *corev1.SecretKeySelector `json:"secretKeyRef,omitempty"`
+	// +optional
+	ConfigMapKeyRef *corev1.ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
 }
 
 // When represents one of two trigger variants:

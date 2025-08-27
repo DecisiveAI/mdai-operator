@@ -49,41 +49,33 @@ func transformThenToCommands(actions []mdaiv1.Action) ([]events.Command, error) 
 		start := len(cmds)
 
 		if action.AddToSet != nil {
+			bytes, err := json.Marshal(action.AddToSet)
+			if err != nil {
+				return nil, fmt.Errorf("encode variable.set.add: %w", err)
+			}
 			cmds = append(cmds, events.Command{
-				Type: "variable.set.add",
-				Inputs: map[string]any{
-					"variableRef": strings.TrimSpace(action.AddToSet.Set),
-					"valueFrom":   strings.TrimSpace(action.AddToSet.Value),
-				},
+				Type:   "variable.set.add",
+				Inputs: bytes,
 			})
 		}
 		if action.RemoveFromSet != nil {
+			bytes, err := json.Marshal(action.RemoveFromSet)
+			if err != nil {
+				return nil, fmt.Errorf("encode variable.set.remove: %w", err)
+			}
 			cmds = append(cmds, events.Command{
-				Type: "variable.set.remove",
-				Inputs: map[string]any{
-					"variableRef": strings.TrimSpace(action.RemoveFromSet.Set),
-					"valueFrom":   strings.TrimSpace(action.RemoveFromSet.Value),
-				},
+				Type:   "variable.set.remove",
+				Inputs: bytes,
 			})
 		}
 		if action.CallWebhook != nil {
-			method := strings.TrimSpace(action.CallWebhook.Method)
-			if method == "" {
-				method = "POST"
-			}
-			inputs := map[string]any{
-				"url":    strings.TrimSpace(action.CallWebhook.URL),
-				"method": method,
-			}
-			if body := decodeWebhookBody(action); body != nil {
-				inputs["body"] = body
-			}
-			if len(action.CallWebhook.Headers) > 0 {
-				inputs["headers"] = action.CallWebhook.Headers
+			bytes, err := json.Marshal(action.CallWebhook)
+			if err != nil {
+				return nil, fmt.Errorf("encode variable.set.remove: %w", err)
 			}
 			cmds = append(cmds, events.Command{
 				Type:   "webhook.call",
-				Inputs: inputs,
+				Inputs: bytes,
 			})
 		}
 
@@ -92,15 +84,4 @@ func transformThenToCommands(actions []mdaiv1.Action) ([]events.Command, error) 
 		}
 	}
 	return cmds, nil
-}
-
-func decodeWebhookBody(action mdaiv1.Action) map[string]any {
-	if action.CallWebhook == nil || action.CallWebhook.Body == nil || len(action.CallWebhook.Body.Raw) == 0 {
-		return nil
-	}
-	var obj map[string]any
-	if err := json.Unmarshal(action.CallWebhook.Body.Raw, &obj); err == nil {
-		return obj
-	}
-	return map[string]any{"raw": string(action.CallWebhook.Body.Raw)}
 }

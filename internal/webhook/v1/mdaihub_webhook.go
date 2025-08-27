@@ -297,11 +297,14 @@ func validateSetAction(p *field.Path, a *mdaiv1.SetAction, knownVarKeys map[stri
 func validateWebhookCall(callPath *field.Path, call *mdaiv1.CallWebhookAction) field.ErrorList {
 	var errs field.ErrorList
 
-	endpoint := strings.TrimSpace(call.URL)
-	if endpoint == "" {
-		errs = append(errs, field.Required(callPath.Child("url"), "required"))
-	} else if !isValidURL(endpoint) {
-		errs = append(errs, field.Invalid(callPath.Child("url"), endpoint, "must be an absolute http(s) URL or a template"))
+	// we are validating only if URL is provided as string
+	if call.URL.Value != nil {
+		endpoint := strings.TrimSpace(*call.URL.Value)
+		if endpoint == "" {
+			errs = append(errs, field.Required(callPath.Child("url"), "required"))
+		} else if !isValidURL(endpoint) {
+			errs = append(errs, field.Invalid(callPath.Child("url"), endpoint, "must be an absolute http(s) URL or a template"))
+		}
 	}
 
 	if m := strings.TrimSpace(call.Method); m != "" && !allowedHTTP.Has(m) {
