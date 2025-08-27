@@ -144,7 +144,7 @@ spec:
                                 type: string
                               url:
                                 description: URL provided as string or read from secret
-                                  or configmap
+                                  or configmap within hub namespace.
                                 properties:
                                   value:
                                     type: string
