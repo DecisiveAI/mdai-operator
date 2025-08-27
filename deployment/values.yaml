@@ -18,7 +18,7 @@ controllerManager:
       valkeyAuditStreamExpiryMs: "2592000000"
     image:
       repository: public.ecr.aws/p3k6k6h3/mdai-operator
-      tag: 0.1.22
+      tag: 0.1.23
     resources:
       limits:
         cpu: 500m
@@ -47,3 +47,23 @@ webhookService:
     protocol: TCP
     targetPort: 9443
   type: ClusterIP
+admissionWebhooks:
+  create: true
+  secretName: ""
+
+  certManager:
+    enabled: true
+    issuerRef: {}
+    certificateAnnotations: {}
+    issuerAnnotations: {}
+    duration: ""
+    renewBefore: ""
+
+  autoGenerateCert:
+    enabled: false
+    recreate: true
+    certPeriodDays: 365
+
+  certFile: ""
+  keyFile: ""
+  caFile: ""

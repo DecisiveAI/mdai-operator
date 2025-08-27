@@ -1,0 +1,20 @@
+admissionWebhooks:
+  create: true
+  secretName: ""
+
+  certManager:
+    enabled: true
+    issuerRef: {}
+    certificateAnnotations: {}
+    issuerAnnotations: {}
+    duration: ""
+    renewBefore: ""
+
+  autoGenerateCert:
+    enabled: false
+    recreate: true
+    certPeriodDays: 365
+
+  certFile: ""
+  keyFile: ""
+  caFile: ""

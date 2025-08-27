@@ -1,6 +1,6 @@
 # mdai-operator
 
-![Version: 0.1.22](https://img.shields.io/badge/Version-0.1.22-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.1.22](https://img.shields.io/badge/AppVersion-0.1.22-informational?style=flat-square)
+![Version: 0.1.23](https://img.shields.io/badge/Version-0.1.23-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.1.23](https://img.shields.io/badge/AppVersion-0.1.23-informational?style=flat-square)
 
 MDAI Operator Helm Chart
 
@@ -8,6 +8,20 @@ MDAI Operator Helm Chart
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| admissionWebhooks.autoGenerateCert.certPeriodDays | int | `365` |  |
+| admissionWebhooks.autoGenerateCert.enabled | bool | `false` |  |
+| admissionWebhooks.autoGenerateCert.recreate | bool | `true` |  |
+| admissionWebhooks.caFile | string | `""` |  |
+| admissionWebhooks.certFile | string | `""` |  |
+| admissionWebhooks.certManager.certificateAnnotations | object | `{}` |  |
+| admissionWebhooks.certManager.duration | string | `""` |  |
+| admissionWebhooks.certManager.enabled | bool | `true` |  |
+| admissionWebhooks.certManager.issuerAnnotations | object | `{}` |  |
+| admissionWebhooks.certManager.issuerRef | object | `{}` |  |
+| admissionWebhooks.certManager.renewBefore | string | `""` |  |
+| admissionWebhooks.create | bool | `true` |  |
+| admissionWebhooks.keyFile | string | `""` |  |
+| admissionWebhooks.secretName | string | `""` |  |
 | controllerManager.manager.args[0] | string | `"--metrics-bind-address=:8443"` |  |
 | controllerManager.manager.args[1] | string | `"--leader-elect=false"` |  |
 | controllerManager.manager.args[2] | string | `"--health-probe-bind-address=:8081"` |  |
@@ -20,7 +34,7 @@ MDAI Operator Helm Chart
 | controllerManager.manager.env.useConsoleLogEncoder | string | `"false"` |  |
 | controllerManager.manager.env.valkeyAuditStreamExpiryMs | string | `"2592000000"` |  |
 | controllerManager.manager.image.repository | string | `"public.ecr.aws/p3k6k6h3/mdai-operator"` |  |
-| controllerManager.manager.image.tag | string | `"0.1.22"` |  |
+| controllerManager.manager.image.tag | string | `"0.1.23"` |  |
 | controllerManager.manager.resources.limits.cpu | string | `"500m"` |  |
 | controllerManager.manager.resources.limits.memory | string | `"128Mi"` |  |
 | controllerManager.manager.resources.requests.cpu | string | `"10m"` |  |
