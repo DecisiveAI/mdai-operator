@@ -23,6 +23,9 @@ jobs:
     name: Helm Chart Checks
     runs-on: ubuntu-latest
     steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
       - name: Check if Helm chart was updated
         run: |
           if git diff --quiet HEAD -- deployment/; then
