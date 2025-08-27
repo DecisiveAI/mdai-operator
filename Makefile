@@ -331,7 +331,7 @@ helm-update: manifests kustomize helmify helm-docs helm-values-schema-json-plugi
 	$(call vecho,"📝 Updating Helm chart docs...")
 	@$(HELM_DOCS) --skip-version-footer $(CHART_PATH) -f values.yaml -l warning
 	$(call vecho,"📐 Updating Helm chart JSON schema...")
-	@helm schema -output $(CHART_PATH)/values.schema.json
+	@helm schema --values $(CHART_PATH)/values.yaml --output $(CHART_PATH)/values.schema.json
 
 .PHONY: helm-package
 helm-package: helm-update
