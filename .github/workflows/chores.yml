@@ -19,6 +19,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  helmchart-check:
+    name: Helm Chart Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if Helm chart was updated
+        run: |
+          if git diff --quiet HEAD -- deployment/; then
+            echo "✅ No changes in /deployment - helm chart is up to date."
+          else
+            echo "❌ Generated Helm chart is not synchronized with the latest commit. Run 'make helm-update' to update the chart."
+            exit 1
+          fi
+
   lint-and-test:
     name: Lint & Test on Ubuntu
     runs-on: ubuntu-latest
