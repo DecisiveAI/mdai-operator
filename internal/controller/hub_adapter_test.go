@@ -849,7 +849,7 @@ func TestEnsureAutomationsSynchronized(t *testing.T) {
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: "default"}, cm)
 	require.NoError(t, err)
 
-	expectedData := `{"name":"automation-1","trigger":{"kind":"alert","spec":{"name":"my-alert","status":"firing"}},"commands":[{"type":"variable.set.add","inputs":{"valueFrom":"my-value","variableRef":"my-set"}}]}`
+	expectedData := `{"name":"automation-1","trigger":{"kind":"alert","spec":{"name":"my-alert","status":"firing"}},"commands":[{"type":"variable.set.add","inputs":{"set":"my-set","value":"my-value"}}]}`
 	actualData, exists := cm.Data["automation-1"]
 	assert.True(t, exists)
 	assert.JSONEq(t, expectedData, actualData)

@@ -71,7 +71,7 @@ func transformThenToCommands(actions []mdaiv1.Action) ([]events.Command, error) 
 		if action.CallWebhook != nil {
 			bytes, err := json.Marshal(action.CallWebhook)
 			if err != nil {
-				return nil, fmt.Errorf("encode variable.set.remove: %w", err)
+				return nil, fmt.Errorf("encode webhook.call: %w", err)
 			}
 			cmds = append(cmds, events.Command{
 				Type:   "webhook.call",
