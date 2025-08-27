@@ -8,6 +8,20 @@ MDAI Operator Helm Chart
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| admissionWebhooks.autoGenerateCert.certPeriodDays | int | `365` |  |
+| admissionWebhooks.autoGenerateCert.enabled | bool | `false` |  |
+| admissionWebhooks.autoGenerateCert.recreate | bool | `true` |  |
+| admissionWebhooks.caFile | string | `""` |  |
+| admissionWebhooks.certFile | string | `""` |  |
+| admissionWebhooks.certManager.certificateAnnotations | object | `{}` |  |
+| admissionWebhooks.certManager.duration | string | `""` |  |
+| admissionWebhooks.certManager.enabled | bool | `true` |  |
+| admissionWebhooks.certManager.issuerAnnotations | object | `{}` |  |
+| admissionWebhooks.certManager.issuerRef | object | `{}` |  |
+| admissionWebhooks.certManager.renewBefore | string | `""` |  |
+| admissionWebhooks.create | bool | `true` |  |
+| admissionWebhooks.keyFile | string | `""` |  |
+| admissionWebhooks.secretName | string | `""` |  |
 | controllerManager.manager.args[0] | string | `"--metrics-bind-address=:8443"` |  |
 | controllerManager.manager.args[1] | string | `"--leader-elect=false"` |  |
 | controllerManager.manager.args[2] | string | `"--health-probe-bind-address=:8081"` |  |

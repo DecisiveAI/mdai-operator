@@ -1,3 +1,4 @@
+{{- if and (.Values.admissionWebhooks.create) (.Values.admissionWebhooks.certManager.enabled) }}
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
@@ -67,3 +68,4 @@ webhooks:
     resources:
     - mdaiobservers
   sideEffects: None
+{{- end }}
