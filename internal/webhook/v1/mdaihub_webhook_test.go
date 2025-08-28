@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
@@ -208,12 +209,13 @@ var _ = Describe("MdaiHub Webhook", func() {
 	})
 
 	Context("When creating or updating MdaiHub under Validating Webhook", func() {
-		It("Should deny creation if a required field is missing", func() {
+		It("Should deny creation if variable keys are duplicated", func() {
 			By("simulating an invalid creation scenario")
 			obj := createSampleMdaiHub()
 			(obj.Spec.Variables)[0].Key = "service_list_2"
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).Error().To(HaveOccurred())
+			Expect(err).To(MatchError(ContainSubstring(`"mdaihub-sample" is invalid: [spec.variables[1].key: Duplicate value: "service_list_2"`)))
 		})
 
 		It("Should admit creation if all required fields are present", func() {
@@ -306,6 +308,224 @@ var _ = Describe("MdaiHub Webhook", func() {
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(MatchError(ContainSubstring(`MdaiHub.hub.mydecisive.ai "mdaihub-sample" is invalid: spec.variables[3].serializeAs[0].transformers: Forbidden: transformers are not supported for variable type boolean`)))
 			Expect(warnings).To(BeEmpty())
+		})
+
+		It("Should fail if status is set without alertName", func() {
+			By("setting status but clearing alertName in a rule")
+			obj := createSampleMdaiHub()
+			obj.Spec.Rules[0].When.AlertName = nil
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("alertName and status must be set together"))
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should fail if updateType is set without variableUpdated", func() {
+			By("setting updateType but leaving variableUpdated empty")
+			obj := createSampleMdaiHub()
+			obj.Spec.Rules[0].When.UpdateType = ptr.To("added")
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.rules[0].when.updateType"))
+			Expect(err.Error()).To(ContainSubstring("can only be set when variableUpdated is set"))
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should fail if variableUpdated is not defined in spec.variables", func() {
+			By("referencing an unknown variable in when.variableUpdated")
+			obj := createSampleMdaiHub()
+			obj.Spec.Rules[0].When.VariableUpdated = ptr.To("does_not_exist")
+			obj.Spec.Rules[0].When.UpdateType = ptr.To("set")
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.rules[0].when.variableUpdated"))
+			Expect(err.Error()).To(ContainSubstring("not defined in spec.variables"))
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should fail if alertName is not defined in spec.alerts", func() {
+			By("referencing an unknown alert in when.alertName")
+			obj := createSampleMdaiHub()
+			obj.Spec.Rules[0].When.AlertName = ptr.To("UnknownAlert")
+			// keep status to trigger the existence check
+			obj.Spec.Rules[0].When.Status = ptr.To("firing")
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.rules[0].when.alertName"))
+			Expect(err.Error()).To(ContainSubstring("not defined in spec.alerts"))
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should fail if an action item has no fields set", func() {
+			By("providing an empty action (no addToSet/removeFromSet/callWebhook)")
+			obj := createSampleMdaiHub()
+			// Replace the default valid action with an empty one
+			obj.Spec.Rules[0].Then = []mdaiv1.Action{{}}
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.rules[0].then[0]"))
+			Expect(err.Error()).To(ContainSubstring("at least one action must be specified"))
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should fail if addToSet targets an unknown variable", func() {
+			By("pointing addToSet.set to a variable that does not exist")
+			obj := createSampleMdaiHub()
+			obj.Spec.Rules[0].Then[0].AddToSet.Set = "does_not_exist"
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.rules[0].then[0].addToSet.set"))
+			Expect(err.Error()).To(ContainSubstring("not defined in spec.variables"))
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should admit creation when removeFromSet references an existing set variable", func() {
+			By("switching to removeFromSet with a valid set variable")
+			obj := createSampleMdaiHub()
+			obj.Spec.Rules[0].Then = []mdaiv1.Action{
+				{
+					RemoveFromSet: &mdaiv1.SetAction{
+						Set:   "service_list_1",
+						Value: "service_name",
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should fail if removeFromSet targets an unknown variable", func() {
+			By("using removeFromSet on a non-existent variable")
+			obj := createSampleMdaiHub()
+			obj.Spec.Rules[0].Then = []mdaiv1.Action{
+				{
+					RemoveFromSet: &mdaiv1.SetAction{
+						Set:   "ghost_variable",
+						Value: "service_name",
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("spec.rules[0].then[0].removeFromSet.set"))
+			Expect(err.Error()).To(ContainSubstring("not defined in spec.variables"))
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should fail if callWebhook.url is an explicit empty string", func() {
+			By("setting url to an empty string")
+			obj := createSampleMdaiHub()
+			obj.Spec.Rules[0].Then = []mdaiv1.Action{{CallWebhook: &mdaiv1.CallWebhookAction{}}}
+			obj.Spec.Rules[0].Then[0].CallWebhook.URL.Value = ptr.To("")
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(`spec.rules[0].then[0].callWebhook.url`))
+			Expect(err.Error()).To(ContainSubstring(`Required value: required`))
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should fail if callWebhook.url is only whitespace", func() {
+			By("setting url to whitespace")
+			obj := createSampleMdaiHub()
+			obj.Spec.Rules[0].Then = []mdaiv1.Action{{CallWebhook: &mdaiv1.CallWebhookAction{}}}
+			obj.Spec.Rules[0].Then[0].CallWebhook.URL.Value = ptr.To("   \t  ")
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(`spec.rules[0].then[0].callWebhook.url`))
+			Expect(err.Error()).To(ContainSubstring(`Required value`))
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should fail if callWebhook.url is not an absolute http(s) URL", func() {
+			By("using a non-absolute/non-http URL")
+			obj := createSampleMdaiHub()
+			obj.Spec.Rules[0].Then = []mdaiv1.Action{{CallWebhook: &mdaiv1.CallWebhookAction{}}}
+			obj.Spec.Rules[0].Then[0].CallWebhook.URL.Value = ptr.To("example.com/hook") // missing scheme
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(`spec.rules[0].then[0].callWebhook.url`))
+			Expect(err.Error()).To(ContainSubstring(`must be an absolute http(s) URL or a template`))
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should admit creation when callWebhook has a valid absolute URL and allowed method", func() {
+			By("providing a proper https URL and a supported method")
+			obj := createSampleMdaiHub()
+			obj.Spec.Rules[0].Then = []mdaiv1.Action{{CallWebhook: &mdaiv1.CallWebhookAction{}}}
+			obj.Spec.Rules[0].Then[0].CallWebhook.URL.Value = ptr.To("https://hooks.example.com/x")
+			obj.Spec.Rules[0].Then[0].CallWebhook.Method = "PUT" // allowed
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should admit creation when callWebhook has a valid absolute URL and empty method (defaults to POST)", func() {
+			By("supplying a valid URL without method")
+			obj := createSampleMdaiHub()
+			obj.Spec.Rules[0].Then = []mdaiv1.Action{{CallWebhook: &mdaiv1.CallWebhookAction{}}}
+			obj.Spec.Rules[0].Then[0].CallWebhook.URL.Value = ptr.To("http://example.com/hook")
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should admit creation when callWebhook.url comes from a Secret", func() {
+			obj := createSampleMdaiHub()
+			obj.Spec.Rules[0].Then = []mdaiv1.Action{
+				{
+					CallWebhook: &mdaiv1.CallWebhookAction{
+						URL: mdaiv1.StringOrFrom{
+							ValueFrom: &mdaiv1.ValueFromSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-secret"},
+									Key:                  "url",
+								},
+							},
+						},
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("Should admit creation when callWebhook.url comes from a ConfigMap", func() {
+			obj := createSampleMdaiHub()
+			obj.Spec.Rules[0].Then = []mdaiv1.Action{
+				{
+					CallWebhook: &mdaiv1.CallWebhookAction{
+						URL: mdaiv1.StringOrFrom{
+							ValueFrom: &mdaiv1.ValueFromSource{
+								ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-config"},
+									Key:                  "url",
+								},
+							},
+						},
+						Method: "PATCH",
+					},
+				},
+			}
+
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(warnings).To(Equal(admission.Warnings{}))
 		})
 	})
 })
