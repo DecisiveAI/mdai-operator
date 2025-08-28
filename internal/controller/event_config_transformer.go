@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/decisiveai/mdai-data-core/events"
 	"github.com/decisiveai/mdai-data-core/events/triggers"
@@ -17,10 +16,11 @@ func transformWhenToTrigger(when *mdaiv1.When) (triggers.Trigger, error) {
 		return nil, errors.New("when is required")
 	}
 
-	alertName := strings.TrimSpace(ptr.Deref(when.AlertName, ""))
-	status := strings.TrimSpace(ptr.Deref(when.Status, ""))
-	varUpdated := strings.TrimSpace(ptr.Deref(when.VariableUpdated, ""))
-	updateType := strings.TrimSpace(ptr.Deref(when.UpdateType, ""))
+	// we don't need to trim space in yaml unless they are within quote, but we trim it here just in case
+	alertName := ptr.Deref(when.AlertName, "")
+	status := ptr.Deref(when.Status, "")
+	varUpdated := ptr.Deref(when.VariableUpdated, "")
+	updateType := ptr.Deref(when.UpdateType, "")
 
 	hasAlert := alertName != ""
 	hasVar := varUpdated != ""
