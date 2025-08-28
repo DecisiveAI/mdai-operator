@@ -16,7 +16,6 @@ func transformWhenToTrigger(when *mdaiv1.When) (triggers.Trigger, error) {
 		return nil, errors.New("when is required")
 	}
 
-	// we don't need to trim space in yaml unless they are within quote, but we trim it here just in case
 	alertName := ptr.Deref(when.AlertName, "")
 	status := ptr.Deref(when.Status, "")
 	varUpdated := ptr.Deref(when.VariableUpdated, "")
