@@ -41,7 +41,7 @@ func TestTransformWhenToTrigger_AlertTrigger_EmptyStatus(t *testing.T) {
 	require.True(t, ok)
 
 	assert.Equal(t, "some-alert-name", alertTrigger.Name)
-	assert.Equal(t, "", alertTrigger.Status)
+	assert.Empty(t, alertTrigger.Status)
 }
 
 func TestTransformWhenToTrigger_VariableTrigger(t *testing.T) {
@@ -86,7 +86,7 @@ func TestTransformWhenToTrigger_VariableTrigger_EmptyUpdateType(t *testing.T) {
 			require.True(t, ok)
 
 			assert.Equal(t, "some-variable-name", variableTrigger.Name)
-			assert.Equal(t, "", variableTrigger.UpdateType)
+			assert.Empty(t, variableTrigger.UpdateType)
 		})
 	}
 }
