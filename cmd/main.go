@@ -7,9 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	"github.com/decisiveai/mdai-operator/internal/controller"
-	webhookmdaiv1 "github.com/decisiveai/mdai-operator/internal/webhook/v1"
 	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/go-logr/zapr"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -21,6 +18,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"github.com/decisiveai/mdai-operator/internal/controller"
+	webhookmdaiv1 "github.com/decisiveai/mdai-operator/internal/webhook/v1"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -166,6 +167,7 @@ func main() {
 	}
 	webhookServer := webhook.NewServer(webhook.Options{
 		TLSOpts: webhookTLSOpts,
+		Port:    9444,
 	})
 
 	// Metrics endpoint is enabled in 'config/default/kustomization.yaml'. The Metrics options configure the server.
@@ -299,6 +301,14 @@ func main() {
 		}
 	}
 
+	if err := (&controller.MdaiIngressReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Cache:  mgr.GetCache(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MdaiIngress")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {
@@ -345,7 +355,7 @@ func bindFlags(
 ) {
 	flag.StringVar(metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
-	flag.StringVar(probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.StringVar(probeAddr, "health-probe-bind-address", ":8082", "The address the probe endpoint binds to.")
 	flag.BoolVar(enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
