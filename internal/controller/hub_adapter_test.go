@@ -798,7 +798,7 @@ func TestEnsureStatusSetToDone(t *testing.T) {
 	if cond == nil {
 		t.Fatalf("expected condition %q to exist, but it was not found", typeAvailableHub)
 	}
-	if cond.Status != metav1.ConditionTrue {
+	if cond.Status != metav1.ConditionTrue { //nolint:staticcheck
 		t.Errorf("expected condition %q to be True, got: %v", typeAvailableHub, cond.Status)
 	}
 	if cond.Reason != "Reconciling" {
