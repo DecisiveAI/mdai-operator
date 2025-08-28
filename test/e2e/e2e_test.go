@@ -451,7 +451,7 @@ var _ = Describe("Manager", Ordered, func() {
 				data := getDataFromMap(g, "mdaihub-sample-automation", "mdai")
 				g.Expect(data).To(HaveLen(1))
 				g.Expect(data["HandleAddNoisyServiceToSet"]).
-					To(Equal(`{"name":"HandleAddNoisyServiceToSet","trigger":{"kind":"alert","spec":{"name":"logBytesOutTooHighBySvc"}},"commands":[{"type":"variable.set.add","inputs":{"valueFrom":"{{ service_name }}","variableRef":"service_list_1"}}]}`))
+					To(Equal(`{"name":"HandleAddNoisyServiceToSet","trigger":{"kind":"alert","spec":{"name":"logBytesOutTooHighBySvc"}},"commands":[{"type":"variable.set.add","inputs":{"set":"service_list_1","value":"{{ service_name }}"}}]}`))
 			}
 			Eventually(verifyConfigMapManual).Should(Succeed())
 		})
