@@ -40,29 +40,6 @@ spec:
           spec:
             description: MdaiHubSpec defines the desired state of MdaiHub.
             properties:
-              automations:
-                items:
-                  properties:
-                    eventRef:
-                      type: string
-                    workflow:
-                      items:
-                        properties:
-                          args:
-                            additionalProperties:
-                              type: string
-                            type: object
-                          handlerRef:
-                            type: string
-                        required:
-                        - handlerRef
-                        type: object
-                      type: array
-                  required:
-                  - eventRef
-                  - workflow
-                  type: object
-                type: array
               config:
                 properties:
                   evaluation_interval:
@@ -71,7 +48,7 @@ spec:
                     pattern: ^(0|(([0-9]+)y)?(([0-9]+)w)?(([0-9]+)d)?(([0-9]+)h)?(([0-9]+)m)?(([0-9]+)s)?(([0-9]+)ms)?)$
                     type: string
                 type: object
-              prometheusAlert:
+              prometheusAlerts:
                 items:
                   properties:
                     expr:
@@ -103,6 +80,193 @@ spec:
                   - expr
                   - name
                   - severity
+                  type: object
+                type: array
+              rules:
+                items:
+                  properties:
+                    name:
+                      description: Name How this rule will be referred to elsewhere
+                        in the config and audit.
+                      minLength: 1
+                      type: string
+                    then:
+                      description: Then specifies the actions to be taken when the rule
+                        is triggered.
+                      items:
+                        properties:
+                          addToSet:
+                            description: Payloads (one required depending on Type)
+                            properties:
+                              set:
+                                description: Target set name
+                                minLength: 1
+                                type: string
+                              value:
+                                description: Value to add (templated string allowed)
+                                minLength: 1
+                                type: string
+                            required:
+                            - set
+                            - value
+                            type: object
+                          callWebhook:
+                            description: CallWebhookAction is used to call a webhook
+                              with the provided template.
+                            properties:
+                              headers:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                              method:
+                                default: POST
+                                description: Method defaults to POST if not provided.
+                                  If template is used, POST method has to be used.
+                                enum:
+                                - POST
+                                - PUT
+                                - PATCH
+                                type: string
+                              templateRef:
+                                description: TemplateRef uses built-in templates. Custom
+                                  templates will be supported in the future.
+                                enum:
+                                - slackAlertTemplate
+                                type: string
+                              templateValues:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                              timeout:
+                                description: |-
+                                  Timeout specifies the maximum time to wait for the response from the webhook before retry.
+                                  Default is 0s, means no timeout should be applied.
+                                type: string
+                              url:
+                                description: URL provided as string or read from secret
+                                  or configmap within hub namespace.
+                                properties:
+                                  value:
+                                    type: string
+                                  valueFrom:
+                                    description: ValueFromSource refers to a key in
+                                      a Secret or ConfigMap.
+                                    properties:
+                                      configMapKeyRef:
+                                        description: Selects a key from a ConfigMap.
+                                        properties:
+                                          key:
+                                            description: The key to select.
+                                            type: string
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                          optional:
+                                            description: Specify whether the ConfigMap
+                                              or its key must be defined
+                                            type: boolean
+                                        required:
+                                        - key
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                      secretKeyRef:
+                                        description: SecretKeySelector selects a key
+                                          of a Secret.
+                                        properties:
+                                          key:
+                                            description: The key of the secret to select
+                                              from.  Must be a valid secret key.
+                                            type: string
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                          optional:
+                                            description: Specify whether the Secret
+                                              or its key must be defined
+                                            type: boolean
+                                        required:
+                                        - key
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                    type: object
+                                    x-kubernetes-validations:
+                                    - message: set exactly one of secretKeyRef or configMapKeyRef
+                                      rule: (has(self.secretKeyRef)?1:0)+(has(self.configMapKeyRef)?1:0)==1
+                                type: object
+                                x-kubernetes-validations:
+                                - message: set exactly one of value or valueFrom
+                                  rule: (has(self.value)?1:0)+(has(self.valueFrom)?1:0)==1
+                            required:
+                            - url
+                            type: object
+                          removeFromSet:
+                            properties:
+                              set:
+                                description: Target set name
+                                minLength: 1
+                                type: string
+                              value:
+                                description: Value to add (templated string allowed)
+                                minLength: 1
+                                type: string
+                            required:
+                            - set
+                            - value
+                            type: object
+                          setVariable:
+                            properties:
+                              scalar:
+                                description: Target set name
+                                minLength: 1
+                                type: string
+                              value:
+                                description: Value to add (templated string allowed)
+                                minLength: 1
+                                type: string
+                            required:
+                            - scalar
+                            - value
+                            type: object
+                        type: object
+                      type: array
+                    when:
+                      description: When specifies the conditions under which the rule
+                        is triggered.
+                      properties:
+                        alertName:
+                          description: 'Variant 1: alert'
+                          type: string
+                        status:
+                          type: string
+                        updateType:
+                          enum:
+                          - added
+                          - removed
+                          - set
+                          type: string
+                        variableUpdated:
+                          description: 'Variant 2: variable-driven'
+                          type: string
+                      type: object
+                      x-kubernetes-validations:
+                      - message: exactly one variant must be set
+                        rule: (has(self.alertName)) != (has(self.variableUpdated))
+                  required:
+                  - name
+                  - then
+                  - when
                   type: object
                 type: array
               variables:

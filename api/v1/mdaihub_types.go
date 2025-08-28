@@ -1,6 +1,7 @@
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -87,18 +88,113 @@ type Config struct {
 	EvaluationInterval *prometheusv1.Duration `json:"evaluation_interval,omitempty" yaml:"evaluation_interval,omitempty"` //nolint:tagliatelle
 }
 
-type Automation struct {
-	// + required
-	EventRef string `json:"eventRef"`
-	// + required
-	Workflow []AutomationStep `json:"workflow"` // we are using a slice here to keep the order
+type AutomationRule struct {
+	// Name How this rule will be referred to elsewhere in the config and audit.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// When specifies the conditions under which the rule is triggered.
+	// +kubebuilder:validation:Required
+	When When `json:"when"`
+	// Then specifies the actions to be taken when the rule is triggered.
+	// +kubebuilder:validation:Required
+	Then []Action `json:"then"`
 }
 
-type AutomationStep struct {
-	// +required
-	HandlerRef string `json:"handlerRef"`
+type Action struct {
+	// Payloads (one required depending on Type)
+	AddToSet      *SetAction `json:"addToSet,omitempty"`
+	RemoveFromSet *SetAction `json:"removeFromSet,omitempty"`
+
+	SetVariable *ScalarAction `json:"setVariable,omitempty"`
+
+	// TODO add more actions to update variables here
+
+	CallWebhook *CallWebhookAction `json:"callWebhook,omitempty"`
+}
+
+type SetAction struct {
+	// Target set name
+	// +kubebuilder:validation:MinLength=1
+	Set string `json:"set"`
+	// Value to add (templated string allowed)
+	// +kubebuilder:validation:MinLength=1
+	Value string `json:"value"`
+}
+
+type ScalarAction struct {
+	// Target set name
+	// +kubebuilder:validation:MinLength=1
+	Scalar string `json:"scalar"`
+	// Value to add (templated string allowed)
+	// +kubebuilder:validation:MinLength=1
+	Value string `json:"value"`
+}
+
+// CallWebhookAction is used to call a webhook with the provided template.
+type CallWebhookAction struct {
+	// URL provided as string or read from secret or configmap within hub namespace.
+	// +kubebuilder: required
+	URL StringOrFrom `json:"url"`
+
+	// Method defaults to POST if not provided. If template is used, POST method has to be used.
+	// +kubebuilder:default=POST
+	// +kubebuilder:validation:Enum=POST;PUT;PATCH
+	Method string `json:"method,omitempty"`
+
+	// +kubebuilder:validation:Enum=slackAlertTemplate
+	// TemplateRef uses built-in templates. Custom templates will be supported in the future.
+	TemplateRef string `json:"templateRef,omitempty"`
+
+	TemplateValues map[string]string `json:"templateValues,omitempty"`
+
 	// +optional
-	Arguments map[string]string `json:"args,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+
+	// Timeout specifies the maximum time to wait for the response from the webhook before retry.
+	// Default is 0s, means no timeout should be applied.
+	// +kubebuilder: default= 0s
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+}
+
+// StringOrFrom represents a string value or a reference to a value in a Secret or ConfigMap.
+// +kubebuilder:validation:XValidation:rule="(has(self.value)?1:0)+(has(self.valueFrom)?1:0)==1",message="set exactly one of value or valueFrom"
+type StringOrFrom struct {
+	// +optional
+	Value *string `json:"value,omitempty"`
+	// +optional
+	ValueFrom *ValueFromSource `json:"valueFrom,omitempty"`
+}
+
+// ValueFromSource refers to a key in a Secret or ConfigMap.
+// +kubebuilder:validation:XValidation:rule="(has(self.secretKeyRef)?1:0)+(has(self.configMapKeyRef)?1:0)==1",message="set exactly one of secretKeyRef or configMapKeyRef"
+type ValueFromSource struct {
+	// +optional
+	SecretKeyRef *corev1.SecretKeySelector `json:"secretKeyRef,omitempty"`
+	// +optional
+	ConfigMapKeyRef *corev1.ConfigMapKeySelector `json:"configMapKeyRef,omitempty"`
+}
+
+// When represents one of two trigger variants:
+//
+//  1. alertName + status
+//  2. variableUpdated + UpdateType
+//
+// Exactly one variant must be set. TODO check the validation logic for this.
+// +kubebuilder:validation:XValidation:rule="(has(self.alertName)) != (has(self.variableUpdated))",message="exactly one variant must be set"
+type When struct {
+	// Variant 1: alert
+	// +optional
+	AlertName *string `json:"alertName,omitempty"`
+	// +optional
+	Status *string `json:"status,omitempty"`
+
+	// Variant 2: variable-driven
+	// +optional
+	VariableUpdated *string `json:"variableUpdated,omitempty"`
+	// +optional
+	// +kubebuilder:validation:Enum=added;removed;set
+	UpdateType *string `json:"updateType,omitempty"`
 }
 
 // MdaiHubSpec defines the desired state of MdaiHub.
@@ -108,9 +204,9 @@ type MdaiHubSpec struct {
 	// +optional
 	Variables []Variable `json:"variables,omitempty"`
 	// +optional
-	PrometheusAlert []PrometheusAlert `json:"prometheusAlert,omitempty"` // evaluation configuration (alerting rules)
+	PrometheusAlerts []PrometheusAlert `json:"prometheusAlerts,omitempty"` // evaluation configuration (alerting rules)
 	// +optional
-	Automations []Automation `json:"automations,omitempty"`
+	Rules []AutomationRule `json:"rules,omitempty"`
 }
 
 // MdaiHubStatus defines the observed state of MdaiHub.

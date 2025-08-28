@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -635,7 +636,7 @@ func TestEnsureEvaluationsSynchronized_WithEvaluations(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: mdaiv1.MdaiHubSpec{
-			PrometheusAlert: evals,
+			PrometheusAlerts: evals,
 			Config: &mdaiv1.Config{
 				EvaluationInterval: &interval,
 			},
@@ -797,7 +798,7 @@ func TestEnsureStatusSetToDone(t *testing.T) {
 	if cond == nil {
 		t.Fatalf("expected condition %q to exist, but it was not found", typeAvailableHub)
 	}
-	if cond.Status != metav1.ConditionTrue {
+	if cond.Status != metav1.ConditionTrue { //nolint:staticcheck
 		t.Errorf("expected condition %q to be True, got: %v", typeAvailableHub, cond.Status)
 	}
 	if cond.Reason != "Reconciling" {
@@ -812,13 +813,19 @@ func TestEnsureAutomationsSynchronized(t *testing.T) {
 	ctx := t.Context()
 
 	mdaiCR := newTestMdaiCR()
-	mdaiCR.Spec.Automations = []mdaiv1.Automation{
+	mdaiCR.Spec.Rules = []mdaiv1.AutomationRule{
 		{
-			EventRef: "my-event",
-			Workflow: []mdaiv1.AutomationStep{
+			Name: "automation-1",
+			When: mdaiv1.When{
+				AlertName: ptr.To("my-alert"),
+				Status:    ptr.To("firing"),
+			},
+			Then: []mdaiv1.Action{
 				{
-					HandlerRef: "",
-					Arguments:  map[string]string{"key": "value"},
+					AddToSet: &mdaiv1.SetAction{
+						Set:   "my-set",
+						Value: "my-value",
+					},
 				},
 			},
 		},
@@ -842,14 +849,12 @@ func TestEnsureAutomationsSynchronized(t *testing.T) {
 	err = fakeClient.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: "default"}, cm)
 	require.NoError(t, err)
 
-	workflowJSON, err := json.Marshal(mdaiCR.Spec.Automations[0].Workflow)
-	require.NoError(t, err)
-	expectedData := string(workflowJSON)
-	actualData, exists := cm.Data["my-event"]
+	expectedData := `{"name":"automation-1","trigger":{"kind":"alert","spec":{"name":"my-alert","status":"firing"}},"commands":[{"type":"variable.set.add","inputs":{"set":"my-set","value":"my-value"}}]}`
+	actualData, exists := cm.Data["automation-1"]
 	assert.True(t, exists)
 	assert.JSONEq(t, expectedData, actualData)
 
-	mdaiCR.Spec.Automations = nil
+	mdaiCR.Spec.Rules = nil
 	adapter.mdaiCR = mdaiCR
 
 	opResult, err = adapter.ensureAutomationsSynchronized(ctx)

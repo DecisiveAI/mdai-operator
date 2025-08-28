@@ -17,7 +17,7 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 # Update this version to match new release tag and run helm targets
-VERSION = 0.1.23
+VERSION = 0.2.0
 # Image URL to use all building/pushing image targets
 IMG ?= public.ecr.aws/p3k6k6h3/mdai-operator:${VERSION}
 
@@ -205,7 +205,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.17.2
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
-GOLANGCI_LINT_VERSION ?= v2.1.6
+GOLANGCI_LINT_VERSION ?= v2.4.0
 HELMIFY_VERSION ?= v0.4.17
 HELM_DOCS_VERSION ?= v1.14.2
 YQ_VERSION ?= v4.45.4
@@ -287,13 +287,14 @@ endef
 
 .PHONY: local-deploy
 local-deploy: manifests install
+	go mod tidy
 	go mod vendor
 	make manifests
 	make generate
 	make lint
 	make helm-update
 	make docker-build IMG=mdai-operator:${VERSION}
-	kind load docker-image mdai-operator:${VERSION} --name mdai-operator-test
+	kind load docker-image mdai-operator:${VERSION} --name mdai
 	make deploy IMG=mdai-operator:${VERSION}
 	kubectl rollout restart deployment mdai-operator-controller-manager -n mdai
 
