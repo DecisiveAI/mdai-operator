@@ -4,8 +4,13 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
-	"go.uber.org/zap"
+	"github.com/decisiveai/mdai-operator/internal/manifests"
+	"github.com/decisiveai/mdai-operator/internal/manifests/collector"
+	"github.com/go-logr/logr"
+	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -21,12 +26,16 @@ import (
 	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
 
+const resourceOwnerKey = ".metadata.owner"
+
 // MdaiIngressReconciler reconciles a MdaiIngress object
 type MdaiIngressReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	Cache     cache.Cache
-	ZapLogger *zap.Logger
+	Scheme *runtime.Scheme
+	Cache  cache.Cache
+	// TODO: should be Zap logger
+	//ZapLogger *zap.Logger
+	Logger logr.Logger
 }
 
 //+kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaiingresses,verbs=get;list;watch;create;update;patch;delete
@@ -36,6 +45,56 @@ type MdaiIngressReconciler struct {
 func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logger.FromContext(ctx)
 	log.Info("-- Starting MDAI Ingress reconciliation --", "name", req.Name)
+
+	var instanceOtel v1beta1.OpenTelemetryCollector
+	if err := r.Get(ctx, req.NamespacedName, &instanceOtel); err != nil {
+		if !apierrors.IsNotFound(err) {
+			log.Error(err, "unable to fetch OpenTelemetryCollector")
+		}
+
+		// we'll ignore not-found errors, since they can't be fixed by an immediate
+		// requeue (we'll need to wait for a new notification), and we can get them
+		// on deleted requests.
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+	var instanceMdaiIngress hubv1.MdaiIngress
+	if err := r.Get(ctx, req.NamespacedName, &instanceMdaiIngress); err != nil {
+		if !apierrors.IsNotFound(err) {
+			log.Error(err, "unable to fetch MdaiIngress")
+		}
+
+		// we'll ignore not-found errors, since they can't be fixed by an immediate
+		// requeue (we'll need to wait for a new notification), and we can get them
+		// on deleted requests.
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	OtelMdaiComb := hubv1.NewOtelIngressConfig(instanceOtel, instanceMdaiIngress)
+
+	params, err := r.GetParams(ctx, *OtelMdaiComb)
+	if err != nil {
+		log.Error(err, "Failed to create manifest.Params")
+		return ctrl.Result{}, err
+	}
+
+	desiredObjects, buildErr := BuildCollector(params)
+	if buildErr != nil {
+		return ctrl.Result{}, buildErr
+	}
+
+	// TODO: delete
+	for _, obj := range desiredObjects {
+		log.Info("Desired object", "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
+	}
+
+	ownedObjects, err := r.findMdaiIngressOwnedObjects(ctx, params)
+	// TODO: delete
+	for _, obj := range ownedObjects {
+		log.Info("Owned object", "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
+	}
+	//if err != nil {
+	//	return ctrl.Result{}, err
+	//}
 
 	return ctrl.Result{}, nil
 }
@@ -101,7 +160,7 @@ func (r *MdaiIngressReconciler) requeueByCollectorRef(ctx context.Context, obj c
 	}
 }
 
-// pairOtelcolMdaiIngressExist checks if there exists a MdaiIngress with the same name and namespace as the provided OpentelemetryCollector
+// pairOtelcolMdaiIngressExist checks if there is a MdaiIngress with the same name and namespace as the provided OpentelemetryCollector
 // TODO: change mdaiingress -> otelcol mapping logic? Labels?
 func (r *MdaiIngressReconciler) pairOtelcolMdaiIngressExist(ctx context.Context, name string, namespace string) bool {
 	log := logger.FromContext(ctx)
@@ -120,4 +179,62 @@ func (r *MdaiIngressReconciler) pairOtelcolMdaiIngressExist(ctx context.Context,
 	}
 
 	return true
+}
+
+// BuildCollector returns the generation and collected errors of all manifests for a given instance.
+func BuildCollector(params manifests.Params) ([]client.Object, error) {
+	mBuilders := []manifests.Builder[manifests.Params]{
+		collector.Build,
+	}
+	var resources []client.Object
+	for _, mBuilder := range mBuilders {
+		objs, err := mBuilder(params)
+		if err != nil {
+			return nil, err
+		}
+		resources = append(resources, objs...)
+	}
+	return resources, nil
+}
+
+func (r *MdaiIngressReconciler) GetParams(ctx context.Context, otelMdaiComb hubv1.OtelMdaiIngressComb) (manifests.Params, error) {
+	p := manifests.Params{
+		Client:              r.Client,
+		OtelMdaiIngressComb: otelMdaiComb,
+		Log:                 r.Logger,
+		Scheme:              r.Scheme,
+	}
+
+	return p, nil
+}
+
+func (r *MdaiIngressReconciler) findMdaiIngressOwnedObjects(ctx context.Context, params manifests.Params) (map[types.UID]client.Object, error) {
+	ownedObjects := map[types.UID]client.Object{}
+	ownedObjectTypes := r.GetOwnedResourceTypes()
+	listOpts := []client.ListOption{
+		client.InNamespace(params.OtelMdaiIngressComb.Otelcol.Namespace),
+		client.MatchingFields{resourceOwnerKey: params.OtelMdaiIngressComb.Otelcol.Name},
+	}
+	for _, objectType := range ownedObjectTypes {
+		objs, err := getList(ctx, r.Client, objectType, listOpts...)
+		if err != nil {
+			return nil, err
+		}
+		for uid, object := range objs {
+			ownedObjects[uid] = object
+		}
+	}
+
+	return ownedObjects, nil
+}
+
+// GetOwnedResourceTypes returns all the resource types the controller can own. Even though this method returns an array
+// of client.Object, these are (empty) example structs rather than actual resources.
+func (r *MdaiIngressReconciler) GetOwnedResourceTypes() []client.Object {
+	ownedResources := []client.Object{
+		&corev1.Service{},
+		&networkingv1.Ingress{},
+	}
+
+	return ownedResources
 }

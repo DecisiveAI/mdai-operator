@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/go-logr/zapr"
+	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

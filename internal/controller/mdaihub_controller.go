@@ -11,8 +11,8 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
 	"github.com/go-logr/logr"
+	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	"github.com/valkey-io/valkey-go"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
