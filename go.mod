@@ -5,8 +5,8 @@ go 1.24.0
 godebug default=go1.24
 
 require (
-	github.com/cenkalti/backoff/v5 v5.0.2
-	github.com/decisiveai/mdai-data-core v0.2.1
+	github.com/cenkalti/backoff/v5 v5.0.3
+	github.com/decisiveai/mdai-data-core v0.2.2
 	github.com/decisiveai/opentelemetry-operator v0.113.0
 	github.com/go-logr/logr v1.4.2
 	github.com/go-logr/zapr v1.3.0
@@ -15,16 +15,16 @@ require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.79.2
 	github.com/prometheus/prometheus v0.55.0
 	github.com/samber/lo v1.51.0
-	github.com/stretchr/testify v1.10.0
-	github.com/valkey-io/valkey-go v1.0.57
-	github.com/valkey-io/valkey-go/mock v1.0.57
+	github.com/stretchr/testify v1.11.1
+	github.com/valkey-io/valkey-go v1.0.62
+	github.com/valkey-io/valkey-go/mock v1.0.62
 	go.opentelemetry.io/contrib/bridges/otellogr v0.10.0
 	go.opentelemetry.io/otel v1.35.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.11.0
 	go.opentelemetry.io/otel/log v0.11.0
 	go.opentelemetry.io/otel/sdk v1.35.0
 	go.opentelemetry.io/otel/sdk/log v0.11.0
-	go.uber.org/mock v0.5.0
+	go.uber.org/mock v0.5.2
 	go.uber.org/zap v1.27.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.33.2
@@ -85,7 +85,7 @@ require (
 	github.com/shurcooL/httpfs v0.0.0-20230704072500-f1e31cf0ba5c // indirect
 	github.com/shurcooL/vfsgen v0.0.0-20230704071429-0000e147ea92 // indirect
 	github.com/spf13/cobra v1.8.1 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/stoewer/go-strcase v1.3.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
@@ -101,14 +101,14 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0 // indirect
-	golang.org/x/net v0.41.0 // indirect
+	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sync v0.15.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
-	golang.org/x/term v0.32.0 // indirect
-	golang.org/x/text v0.26.0 // indirect
-	golang.org/x/time v0.9.0 // indirect
-	golang.org/x/tools v0.33.0 // indirect
+	golang.org/x/sync v0.16.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
+	golang.org/x/term v0.34.0 // indirect
+	golang.org/x/text v0.28.0 // indirect
+	golang.org/x/time v0.12.0 // indirect
+	golang.org/x/tools v0.35.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250218202821-56aae31c358a // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250218202821-56aae31c358a // indirect
