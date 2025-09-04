@@ -26,7 +26,7 @@ import (
 	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
 
-const resourceOwnerKey = ".metadata.owner"
+const resourceOwnerKey = "metadata.ownerReferences.name"
 
 // MdaiIngressReconciler reconciles a MdaiIngress object
 type MdaiIngressReconciler struct {
@@ -82,20 +82,14 @@ func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, buildErr
 	}
 
-	// TODO: delete
-	for _, obj := range desiredObjects {
-		log.Info("Desired object", "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
-	}
-
 	ownedObjects, err := r.findMdaiIngressOwnedObjects(ctx, params)
-	// TODO: delete
-	for _, obj := range ownedObjects {
-		log.Info("Owned object", "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
-	}
-	//if err != nil {
-	//	return ctrl.Result{}, err
-	//}
 
+	err = reconcileDesiredObjects(ctx, r.Client, log, &instanceMdaiIngress, params.Scheme, desiredObjects, ownedObjects)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	log.Info("-- Finished MDAI Ingress reconciliation --", "name", req.Name)
 	return ctrl.Result{}, nil
 }
 
@@ -213,7 +207,7 @@ func (r *MdaiIngressReconciler) findMdaiIngressOwnedObjects(ctx context.Context,
 	ownedObjectTypes := r.GetOwnedResourceTypes()
 	listOpts := []client.ListOption{
 		client.InNamespace(params.OtelMdaiIngressComb.Otelcol.Namespace),
-		client.MatchingFields{resourceOwnerKey: params.OtelMdaiIngressComb.Otelcol.Name},
+		client.MatchingFields{resourceOwnerKey: params.OtelMdaiIngressComb.MdaiIngress.Name},
 	}
 	for _, objectType := range ownedObjectTypes {
 		objs, err := getList(ctx, r.Client, objectType, listOpts...)

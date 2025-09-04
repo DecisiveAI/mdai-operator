@@ -19,8 +19,10 @@ func IngressAws(params manifests.Params) (*networkingv1.Ingress, error) {
 	name := naming.Ingress(params.OtelMdaiIngressComb.Otelcol.Name)
 	// TODO: rework labels & annotations
 	labels := params.OtelMdaiIngressComb.MdaiIngress.Labels
-	annotations := params.OtelMdaiIngressComb.Otelcol.Annotations
-	ingressAnnotations := params.OtelMdaiIngressComb.MdaiIngress.Annotations
+
+	var annotations map[string]string
+	annotations = maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
+	ingressAnnotations := params.OtelMdaiIngressComb.MdaiIngress.Spec.Annotations
 	maps.Copy(annotations, ingressAnnotations)
 
 	var rules []networkingv1.IngressRule

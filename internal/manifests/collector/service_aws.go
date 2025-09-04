@@ -23,13 +23,10 @@ func GrpcService(params manifests.Params) (*corev1.Service, error) {
 	name := naming.GrpcService(params.OtelMdaiIngressComb.Otelcol.Name)
 	labels := manifestutils.Labels(params.OtelMdaiIngressComb.Otelcol.ObjectMeta, name, params.OtelMdaiIngressComb.Otelcol.Spec.Image, ComponentOpenTelemetryCollector, []string{})
 
-	//annotations, err := manifestutils.Annotations(params.OtelMdaiIngressComb.Otelcol, []string{})
-	annotations := params.OtelMdaiIngressComb.Otelcol.Annotations
-
-	//ingressAnnotations, err := manifestutils.GrpcServiceAnnotations(params.OtelMdaiIngressComb.Otelcol, []string{})
-	ingressAnnotations := params.OtelMdaiIngressComb.Otelcol.Annotations
-
-	maps.Copy(annotations, ingressAnnotations)
+	var annotations map[string]string
+	annotations = maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
+	serviceAnnotations := params.OtelMdaiIngressComb.MdaiIngress.Spec.GrpcService.Annotations
+	maps.Copy(annotations, serviceAnnotations)
 
 	ports, err := servicePortsFromCfg(params.Log, params.OtelMdaiIngressComb.Otelcol)
 	if err != nil {
@@ -103,17 +100,21 @@ func NonGrpcService(params manifests.Params) (*corev1.Service, error) {
 	name := naming.NonGrpcService(params.OtelMdaiIngressComb.Otelcol.Name)
 	labels := manifestutils.Labels(params.OtelMdaiIngressComb.Otelcol.ObjectMeta, name, params.OtelMdaiIngressComb.Otelcol.Spec.Image, ComponentOpenTelemetryCollector, []string{})
 
-	annotations, err := manifestutils.Annotations(params.OtelMdaiIngressComb.Otelcol, []string{})
-	if err != nil {
-		return nil, err
-	}
+	//annotations, err := manifestutils.Annotations(params.OtelMdaiIngressComb.Otelcol, []string{})
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//ingressAnnotations, err := manifestutils.NonGrpcServiceAnnotations(params.OtelMdaiIngressComb, []string{})
+	//if err != nil {
+	//	return nil, err
+	//}
 
-	ingressAnnotations, err := manifestutils.NonGrpcServiceAnnotations(params.OtelMdaiIngressComb, []string{})
-	if err != nil {
-		return nil, err
-	}
+	var annotations map[string]string
+	annotations = maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
+	serviceAnnotations := params.OtelMdaiIngressComb.MdaiIngress.Spec.NonGrpcService.Annotations
 
-	maps.Copy(annotations, ingressAnnotations)
+	maps.Copy(annotations, serviceAnnotations)
 
 	ports, err := params.OtelMdaiIngressComb.Otelcol.Spec.Config.GetAllPorts(params.Log)
 	if err != nil {
