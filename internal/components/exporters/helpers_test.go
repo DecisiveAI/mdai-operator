@@ -6,8 +6,8 @@ package exporters
 import (
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 
 	"github.com/decisiveai/mdai-operator/internal/components"
 	"github.com/decisiveai/mdai-operator/internal/naming"
@@ -18,7 +18,7 @@ func TestParserForReturns(t *testing.T) {
 	parser := ParserFor(testComponentName)
 	assert.Equal(t, "test", parser.ParserType())
 	assert.Equal(t, "__test", parser.ParserName())
-	ports, err := parser.Ports(logr.Discard(), testComponentName, map[string]interface{}{
+	ports, err := parser.Ports(zap.NewNop(), testComponentName, map[string]interface{}{
 		"endpoint": "localhost:9000",
 	})
 	assert.NoError(t, err)
@@ -31,7 +31,7 @@ func TestCanRegister(t *testing.T) {
 	parser := ParserFor(testComponentName)
 	assert.Equal(t, "test", parser.ParserType())
 	assert.Equal(t, "__test", parser.ParserName())
-	ports, err := parser.Ports(logr.Discard(), testComponentName, map[string]interface{}{})
+	ports, err := parser.Ports(zap.NewNop(), testComponentName, map[string]interface{}{})
 	assert.NoError(t, err)
 	assert.Len(t, ports, 1)
 	assert.Equal(t, ports[0].Port, int32(9000))
@@ -55,7 +55,7 @@ func TestExporterComponentParsers(t *testing.T) {
 				parser := ParserFor(tt.exporterName)
 
 				// test throwing in pure junk
-				_, err := parser.Ports(logr.Discard(), tt.exporterName, func() {})
+				_, err := parser.Ports(zap.NewNop(), tt.exporterName, func() {})
 
 				// verify
 				assert.ErrorContains(t, err, "expected a map, got ")
@@ -66,7 +66,7 @@ func TestExporterComponentParsers(t *testing.T) {
 				parser := ParserFor(tt.exporterName)
 
 				// test
-				ports, err := parser.Ports(logr.Discard(), tt.exporterName, map[string]interface{}{})
+				ports, err := parser.Ports(zap.NewNop(), tt.exporterName, map[string]interface{}{})
 
 				if tt.defaultPort == 0 {
 					assert.Len(t, ports, 0)
@@ -84,7 +84,7 @@ func TestExporterComponentParsers(t *testing.T) {
 				parser := ParserFor(tt.exporterName)
 
 				// test
-				ports, err := parser.Ports(logr.Discard(), tt.exporterName, map[string]interface{}{
+				ports, err := parser.Ports(zap.NewNop(), tt.exporterName, map[string]interface{}{
 					"endpoint": "0.0.0.0:65535",
 				})
 
