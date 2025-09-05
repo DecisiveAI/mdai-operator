@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -739,8 +740,20 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorService(ctx context.Con
 			WithLabel("app", appName).
 			WithLabel(hubNameLabel, c.collectorCR.Name).
 			WithSelectorLabel("app", appName).
-			WithPort("otlp-grpc", corev1.ProtocolTCP, otlpGRPCPort, "otlp-grpc").
-			WithPort("otlp-http", corev1.ProtocolTCP, otlpHTTPPort, "otlp-http").
+			WithPorts(
+				corev1.ServicePort{
+					Port:       otlpGRPCPort,
+					Name:       "otlp-grpc",
+					TargetPort: intstr.FromString("otlp-grpc"),
+					Protocol:   corev1.ProtocolTCP,
+				},
+				corev1.ServicePort{
+					Port:       otlpHTTPPort,
+					Name:       "otlp-http",
+					TargetPort: intstr.FromString("otlp-http"),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			).
 			WithType(corev1.ServiceTypeClusterIP)
 
 		return nil
