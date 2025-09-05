@@ -4,7 +4,7 @@
 package receivers
 
 import (
-	"github.com/go-logr/logr"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 )
@@ -32,7 +32,7 @@ type kubeletStatsConfig struct {
 	AuthType            string   `mapstructure:"auth_type"`
 }
 
-func generateKubeletStatsEnvVars(_ logr.Logger, config kubeletStatsConfig) ([]corev1.EnvVar, error) {
+func generateKubeletStatsEnvVars(_ *zap.Logger, config kubeletStatsConfig) ([]corev1.EnvVar, error) {
 	// The documentation mentions that the K8S_NODE_NAME environment variable is required when using the serviceAccount auth type.
 	// Also, it mentions that it is a good idea to use it for the Read Only Endpoint. Added always to make it easier for users.
 	// https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/receiver/kubeletstatsreceiver/README.md
@@ -41,7 +41,7 @@ func generateKubeletStatsEnvVars(_ logr.Logger, config kubeletStatsConfig) ([]co
 	}, nil
 }
 
-func generateKubeletStatsRbacRules(_ logr.Logger, config kubeletStatsConfig) ([]rbacv1.PolicyRule, error) {
+func generateKubeletStatsRbacRules(_ *zap.Logger, config kubeletStatsConfig) ([]rbacv1.PolicyRule, error) {
 	// The Kubelet Stats Receiver needs the get permissions on the nodes/stats resources always.
 	prs := []rbacv1.PolicyRule{
 		{

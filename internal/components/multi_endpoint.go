@@ -6,8 +6,9 @@ package components
 import (
 	"fmt"
 
-	"github.com/go-logr/logr"
+	//"github.com/go-logr/logr"
 	"github.com/mitchellh/mapstructure"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 
@@ -35,7 +36,7 @@ type MultiPortReceiver struct {
 	urlPathsMapping map[string]*[]string
 }
 
-func (m *MultiPortReceiver) Ports(logger logr.Logger, name string, config interface{}) ([]corev1.ServicePort, error) {
+func (m *MultiPortReceiver) Ports(logger *zap.Logger, name string, config interface{}) ([]corev1.ServicePort, error) {
 	multiProtoEndpointCfg := &MultiProtocolEndpointConfig{}
 	if err := mapstructure.Decode(config, multiProtoEndpointCfg); err != nil {
 		return nil, err
@@ -64,7 +65,7 @@ func (m *MultiPortReceiver) ParserName() string {
 	return fmt.Sprintf("__%s", m.name)
 }
 
-func (m *MultiPortReceiver) GetDefaultConfig(logger logr.Logger, config interface{}) (interface{}, error) {
+func (m *MultiPortReceiver) GetDefaultConfig(logger *zap.Logger, config interface{}) (interface{}, error) {
 	multiProtoEndpointCfg := &MultiProtocolEndpointConfig{}
 	if err := mapstructure.Decode(config, multiProtoEndpointCfg); err != nil {
 		return nil, err
@@ -94,19 +95,19 @@ func (m *MultiPortReceiver) GetDefaultConfig(logger logr.Logger, config interfac
 	}, nil
 }
 
-func (m *MultiPortReceiver) GetLivenessProbe(logger logr.Logger, config interface{}) (*corev1.Probe, error) {
+func (m *MultiPortReceiver) GetLivenessProbe(logger *zap.Logger, config interface{}) (*corev1.Probe, error) {
 	return nil, nil
 }
 
-func (m *MultiPortReceiver) GetReadinessProbe(logger logr.Logger, config interface{}) (*corev1.Probe, error) {
+func (m *MultiPortReceiver) GetReadinessProbe(logger *zap.Logger, config interface{}) (*corev1.Probe, error) {
 	return nil, nil
 }
 
-func (m *MultiPortReceiver) GetRBACRules(logr.Logger, interface{}) ([]rbacv1.PolicyRule, error) {
+func (m *MultiPortReceiver) GetRBACRules(*zap.Logger, interface{}) ([]rbacv1.PolicyRule, error) {
 	return nil, nil
 }
 
-func (m *MultiPortReceiver) GetEnvironmentVariables(logger logr.Logger, config interface{}) ([]corev1.EnvVar, error) {
+func (m *MultiPortReceiver) GetEnvironmentVariables(logger *zap.Logger, config interface{}) ([]corev1.EnvVar, error) {
 	return nil, nil
 }
 
@@ -159,7 +160,7 @@ func (mp MultiPortBuilder[ComponentConfigType]) MustBuild() *MultiPortReceiver {
 	}
 }
 
-func (m *MultiPortReceiver) PortsWithUrlPaths(logger logr.Logger, name string, config interface{}) ([]PortUrlPaths, error) {
+func (m *MultiPortReceiver) PortsWithUrlPaths(logger *zap.Logger, name string, config interface{}) ([]PortUrlPaths, error) {
 	multiProtoEndpointCfg := &MultiProtocolEndpointConfig{}
 	if err := mapstructure.Decode(config, multiProtoEndpointCfg); err != nil {
 		return []PortUrlPaths{}, nil

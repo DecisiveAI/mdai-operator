@@ -7,7 +7,9 @@ import (
 	"github.com/decisiveai/mdai-operator/internal/manifests"
 	"github.com/decisiveai/mdai-operator/internal/manifests/manifestutils"
 	"github.com/decisiveai/mdai-operator/internal/naming"
+	"github.com/go-logr/zapr"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -59,7 +61,10 @@ func GrpcService(params manifests.Params) (*corev1.Service, error) {
 
 	// if we have no ports, we don't need a service
 	if len(ports) == 0 {
-		params.Log.V(1).Info("the instance's configuration didn't yield any ports to open, skipping service", "instance.name", params.OtelMdaiIngressComb.Otelcol.Name, "instance.namespace", params.OtelMdaiIngressComb.Otelcol.Namespace)
+		params.Log.Info("the instance's configuration didn't yield any ports to open, skipping service",
+			zap.String("instance.name", params.OtelMdaiIngressComb.Otelcol.Name),
+			zap.String("instance.namespace", params.OtelMdaiIngressComb.Otelcol.Namespace),
+		)
 		return nil, err
 	}
 
@@ -92,6 +97,8 @@ func GrpcService(params manifests.Params) (*corev1.Service, error) {
 }
 
 func NonGrpcService(params manifests.Params) (*corev1.Service, error) {
+
+	logrLogger := zapr.NewLogger(params.Log)
 	// we need this service for aws only
 	if !(params.OtelMdaiIngressComb.Otelcol.Spec.Ingress.Type == "" && params.OtelMdaiIngressComb.MdaiIngress.Spec.CloudType == hubv1.CloudProviderAws) {
 		return nil, nil
@@ -116,7 +123,7 @@ func NonGrpcService(params manifests.Params) (*corev1.Service, error) {
 
 	maps.Copy(annotations, serviceAnnotations)
 
-	ports, err := params.OtelMdaiIngressComb.Otelcol.Spec.Config.GetAllPorts(params.Log)
+	ports, err := params.OtelMdaiIngressComb.Otelcol.Spec.Config.GetAllPorts(logrLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +155,10 @@ func NonGrpcService(params manifests.Params) (*corev1.Service, error) {
 
 	// if we have no ports, we don't need a service
 	if len(ports) == 0 {
-		params.Log.V(1).Info("the instance's configuration didn't yield any ports to open, skipping service", "instance.name", params.OtelMdaiIngressComb.Otelcol.Name, "instance.namespace", params.OtelMdaiIngressComb.Otelcol.Namespace)
+		params.Log.Info("the instance's configuration didn't yield any ports to open, skipping service",
+			zap.String("instance.name", params.OtelMdaiIngressComb.Otelcol.Name),
+			zap.String("instance.namespace", params.OtelMdaiIngressComb.Otelcol.Namespace),
+		)
 		return nil, err
 	}
 

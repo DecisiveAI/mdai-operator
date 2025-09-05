@@ -9,8 +9,8 @@ import (
 	"github.com/decisiveai/mdai-operator/internal/components"
 	"github.com/decisiveai/mdai-operator/internal/manifests"
 	"github.com/decisiveai/mdai-operator/internal/naming"
-	"github.com/go-logr/logr"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
+	"go.uber.org/zap"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -28,10 +28,10 @@ func IngressAws(params manifests.Params) (*networkingv1.Ingress, error) {
 	var rules []networkingv1.IngressRule
 	compPortsEndpoints, err := servicePortsUrlPathsFromCfg(params)
 	if len(compPortsEndpoints) == 0 || err != nil {
-		params.Log.V(1).Info(
+		params.Log.Info(
 			"the instance's configuration didn't yield any ports to open, skipping ingress",
-			"instance.name", params.OtelMdaiIngressComb.Otelcol.Name,
-			"instance.namespace", params.OtelMdaiIngressComb.Otelcol.Namespace,
+			zap.String("instance.name", params.OtelMdaiIngressComb.Otelcol.Name),
+			zap.String("instance.namespace", params.OtelMdaiIngressComb.Otelcol.Namespace),
 		)
 		return nil, err
 	}
@@ -52,10 +52,10 @@ func IngressAws(params manifests.Params) (*networkingv1.Ingress, error) {
 	}
 	// if we have no grpc ports, we don't need an ingress entry
 	if len(compPortsEndpoints) == 0 {
-		params.Log.V(1).Info(
+		params.Log.Info(
 			"the instance's configuration didn't yield any grpc ports to open, skipping ingress",
-			"instance.name", params.OtelMdaiIngressComb.Otelcol.Name,
-			"instance.namespace", params.OtelMdaiIngressComb.Otelcol.Namespace,
+			zap.String("instance.name", params.OtelMdaiIngressComb.Otelcol.Name),
+			zap.String("instance.namespace", params.OtelMdaiIngressComb.Otelcol.Namespace),
 		)
 		return nil, nil
 	}
@@ -68,17 +68,17 @@ func IngressAws(params manifests.Params) (*networkingv1.Ingress, error) {
 			rules = createPathIngressRulesUrlPaths(params.Log, params.OtelMdaiIngressComb.Otelcol.Name, params.OtelMdaiIngressComb.MdaiIngress.Spec.CollectorEndpoints, compPortsEndpoints)
 		}
 	case v1beta1.IngressRuleTypeSubdomain:
-		params.Log.V(1).Info("Only  IngressRuleType = \"path\" is supported for AWS",
-			"ingress.type", hubv1.CloudProviderAws,
-			"ingress.ruleType", v1beta1.IngressRuleTypeSubdomain,
+		params.Log.Info("Only  IngressRuleType = \"path\" is supported for AWS",
+			zap.String("ingress.type", string(hubv1.CloudProviderAws)),
+			zap.String("ingress.ruleType", string(v1beta1.IngressRuleTypeSubdomain)),
 		)
 		return nil, err
 	}
 	if rules == nil || len(rules) == 0 {
-		params.Log.V(1).Info(
+		params.Log.Info(
 			"could not configure any ingress rules for the instance's configuration, skipping ingress",
-			"instance.name", params.OtelMdaiIngressComb.Otelcol.Name,
-			"instance.namespace", params.OtelMdaiIngressComb.Otelcol.Namespace,
+			zap.String("instance.name", params.OtelMdaiIngressComb.Otelcol.Name),
+			zap.String("instance.namespace", params.OtelMdaiIngressComb.Otelcol.Namespace),
 		)
 		return nil, nil
 	}
@@ -103,7 +103,7 @@ func IngressAws(params manifests.Params) (*networkingv1.Ingress, error) {
 }
 
 // mydecisive.
-func createPathIngressRulesUrlPaths(logger logr.Logger, otelcol string, colEndpoints map[string]string, compPortsUrlPaths components.ComponentsPortsUrlPaths) []networkingv1.IngressRule {
+func createPathIngressRulesUrlPaths(logger *zap.Logger, otelcol string, colEndpoints map[string]string, compPortsUrlPaths components.ComponentsPortsUrlPaths) []networkingv1.IngressRule {
 	pathType := networkingv1.PathTypePrefix
 	var ingressRules []networkingv1.IngressRule
 	for comp, portsUrlPaths := range compPortsUrlPaths {
@@ -142,7 +142,7 @@ func createPathIngressRulesUrlPaths(logger logr.Logger, otelcol string, colEndpo
 				ingressRules = append(ingressRules, ingressRule)
 			} else {
 				err := errors.New("missing or invalid mapping")
-				logger.V(1).Error(err, "missing or invalid mapping for", "component", comp)
+				logger.Error("missing or invalid mapping for", zap.String("component", comp), zap.Error(err))
 				continue
 			}
 		}
@@ -155,7 +155,7 @@ func servicePortsUrlPathsFromCfg(params manifests.Params) (components.Components
 	logger := params.Log
 	portsUrlPaths, err := params.OtelMdaiIngressComb.GetReceiverPortsWithUrlPaths(logger)
 	if err != nil {
-		logger.Error(err, "couldn't build the ingress for this instance")
+		logger.Error("couldn't build the ingress for this instance", zap.Error(err))
 		return nil, err
 	}
 	return portsUrlPaths, nil

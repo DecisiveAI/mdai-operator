@@ -4,8 +4,8 @@ import (
 	"github.com/decisiveai/mdai-operator/internal/components"
 	"github.com/decisiveai/mdai-operator/internal/components/exporters"
 	"github.com/decisiveai/mdai-operator/internal/components/receivers"
-	"github.com/go-logr/logr"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
+	"go.uber.org/zap"
 )
 
 // Config encapsulates collector & ingress config.
@@ -22,12 +22,12 @@ func NewOtelIngressConfig(otelcolConfig v1beta1.OpenTelemetryCollector, ingressC
 }
 
 // mydecisive
-func (c *OtelMdaiIngressComb) GetReceiverPortsWithUrlPaths(logger logr.Logger) (components.ComponentsPortsUrlPaths, error) {
+func (c *OtelMdaiIngressComb) GetReceiverPortsWithUrlPaths(logger *zap.Logger) (components.ComponentsPortsUrlPaths, error) {
 	return c.getPortsWithUrlPathsForComponentKinds(logger, v1beta1.KindReceiver)
 }
 
 // mydecisive
-func (c *OtelMdaiIngressComb) getPortsWithUrlPathsForComponentKinds(logger logr.Logger, componentKinds ...v1beta1.ComponentKind) (components.ComponentsPortsUrlPaths, error) {
+func (c *OtelMdaiIngressComb) getPortsWithUrlPathsForComponentKinds(logger *zap.Logger, componentKinds ...v1beta1.ComponentKind) (components.ComponentsPortsUrlPaths, error) {
 	componentsPortsUrlPaths := components.ComponentsPortsUrlPaths{}
 	enabledComponents := c.Otelcol.Spec.Config.GetEnabledComponents()
 	for _, componentKind := range componentKinds {

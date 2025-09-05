@@ -4,7 +4,7 @@
 package receivers
 
 import (
-	"github.com/go-logr/logr"
+	"go.uber.org/zap"
 	rbacv1 "k8s.io/api/rbac/v1"
 )
 
@@ -12,7 +12,7 @@ type k8sclusterConfig struct {
 	Distribution string `mapstructure:"distribution"`
 }
 
-func generatek8sclusterRbacRules(_ logr.Logger, cfg k8sclusterConfig) ([]rbacv1.PolicyRule, error) {
+func generatek8sclusterRbacRules(_ *zap.Logger, cfg k8sclusterConfig) ([]rbacv1.PolicyRule, error) {
 	policyRules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},

@@ -285,6 +285,17 @@ func main() {
 		gracefullyShutdownWithCode(1)
 	}
 
+	if err := (&controller.MdaiIngressReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Cache:  mgr.GetCache(),
+		Logger: zapLogger,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MdaiIngress")
+		os.Exit(1)
+	}
+	// +kubebuilder:scaffold:builder
+
 	// nolint:goconst
 	if os.Getenv(enableWebhooksEnvVar) != "false" {
 		if err = webhookmdaiv1.SetupMdaiHubWebhookWithManager(mgr); err != nil {
@@ -300,16 +311,6 @@ func main() {
 			gracefullyShutdownWithCode(1)
 		}
 	}
-
-	if err := (&controller.MdaiIngressReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Cache:  mgr.GetCache(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MdaiIngress")
-		os.Exit(1)
-	}
-	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {
 		setupLog.Info("Adding metrics certificate watcher to manager")

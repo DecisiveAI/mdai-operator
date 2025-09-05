@@ -6,8 +6,8 @@ import (
 
 	"github.com/decisiveai/mdai-operator/internal/manifests"
 	"github.com/decisiveai/mdai-operator/internal/manifests/collector"
-	"github.com/go-logr/logr"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -33,9 +33,7 @@ type MdaiIngressReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 	Cache  cache.Cache
-	// TODO: should be Zap logger
-	//ZapLogger *zap.Logger
-	Logger logr.Logger
+	Logger *zap.Logger
 }
 
 //+kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaiingresses,verbs=get;list;watch;create;update;patch;delete
@@ -47,7 +45,7 @@ func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	log.Info("-- Starting MDAI Ingress reconciliation --", "name", req.Name)
 
 	var instanceOtel v1beta1.OpenTelemetryCollector
-	if err := r.Get(ctx, req.NamespacedName, &instanceOtel); err != nil {
+	if err := r.Cache.Get(ctx, req.NamespacedName, &instanceOtel); err != nil {
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "unable to fetch OpenTelemetryCollector")
 		}
@@ -58,7 +56,7 @@ func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	var instanceMdaiIngress hubv1.MdaiIngress
-	if err := r.Get(ctx, req.NamespacedName, &instanceMdaiIngress); err != nil {
+	if err := r.Cache.Get(ctx, req.NamespacedName, &instanceMdaiIngress); err != nil {
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "unable to fetch MdaiIngress")
 		}

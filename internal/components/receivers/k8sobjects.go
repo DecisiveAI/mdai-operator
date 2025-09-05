@@ -4,7 +4,7 @@
 package receivers
 
 import (
-	"github.com/go-logr/logr"
+	"go.uber.org/zap"
 	rbacv1 "k8s.io/api/rbac/v1"
 )
 
@@ -18,7 +18,7 @@ type k8sObject struct {
 	Group string `yaml:"group,omitempty"`
 }
 
-func generatek8sobjectsRbacRules(_ logr.Logger, config k8sobjectsConfig) ([]rbacv1.PolicyRule, error) {
+func generatek8sobjectsRbacRules(_ *zap.Logger, config k8sobjectsConfig) ([]rbacv1.PolicyRule, error) {
 	// https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/k8sobjectsreceiver#rbac
 	prs := []rbacv1.PolicyRule{}
 	for _, obj := range config.Objects {

@@ -4,7 +4,8 @@
 package collector
 
 import (
-	"github.com/go-logr/logr"
+	"github.com/go-logr/zapr"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 
@@ -27,10 +28,11 @@ func Ingress(params manifests.Params) (*networkingv1.Ingress, error) {
 
 }
 
-func servicePortsFromCfg(logger logr.Logger, otelcol v1beta1.OpenTelemetryCollector) ([]corev1.ServicePort, error) {
-	ports, err := otelcol.Spec.Config.GetReceiverPorts(logger)
+func servicePortsFromCfg(logger *zap.Logger, otelcol v1beta1.OpenTelemetryCollector) ([]corev1.ServicePort, error) {
+	logrLogger := zapr.NewLogger(logger)
+	ports, err := otelcol.Spec.Config.GetReceiverPorts(logrLogger)
 	if err != nil {
-		logger.Error(err, "couldn't build the ingress for this instance")
+		logger.Error("couldn't build the ingress for this instance", zap.Error(err))
 		return nil, err
 	}
 

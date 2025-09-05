@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-logr/logr"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -24,7 +24,7 @@ var (
 
 type PortRetriever interface {
 	GetPortNum() (int32, error)
-	GetPortNumOrDefault(logr.Logger, int32) int32
+	GetPortNumOrDefault(*zap.Logger, int32) int32
 }
 
 // PortUrlPaths represents a service port and a list of URL paths
@@ -37,23 +37,23 @@ type PortUrlPaths struct {
 type ComponentsPortsUrlPaths map[string][]PortUrlPaths
 
 // PortParser is a function that returns a list of servicePorts given a config of type Config.
-type PortParser[ComponentConfigType any] func(logger logr.Logger, name string, defaultPort *corev1.ServicePort, config ComponentConfigType) ([]corev1.ServicePort, error)
+type PortParser[ComponentConfigType any] func(logger *zap.Logger, name string, defaultPort *corev1.ServicePort, config ComponentConfigType) ([]corev1.ServicePort, error)
 
 // RBACRuleGenerator is a function that generates a list of RBAC Rules given a configuration of type Config
 // It's expected that type Config is the configuration used by a parser.
-type RBACRuleGenerator[ComponentConfigType any] func(logger logr.Logger, config ComponentConfigType) ([]rbacv1.PolicyRule, error)
+type RBACRuleGenerator[ComponentConfigType any] func(logger *zap.Logger, config ComponentConfigType) ([]rbacv1.PolicyRule, error)
 
 // ProbeGenerator is a function that generates a valid probe for a container given Config
 // It's expected that type Config is the configuration used by a parser.
-type ProbeGenerator[ComponentConfigType any] func(logger logr.Logger, config ComponentConfigType) (*corev1.Probe, error)
+type ProbeGenerator[ComponentConfigType any] func(logger *zap.Logger, config ComponentConfigType) (*corev1.Probe, error)
 
 // EnvVarGenerator is a function that generates a list of environment variables for a given config.
 // It's expected that type Config is the configuration used by a parser.
-type EnvVarGenerator[ComponentConfigType any] func(logger logr.Logger, config ComponentConfigType) ([]corev1.EnvVar, error)
+type EnvVarGenerator[ComponentConfigType any] func(logger *zap.Logger, config ComponentConfigType) ([]corev1.EnvVar, error)
 
 // Defaulter is a function that applies given defaults to the passed Config.
 // It's expected that type Config is the configuration used by a parser.
-type Defaulter[ComponentConfigType any] func(logger logr.Logger, defaultAddr string, defaultPort int32, config ComponentConfigType) (map[string]interface{}, error)
+type Defaulter[ComponentConfigType any] func(logger *zap.Logger, defaultAddr string, defaultPort int32, config ComponentConfigType) (map[string]interface{}, error)
 
 // ComponentType returns the type for a given component name.
 // components have a name like:
@@ -95,23 +95,23 @@ type ParserRetriever func(string) Parser
 type Parser interface {
 	// GetDefaultConfig returns a config with set default values.
 	// NOTE: Config merging must be done by the caller if desired.
-	GetDefaultConfig(logger logr.Logger, config interface{}) (interface{}, error)
+	GetDefaultConfig(logger *zap.Logger, config interface{}) (interface{}, error)
 
 	// Ports returns the service ports parsed based on the component's configuration where name is the component's name
 	// of the form "name" or "type/name"
-	Ports(logger logr.Logger, name string, config interface{}) ([]corev1.ServicePort, error)
+	Ports(logger *zap.Logger, name string, config interface{}) ([]corev1.ServicePort, error)
 
 	// GetRBACRules returns the rbac rules for this component
-	GetRBACRules(logger logr.Logger, config interface{}) ([]rbacv1.PolicyRule, error)
+	GetRBACRules(logger *zap.Logger, config interface{}) ([]rbacv1.PolicyRule, error)
 
 	// GetLivenessProbe returns a liveness probe set for the collector
-	GetLivenessProbe(logger logr.Logger, config interface{}) (*corev1.Probe, error)
+	GetLivenessProbe(logger *zap.Logger, config interface{}) (*corev1.Probe, error)
 
 	// GetEnvironmentVariables returns a list of environment variables for the collector
-	GetEnvironmentVariables(logger logr.Logger, config interface{}) ([]corev1.EnvVar, error)
+	GetEnvironmentVariables(logger *zap.Logger, config interface{}) ([]corev1.EnvVar, error)
 
 	// GetReadinessProbe returns a readiness probe set for the collector
-	GetReadinessProbe(logger logr.Logger, config interface{}) (*corev1.Probe, error)
+	GetReadinessProbe(logger *zap.Logger, config interface{}) (*corev1.Probe, error)
 
 	// ParserType returns the type of this parser
 	ParserType() string
@@ -120,7 +120,7 @@ type Parser interface {
 	ParserName() string
 
 	// PortsWithUrlPaths returns the service ports + URL paths parsed based on the receiver's configuration
-	PortsWithUrlPaths(logger logr.Logger, name string, config interface{}) ([]PortUrlPaths, error)
+	PortsWithUrlPaths(logger *zap.Logger, name string, config interface{}) ([]PortUrlPaths, error)
 }
 
 func ConstructServicePort(current *corev1.ServicePort, port int32) corev1.ServicePort {

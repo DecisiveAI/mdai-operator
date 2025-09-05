@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/go-logr/logr"
 	"github.com/mitchellh/mapstructure"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/decisiveai/mdai-operator/internal/naming"
@@ -27,10 +27,10 @@ type SingleEndpointConfig struct {
 	ListenAddress string `mapstructure:"listen_address,omitempty" yaml:"listen_address,omitempty"`
 }
 
-func (g *SingleEndpointConfig) GetPortNumOrDefault(logger logr.Logger, p int32) int32 {
+func (g *SingleEndpointConfig) GetPortNumOrDefault(logger *zap.Logger, p int32) int32 {
 	num, err := g.GetPortNum()
 	if err != nil {
-		logger.V(3).Info("no port set, using default: %d", p)
+		logger.Info("no port set, using default", zap.Int32("port", p))
 		return p
 	}
 	return num
@@ -47,24 +47,24 @@ func (g *SingleEndpointConfig) GetPortNum() (int32, error) {
 	return UnsetPort, PortNotFoundErr
 }
 
-func ParseSingleEndpointSilent(logger logr.Logger, name string, defaultPort *corev1.ServicePort, singleEndpointConfig *SingleEndpointConfig) ([]corev1.ServicePort, error) {
+func ParseSingleEndpointSilent(logger *zap.Logger, name string, defaultPort *corev1.ServicePort, singleEndpointConfig *SingleEndpointConfig) ([]corev1.ServicePort, error) {
 	return internalParseSingleEndpoint(logger, name, true, defaultPort, singleEndpointConfig)
 }
 
-func ParseSingleEndpoint(logger logr.Logger, name string, defaultPort *corev1.ServicePort, singleEndpointConfig *SingleEndpointConfig) ([]corev1.ServicePort, error) {
+func ParseSingleEndpoint(logger *zap.Logger, name string, defaultPort *corev1.ServicePort, singleEndpointConfig *SingleEndpointConfig) ([]corev1.ServicePort, error) {
 	return internalParseSingleEndpoint(logger, name, false, defaultPort, singleEndpointConfig)
 }
 
-func internalParseSingleEndpoint(logger logr.Logger, name string, failSilently bool, defaultPort *corev1.ServicePort, singleEndpointConfig *SingleEndpointConfig) ([]corev1.ServicePort, error) {
+func internalParseSingleEndpoint(logger *zap.Logger, name string, failSilently bool, defaultPort *corev1.ServicePort, singleEndpointConfig *SingleEndpointConfig) ([]corev1.ServicePort, error) {
 	if singleEndpointConfig == nil {
 		return nil, nil
 	}
 	if _, err := singleEndpointConfig.GetPortNum(); err != nil && defaultPort.Port == UnsetPort {
 		if failSilently {
-			logger.WithValues("receiver", defaultPort.Name).V(4).Info("couldn't parse the endpoint's port and no default port set", "error", err)
+			logger.Info("couldn't parse the endpoint's port and no default port set", zap.String("receiver", defaultPort.Name), zap.String("ierror:", err.Error()))
 			err = nil
 		} else {
-			logger.WithValues("receiver", defaultPort.Name).Error(err, "couldn't parse the endpoint's port and no default port set")
+			logger.Error("couldn't parse the endpoint's port and no default port set", zap.String("receiver", defaultPort.Name), zap.Error(err))
 		}
 		return []corev1.ServicePort{}, err
 	}
@@ -82,7 +82,7 @@ func NewSilentSinglePortParserBuilder(name string, port int32) Builder[*SingleEn
 	return NewBuilder[*SingleEndpointConfig]().WithPort(port).WithName(name).WithPortParser(ParseSingleEndpointSilent).WithDefaultsApplier(AddressDefaulter).WithDefaultRecAddress(DefaultRecAddress)
 }
 
-func AddressDefaulter(logger logr.Logger, defaultRecAddr string, port int32, config *SingleEndpointConfig) (map[string]interface{}, error) {
+func AddressDefaulter(logger *zap.Logger, defaultRecAddr string, port int32, config *SingleEndpointConfig) (map[string]interface{}, error) {
 	if config == nil {
 		config = &SingleEndpointConfig{}
 	}

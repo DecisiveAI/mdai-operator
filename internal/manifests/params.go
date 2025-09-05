@@ -4,7 +4,7 @@
 package manifests
 
 import (
-	"github.com/go-logr/logr"
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -16,7 +16,7 @@ type Params struct {
 	Client client.Client
 	Scheme *runtime.Scheme
 	// TODO: replace with zap logger
-	Log logr.Logger
-	//Log     *zap.Logger
+	//Log logr.Logger
+	Log                 *zap.Logger
 	OtelMdaiIngressComb mdaiv1.OtelMdaiIngressComb
 }
