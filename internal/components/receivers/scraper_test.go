@@ -7,11 +7,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 
-	"github.com/decisiveai/opentelemetry-operator/internal/components/receivers"
+	"github.com/decisiveai/mdai-operator/internal/components/receivers"
 )
 
 func TestScraperParsers(t *testing.T) {
+	logger := zap.NewNop()
 	for _, tt := range []struct {
 		receiverName string
 		parserName   string

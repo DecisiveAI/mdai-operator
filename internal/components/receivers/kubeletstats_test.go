@@ -6,13 +6,14 @@ package receivers
 import (
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	rbacv1 "k8s.io/api/rbac/v1"
 )
 
 func TestGenerateKubeletStatsRbacRules(t *testing.T) {
+	logger := zap.NewNop()
 	baseRule := rbacv1.PolicyRule{
 		APIGroups: []string{""},
 		Resources: []string{"nodes/stats"},
@@ -74,7 +75,7 @@ func TestGenerateKubeletStatsRbacRules(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rules, err := generateKubeletStatsRbacRules(logr.Logger{}, tt.config)
+			rules, err := generateKubeletStatsRbacRules(logger, tt.config)
 
 			if tt.expectedErrMsg != "" {
 				require.Error(t, err)

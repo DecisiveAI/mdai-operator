@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -44,13 +44,13 @@ func TestBuilder_Build(t *testing.T) {
 		wantRbacErr     assert.ErrorAssertionFunc
 		wantLivenessErr assert.ErrorAssertionFunc
 	}
-	examplePortParser := func(logger logr.Logger, name string, defaultPort *corev1.ServicePort, config sampleConfig) ([]corev1.ServicePort, error) {
+	examplePortParser := func(logger *zap.Logger, name string, defaultPort *corev1.ServicePort, config sampleConfig) ([]corev1.ServicePort, error) {
 		if defaultPort != nil {
 			return []corev1.ServicePort{*defaultPort}, nil
 		}
 		return nil, nil
 	}
-	exampleProbeGen := func(logger logr.Logger, config sampleConfig) (*corev1.Probe, error) {
+	exampleProbeGen := func(logger *zap.Logger, config sampleConfig) (*corev1.Probe, error) {
 		return &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -112,7 +112,7 @@ func TestBuilder_Build(t *testing.T) {
 					WithName("secure-service").
 					WithPort(443).
 					WithProtocol(corev1.ProtocolTCP).
-					WithRbacGen(func(logger logr.Logger, config sampleConfig) ([]rbacv1.PolicyRule, error) {
+					WithRbacGen(func(logger *zap.Logger, config sampleConfig) ([]rbacv1.PolicyRule, error) {
 						rules := []rbacv1.PolicyRule{
 							{
 								NonResourceURLs: []string{config.example},
@@ -163,7 +163,7 @@ func TestBuilder_Build(t *testing.T) {
 					WithName("secure-service").
 					WithPort(443).
 					WithProtocol(corev1.ProtocolTCP).
-					WithRbacGen(func(logger logr.Logger, config sampleConfig) ([]rbacv1.PolicyRule, error) {
+					WithRbacGen(func(logger *zap.Logger, config sampleConfig) ([]rbacv1.PolicyRule, error) {
 						rules := []rbacv1.PolicyRule{
 							{
 								NonResourceURLs: []string{config.example},
@@ -246,7 +246,7 @@ func TestBuilder_Build(t *testing.T) {
 					WithName("secure-service").
 					WithPort(443).
 					WithProtocol(corev1.ProtocolTCP).
-					WithLivenessGen(func(logger logr.Logger, config sampleConfig) (*corev1.Probe, error) {
+					WithLivenessGen(func(logger *zap.Logger, config sampleConfig) (*corev1.Probe, error) {
 						return nil, fmt.Errorf("no probe")
 					}),
 			},
@@ -276,20 +276,20 @@ func TestBuilder_Build(t *testing.T) {
 				return
 			}
 			assert.Equalf(t, tt.want.name, got.ParserName(), "ParserName()")
-			ports, err := got.Ports(logr.Discard(), got.ParserType(), tt.params.conf)
+			ports, err := got.Ports(zap.NewNop(), got.ParserType(), tt.params.conf)
 			assert.NoError(t, err)
 			assert.Equalf(t, tt.want.ports, ports, "Ports()")
-			rules, rbacErr := got.GetRBACRules(logr.Discard(), tt.params.conf)
+			rules, rbacErr := got.GetRBACRules(zap.NewNop(), tt.params.conf)
 			if tt.wantRbacErr(t, rbacErr, "WantRbacErr()") && rbacErr != nil {
 				return
 			}
 			assert.Equalf(t, tt.want.rules, rules, "GetRBACRules()")
-			livenessProbe, livenessErr := got.GetLivenessProbe(logr.Discard(), tt.params.conf)
+			livenessProbe, livenessErr := got.GetLivenessProbe(zap.NewNop(), tt.params.conf)
 			if tt.wantLivenessErr(t, livenessErr, "wantLivenessErr()") && livenessErr != nil {
 				return
 			}
 			assert.Equalf(t, tt.want.livenessProbe, livenessProbe, "GetLivenessProbe()")
-			readinessProbe, readinessErr := got.GetReadinessProbe(logr.Discard(), tt.params.conf)
+			readinessProbe, readinessErr := got.GetReadinessProbe(zap.NewNop(), tt.params.conf)
 			assert.NoError(t, readinessErr)
 			assert.Equalf(t, tt.want.readinessProbe, readinessProbe, "GetReadinessProbe()")
 		})

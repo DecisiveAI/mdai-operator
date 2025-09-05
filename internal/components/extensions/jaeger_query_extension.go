@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/go-logr/logr"
 	"github.com/mitchellh/mapstructure"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/decisiveai/mdai-operator/internal/components"
@@ -32,10 +32,10 @@ type jaegerHTTPAddress struct {
 	Endpoint string `mapstructure:"endpoint,omitempty" yaml:"endpoint,omitempty"`
 }
 
-func (g *JaegerQueryExtensionConfig) GetPortNumOrDefault(logger logr.Logger, p int32) int32 {
+func (g *JaegerQueryExtensionConfig) GetPortNumOrDefault(logger *zap.Logger, p int32) int32 {
 	num, err := g.GetPortNum()
 	if err != nil {
-		logger.V(3).Info("no port set, using default: %d", p)
+		logger.Info("no port set, using defaul", zap.Int32("port", p))
 		return p
 	}
 	return num
@@ -50,12 +50,12 @@ func (g *JaegerQueryExtensionConfig) GetPortNum() (int32, error) {
 	return components.UnsetPort, components.PortNotFoundErr
 }
 
-func ParseJaegerQueryExtensionConfig(logger logr.Logger, name string, defaultPort *corev1.ServicePort, cfg *JaegerQueryExtensionConfig) ([]corev1.ServicePort, error) {
+func ParseJaegerQueryExtensionConfig(logger *zap.Logger, name string, defaultPort *corev1.ServicePort, cfg *JaegerQueryExtensionConfig) ([]corev1.ServicePort, error) {
 	if cfg == nil {
 		return nil, nil
 	}
 	if _, err := cfg.GetPortNum(); err != nil && defaultPort.Port == components.UnsetPort {
-		logger.WithValues("receiver", defaultPort.Name).Error(err, "couldn't parse the endpoint's port and no default port set")
+		logger.Error("couldn't parse the endpoint's port and no default port set", zap.String("receiver", defaultPort.Name), zap.Error(err))
 		return []corev1.ServicePort{}, err
 	}
 	port := cfg.GetPortNumOrDefault(logger, defaultPort.Port)
@@ -68,7 +68,7 @@ func NewJaegerQueryExtensionParserBuilder() components.Builder[*JaegerQueryExten
 	return components.NewBuilder[*JaegerQueryExtensionConfig]().WithPort(port).WithName(name).WithPortParser(ParseJaegerQueryExtensionConfig).WithDefaultsApplier(endpointDefaulter).WithDefaultRecAddress(components.DefaultRecAddress).WithTargetPort(port)
 }
 
-func endpointDefaulter(_ logr.Logger, defaultRecAddr string, port int32, config *JaegerQueryExtensionConfig) (map[string]interface{}, error) {
+func endpointDefaulter(_ *zap.Logger, defaultRecAddr string, port int32, config *JaegerQueryExtensionConfig) (map[string]interface{}, error) {
 	if config == nil {
 		config = &JaegerQueryExtensionConfig{}
 	}

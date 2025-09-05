@@ -4,7 +4,7 @@
 package extensions
 
 import (
-	"github.com/go-logr/logr"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/decisiveai/mdai-operator/internal/components"
@@ -19,7 +19,7 @@ var registry = map[string]components.Parser{
 		WithDefaultRecAddress(components.DefaultRecAddress).
 		WithReadinessGen(healthCheckV1Probe).
 		WithLivenessGen(healthCheckV1Probe).
-		WithPortParser(func(logger logr.Logger, name string, defaultPort *corev1.ServicePort, config healthcheckV1Config) ([]corev1.ServicePort, error) {
+		WithPortParser(func(logger *zap.Logger, name string, defaultPort *corev1.ServicePort, config healthcheckV1Config) ([]corev1.ServicePort, error) {
 			return components.ParseSingleEndpointSilent(logger, name, defaultPort, &config.SingleEndpointConfig)
 		}).
 		MustBuild(),

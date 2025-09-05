@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -91,7 +91,7 @@ func TestSingleEndpointConfig_GetPortNumOrDefault(t *testing.T) {
 				Endpoint:      tt.fields.Endpoint,
 				ListenAddress: tt.fields.ListenAddress,
 			}
-			assert.Equalf(t, tt.want, g.GetPortNumOrDefault(logr.Discard(), tt.args.p), "GetPortNumOrDefault(%v)", tt.args.p)
+			assert.Equalf(t, tt.want, g.GetPortNumOrDefault(zap.NewNop(), tt.args.p), "GetPortNumOrDefault(%v)", tt.args.p)
 		})
 	}
 }
@@ -266,7 +266,7 @@ func TestSingleEndpointParser_Ports(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s, err := tt.fields.b.Build()
 			assert.NoError(t, err)
-			got, err := s.Ports(logr.Discard(), s.ParserType(), tt.args.config)
+			got, err := s.Ports(zap.NewNop(), s.ParserType(), tt.args.config)
 			if !tt.wantErr(t, err, fmt.Sprintf("Ports(%v)", tt.args.config)) {
 				return
 			}
@@ -369,7 +369,7 @@ func TestNewSilentSinglePortParser_Ports(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s, err := tt.fields.b.Build()
 			assert.NoError(t, err)
-			got, err := s.Ports(logr.Discard(), s.ParserType(), tt.args.config)
+			got, err := s.Ports(zap.NewNop(), s.ParserType(), tt.args.config)
 			if !tt.wantErr(t, err, fmt.Sprintf("Ports(%v)", tt.args.config)) {
 				return
 			}

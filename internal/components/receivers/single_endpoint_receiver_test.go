@@ -8,14 +8,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/decisiveai/opentelemetry-operator/internal/components/receivers"
-	"github.com/decisiveai/opentelemetry-operator/internal/naming"
+	"github.com/decisiveai/mdai-operator/internal/components/receivers"
+	"github.com/decisiveai/mdai-operator/internal/naming"
 )
 
-var logger = logf.Log.WithName("unit-tests")
+var logger = zap.NewNop()
 
 func TestParseEndpoint(t *testing.T) {
 	// prepare

@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -18,7 +18,7 @@ import (
 
 func TestGenericParser_GetPorts(t *testing.T) {
 	type args struct {
-		logger logr.Logger
+		logger zap.Logger
 		config interface{}
 	}
 	type testCase[T any] struct {
@@ -34,7 +34,7 @@ func TestGenericParser_GetPorts(t *testing.T) {
 			name: "valid config with endpoint",
 			g:    components.NewSinglePortParserBuilder("test", 0).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: *zap.NewNop(),
 				config: map[string]interface{}{
 					"endpoint": "http://localhost:8080",
 				},
@@ -51,7 +51,7 @@ func TestGenericParser_GetPorts(t *testing.T) {
 			name: "valid config with listen_address",
 			g:    components.NewSinglePortParserBuilder("test", 0).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: *zap.NewNop(),
 				config: map[string]interface{}{
 					"listen_address": "0.0.0.0:9090",
 				},
@@ -68,7 +68,7 @@ func TestGenericParser_GetPorts(t *testing.T) {
 			name: "valid config with listen_address with settings",
 			g:    components.NewSinglePortParserBuilder("test", 0).WithProtocol(corev1.ProtocolUDP).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: *zap.NewNop(),
 				config: map[string]interface{}{
 					"listen_address": "0.0.0.0:9090",
 				},
@@ -86,7 +86,7 @@ func TestGenericParser_GetPorts(t *testing.T) {
 			name: "invalid config with no endpoint or listen_address",
 			g:    components.NewSinglePortParserBuilder("test", 0).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: *zap.NewNop(),
 				config: map[string]interface{}{},
 			},
 			want:    []corev1.ServicePort{},
@@ -96,7 +96,7 @@ func TestGenericParser_GetPorts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.g.Ports(tt.args.logger, "test", tt.args.config)
+			got, err := tt.g.Ports(&tt.args.logger, "test", tt.args.config)
 			if !tt.wantErr(t, err, fmt.Sprintf("GetRBACRules(%v, %v)", tt.args.logger, tt.args.config)) {
 				return
 			}
@@ -107,7 +107,7 @@ func TestGenericParser_GetPorts(t *testing.T) {
 
 func TestGenericParser_GetRBACRules(t *testing.T) {
 	type args struct {
-		logger logr.Logger
+		logger *zap.Logger
 		config interface{}
 	}
 	type testCase[T any] struct {
@@ -118,7 +118,7 @@ func TestGenericParser_GetRBACRules(t *testing.T) {
 		wantErr assert.ErrorAssertionFunc
 	}
 
-	rbacGenFunc := func(logger logr.Logger, config *components.SingleEndpointConfig) ([]rbacv1.PolicyRule, error) {
+	rbacGenFunc := func(logger *zap.Logger, config *components.SingleEndpointConfig) ([]rbacv1.PolicyRule, error) {
 		if config.Endpoint == "" && config.ListenAddress == "" {
 			return nil, fmt.Errorf("either endpoint or listen_address must be specified")
 		}
@@ -136,7 +136,7 @@ func TestGenericParser_GetRBACRules(t *testing.T) {
 			name: "valid config with endpoint",
 			g:    components.NewSinglePortParserBuilder("test", 0).WithRbacGen(rbacGenFunc).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{
 					"endpoint": "http://localhost:8080",
 				},
@@ -154,7 +154,7 @@ func TestGenericParser_GetRBACRules(t *testing.T) {
 			name: "valid config with listen_address",
 			g:    components.NewSinglePortParserBuilder("test", 0).WithRbacGen(rbacGenFunc).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{
 					"listen_address": "0.0.0.0:9090",
 				},
@@ -172,7 +172,7 @@ func TestGenericParser_GetRBACRules(t *testing.T) {
 			name: "invalid config with no endpoint or listen_address",
 			g:    components.NewSinglePortParserBuilder("test", 0).WithRbacGen(rbacGenFunc).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{},
 			},
 			want:    nil,
@@ -182,7 +182,7 @@ func TestGenericParser_GetRBACRules(t *testing.T) {
 			name: "Generic works",
 			g:    components.NewBuilder[*components.SingleEndpointConfig]().WithName("test").MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{},
 			},
 			want:    nil,
@@ -192,7 +192,7 @@ func TestGenericParser_GetRBACRules(t *testing.T) {
 			name: "failed to parse config",
 			g:    components.NewSinglePortParserBuilder("test", 0).WithRbacGen(rbacGenFunc).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: func() {},
 			},
 			want:    nil,
@@ -213,7 +213,7 @@ func TestGenericParser_GetRBACRules(t *testing.T) {
 
 func TestGenericParser_GetProbe(t *testing.T) {
 	type args struct {
-		logger logr.Logger
+		logger *zap.Logger
 		config interface{}
 	}
 	type testCase[T any] struct {
@@ -225,7 +225,7 @@ func TestGenericParser_GetProbe(t *testing.T) {
 		wantLivenessErr  assert.ErrorAssertionFunc
 		wantReadinessErr assert.ErrorAssertionFunc
 	}
-	probeFunc := func(logger logr.Logger, config *components.SingleEndpointConfig) (*corev1.Probe, error) {
+	probeFunc := func(logger *zap.Logger, config *components.SingleEndpointConfig) (*corev1.Probe, error) {
 		if config.Endpoint == "" && config.ListenAddress == "" {
 			return nil, fmt.Errorf("either endpoint or listen_address must be specified")
 		}
@@ -244,7 +244,7 @@ func TestGenericParser_GetProbe(t *testing.T) {
 			name: "valid config with endpoint",
 			g:    components.NewSinglePortParserBuilder("test", 0).WithReadinessGen(probeFunc).WithLivenessGen(probeFunc).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{
 					"endpoint": "http://localhost:8080",
 				},
@@ -272,7 +272,7 @@ func TestGenericParser_GetProbe(t *testing.T) {
 			name: "valid config with listen_address",
 			g:    components.NewSinglePortParserBuilder("test", 0).WithReadinessGen(probeFunc).WithLivenessGen(probeFunc).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{
 					"listen_address": "0.0.0.0:9090",
 				},
@@ -300,7 +300,7 @@ func TestGenericParser_GetProbe(t *testing.T) {
 			name: "readiness invalid config with no endpoint or listen_address",
 			g:    components.NewSinglePortParserBuilder("test", 0).WithReadinessGen(probeFunc).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{},
 			},
 			readinessProbe:   nil,
@@ -312,7 +312,7 @@ func TestGenericParser_GetProbe(t *testing.T) {
 			name: "liveness invalid config with no endpoint or listen_address",
 			g:    components.NewSinglePortParserBuilder("test", 0).WithLivenessGen(probeFunc).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{},
 			},
 			readinessProbe:   nil,
@@ -324,7 +324,7 @@ func TestGenericParser_GetProbe(t *testing.T) {
 			name: "liveness failed to parse config",
 			g:    components.NewSinglePortParserBuilder("test", 0).WithLivenessGen(probeFunc).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: func() {},
 			},
 			livenessProbe:    nil,
@@ -336,7 +336,7 @@ func TestGenericParser_GetProbe(t *testing.T) {
 			name: "readiness failed to parse config",
 			g:    components.NewSinglePortParserBuilder("test", 0).WithReadinessGen(probeFunc).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: func() {},
 			},
 			livenessProbe:    nil,
@@ -364,7 +364,7 @@ func TestGenericParser_GetProbe(t *testing.T) {
 
 func TestGenericParser_GetDefaultConfig(t *testing.T) {
 	type args struct {
-		logger logr.Logger
+		logger *zap.Logger
 		config interface{}
 	}
 	type testCase[T any] struct {
@@ -380,7 +380,7 @@ func TestGenericParser_GetDefaultConfig(t *testing.T) {
 			name: "no settings or defaultsApplier returns config",
 			g:    &components.GenericParser[*components.SingleEndpointConfig]{},
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{
 					"endpoint": "http://localhost:8080",
 				},
@@ -394,7 +394,7 @@ func TestGenericParser_GetDefaultConfig(t *testing.T) {
 			name: "empty defaultRecAddr returns config",
 			g:    components.NewSinglePortParserBuilder("test", 0).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{
 					"endpoint": "http://localhost:8080",
 				},
@@ -408,7 +408,7 @@ func TestGenericParser_GetDefaultConfig(t *testing.T) {
 			name: "valid settings with defaultsApplier",
 			g:    components.NewSinglePortParserBuilder("test", 8080).WithDefaultRecAddress("127.0.0.1").WithDefaultsApplier(components.AddressDefaulter).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{
 					"endpoint": nil,
 				},
@@ -422,7 +422,7 @@ func TestGenericParser_GetDefaultConfig(t *testing.T) {
 			name: "valid settings with defaultsApplier doesnt override",
 			g:    components.NewSinglePortParserBuilder("test", 8080).WithDefaultRecAddress("127.0.0.1").WithDefaultsApplier(components.AddressDefaulter).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{
 					"endpoint": "127.0.0.1:9090",
 				},
@@ -436,7 +436,7 @@ func TestGenericParser_GetDefaultConfig(t *testing.T) {
 			name: "invalid config fails to decode",
 			g:    components.NewSinglePortParserBuilder("test", 8080).WithDefaultRecAddress("127.0.0.1").WithDefaultsApplier(components.AddressDefaulter).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: "invalid_config",
 			},
 			want:    nil,

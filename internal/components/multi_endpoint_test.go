@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -339,18 +339,18 @@ func TestMultiPortReceiver_Ports(t *testing.T) {
 			if tt.wantBuildErr(t, err, fmt.Sprintf("Ports(%v)", tt.args.config)) && err != nil {
 				return
 			}
-			got, err := s.Ports(logr.Discard(), tt.fields.name, tt.args.config)
+			got, err := s.Ports(zap.NewNop(), tt.fields.name, tt.args.config)
 			if !tt.wantErr(t, err, fmt.Sprintf("Ports(%v)", tt.args.config)) {
 				return
 			}
 			assert.ElementsMatchf(t, tt.want, got, "Ports(%v)", tt.args.config)
-			rbacGen, err := s.GetRBACRules(logr.Discard(), tt.args.config)
+			rbacGen, err := s.GetRBACRules(zap.NewNop(), tt.args.config)
 			assert.NoError(t, err)
 			assert.Nil(t, rbacGen)
-			livenessProbe, livenessErr := s.GetLivenessProbe(logr.Discard(), tt.args.config)
+			livenessProbe, livenessErr := s.GetLivenessProbe(zap.NewNop(), tt.args.config)
 			assert.NoError(t, livenessErr)
 			assert.Nil(t, livenessProbe)
-			readinessProbe, readinessErr := s.GetReadinessProbe(logr.Discard(), tt.args.config)
+			readinessProbe, readinessErr := s.GetReadinessProbe(zap.NewNop(), tt.args.config)
 			assert.NoError(t, readinessErr)
 			assert.Nil(t, readinessProbe)
 		})
@@ -359,7 +359,7 @@ func TestMultiPortReceiver_Ports(t *testing.T) {
 
 func TestMultiPortReceiver_GetDefaultConfig(t *testing.T) {
 	type args struct {
-		logger logr.Logger
+		logger *zap.Logger
 		config interface{}
 	}
 	type testCase struct {
@@ -378,7 +378,7 @@ func TestMultiPortReceiver_GetDefaultConfig(t *testing.T) {
 					WithDefaultRecAddress("0.0.0.0").
 					WithTargetPort(8080)).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{
 					"protocols": map[string]interface{}{
 						"http": nil,
@@ -404,7 +404,7 @@ func TestMultiPortReceiver_GetDefaultConfig(t *testing.T) {
 					WithDefaultRecAddress("0.0.0.0").
 					WithTargetPort(8080)).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{
 					"protocols": map[string]interface{}{
 						"http": nil,
@@ -434,7 +434,7 @@ func TestMultiPortReceiver_GetDefaultConfig(t *testing.T) {
 					WithDefaultRecAddress("0.0.0.0").
 					WithTargetPort(8080)).MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{
 					"protocols": map[string]interface{}{
 						"http": map[string]interface{}{
@@ -462,7 +462,7 @@ func TestMultiPortReceiver_GetDefaultConfig(t *testing.T) {
 			name: "config with unknown protocol",
 			m:    components.NewMultiPortReceiverBuilder("receiver1").MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{
 					"protocols": map[string]interface{}{
 						"unknown": map[string]interface{}{
@@ -478,7 +478,7 @@ func TestMultiPortReceiver_GetDefaultConfig(t *testing.T) {
 			name: "config with missing default service port",
 			m:    components.NewMultiPortReceiverBuilder("receiver1").MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: map[string]interface{}{
 					"protocols": map[string]interface{}{
 						"http": map[string]interface{}{
@@ -494,7 +494,7 @@ func TestMultiPortReceiver_GetDefaultConfig(t *testing.T) {
 			name: "invalid config fails to decode",
 			m:    components.NewMultiPortReceiverBuilder("receiver1").MustBuild(),
 			args: args{
-				logger: logr.Discard(),
+				logger: zap.NewNop(),
 				config: "invalid_config",
 			},
 			want:    nil,

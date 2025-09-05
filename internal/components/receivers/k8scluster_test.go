@@ -6,12 +6,13 @@ package receivers
 import (
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 	rbacv1 "k8s.io/api/rbac/v1"
 )
 
 func Test_generatek8sclusterRbacRules(t *testing.T) {
+	logger := zap.NewNop()
 	tests := []struct {
 		name    string
 		cfg     k8sclusterConfig
@@ -141,7 +142,7 @@ func Test_generatek8sclusterRbacRules(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := generatek8sclusterRbacRules(logr.Discard(), tt.cfg)
+			got, err := generatek8sclusterRbacRules(logger, tt.cfg)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return

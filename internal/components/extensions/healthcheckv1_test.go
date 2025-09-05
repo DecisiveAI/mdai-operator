@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -165,7 +165,7 @@ func TestHealthCheckV1Probe(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			parser := ParserFor("health_check")
-			got, err := parser.GetLivenessProbe(logr.Discard(), tt.args.config)
+			got, err := parser.GetLivenessProbe(zap.NewNop(), tt.args.config)
 			if !tt.wantErr(t, err, fmt.Sprintf("GetLivenessProbe(%v)", tt.args.config)) {
 				return
 			}
@@ -275,7 +275,7 @@ func TestHealthCheckV1AddressDefaulter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			parser := ParserFor("health_check")
-			got, err := parser.GetDefaultConfig(logr.Discard(), tt.args.config)
+			got, err := parser.GetDefaultConfig(zap.NewNop(), tt.args.config)
 			if !tt.wantErr(t, err, fmt.Sprintf("GetDefaultConfig(%v)", tt.args.config)) {
 				return
 			}

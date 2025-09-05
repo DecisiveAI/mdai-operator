@@ -6,9 +6,9 @@ package extensions
 import (
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -21,10 +21,10 @@ func TestJaegerQueryExtensionParser(t *testing.T) {
 	assert.Equal(t, "jaeger_query", genericBuilder.ParserType())
 	assert.Equal(t, "__jaeger_query", genericBuilder.ParserName())
 
-	defaultCfg, err := genericBuilder.GetDefaultConfig(logr.Discard(), nil)
+	defaultCfg, err := genericBuilder.GetDefaultConfig(zap.NewNop(), nil)
 	require.NoError(t, err)
 
-	ports, err := genericBuilder.Ports(logr.Discard(), "jaeger_query", defaultCfg)
+	ports, err := genericBuilder.Ports(zap.NewNop(), "jaeger_query", defaultCfg)
 	require.NoError(t, err)
 	assert.Equal(t, []corev1.ServicePort{{
 		Name:       "jaeger-query",
@@ -56,7 +56,7 @@ func TestJaegerQueryExtensionParser_config(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			cfg, errCfg := genericBuilder.GetDefaultConfig(logr.Discard(), test.config)
+			cfg, errCfg := genericBuilder.GetDefaultConfig(zap.NewNop(), test.config)
 			assert.Equal(t, test.want, cfg)
 			require.NoError(t, errCfg)
 		})
