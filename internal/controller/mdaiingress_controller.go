@@ -44,10 +44,10 @@ func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	log := logger.FromContext(ctx)
 	log.Info("-- Starting MDAI Ingress reconciliation --", "name", req.Name)
 
-	var instanceOtel v1beta1.OpenTelemetryCollector
-	if err := r.Cache.Get(ctx, req.NamespacedName, &instanceOtel); err != nil {
+	var instanceMdaiIngress hubv1.MdaiIngress
+	if err := r.Cache.Get(ctx, req.NamespacedName, &instanceMdaiIngress); err != nil {
 		if !apierrors.IsNotFound(err) {
-			log.Error(err, "unable to fetch OpenTelemetryCollector")
+			log.Error(err, "unable to fetch MdaiIngress")
 		}
 
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
@@ -55,10 +55,11 @@ func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	var instanceMdaiIngress hubv1.MdaiIngress
-	if err := r.Cache.Get(ctx, req.NamespacedName, &instanceMdaiIngress); err != nil {
+
+	var instanceOtel v1beta1.OpenTelemetryCollector
+	if err := r.Cache.Get(ctx, req.NamespacedName, &instanceOtel); err != nil {
 		if !apierrors.IsNotFound(err) {
-			log.Error(err, "unable to fetch MdaiIngress")
+			log.Error(err, "unable to fetch OpenTelemetryCollector")
 		}
 
 		// we'll ignore not-found errors, since they can't be fixed by an immediate
