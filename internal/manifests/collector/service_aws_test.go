@@ -18,7 +18,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,14 +34,14 @@ func TestDesiredServiceAws(t *testing.T) {
 	http := "http"
 
 	t.Run("create gRPC and non-gRPC Services", func(t *testing.T) {
-		params, err := newParams("something:tag", testFileServiceAws)
+		params, err := newParams(testFileServiceAws)
 		if err != nil {
 			t.Fatal(err)
 		}
-		params.OtelCol.Spec.Ingress.Type = v1beta1.IngressTypeAws
-		params.OtelCol.Spec.Ports = []v1beta1.PortsSpec{}
-		params.OtelCol.Spec.Ingress.GrpcService = &v1beta1.IngressService{Type: corev1.ServiceTypeNodePort}
-		params.OtelCol.Spec.Ingress.NonGrpcService = &v1beta1.IngressService{Type: corev1.ServiceTypeLoadBalancer}
+		params.OtelMdaiIngressComb.MdaiIngress.Spec.CloudType = mdaiv1.CloudProviderAws
+		params.OtelMdaiIngressComb.Otelcol.Spec.Ports = []v1beta1.PortsSpec{}
+		params.OtelMdaiIngressComb.MdaiIngress.Spec.GrpcService = &mdaiv1.IngressService{Type: corev1.ServiceTypeNodePort}
+		params.OtelMdaiIngressComb.MdaiIngress.Spec.NonGrpcService = &mdaiv1.IngressService{Type: corev1.ServiceTypeLoadBalancer}
 		trafficPolicy := corev1.ServiceInternalTrafficPolicyCluster
 
 		desiredGrpcSpec := corev1.ServiceSpec{
@@ -125,17 +126,17 @@ func TestAnnotationsForNonGrpcService(t *testing.T) {
 	http := "http"
 
 	t.Run("create non-gRPC Service", func(t *testing.T) {
-		params, err := newParams("something:tag", testFileServiceAws)
+		params, err := newParams(testFileServiceAws)
 		if err != nil {
 			t.Fatal(err)
 		}
-		params.OtelCol.Spec.Ingress.Type = v1beta1.IngressTypeAws
-		params.OtelCol.Spec.Ports = []v1beta1.PortsSpec{}
-		params.OtelCol.Annotations = map[string]string{
+		params.OtelMdaiIngressComb.MdaiIngress.Spec.CloudType = mdaiv1.CloudProviderAws
+		params.OtelMdaiIngressComb.Otelcol.Spec.Ports = []v1beta1.PortsSpec{}
+		params.OtelMdaiIngressComb.Otelcol.Annotations = map[string]string{
 			"annotation_common": "value_from_meta",
 			"meta.annotation":   "meta_value_2",
 		}
-		params.OtelCol.Spec.Ingress.NonGrpcService = &v1beta1.IngressService{
+		params.OtelMdaiIngressComb.MdaiIngress.Spec.NonGrpcService = &mdaiv1.IngressService{
 			Type: corev1.ServiceTypeLoadBalancer,
 			Annotations: map[string]string{
 				"annotation_common":  "value_from_service",
@@ -180,12 +181,12 @@ func TestAnnotationsForNonGrpcService(t *testing.T) {
 func TestDesiredServiceAwsEmptyServiceTypes(t *testing.T) {
 
 	t.Run("create gRPC and non-gRPC Services", func(t *testing.T) {
-		params, err := newParams("something:tag", testFileServiceAws)
+		params, err := newParams(testFileServiceAws)
 		if err != nil {
 			t.Fatal(err)
 		}
-		params.OtelCol.Spec.Ingress.Type = v1beta1.IngressTypeAws
-		params.OtelCol.Spec.Ports = []v1beta1.PortsSpec{}
+		params.OtelMdaiIngressComb.MdaiIngress.Spec.CloudType = mdaiv1.CloudProviderAws
+		params.OtelMdaiIngressComb.Otelcol.Spec.Ports = []v1beta1.PortsSpec{}
 
 		actualGrpc, err := GrpcService(params)
 		assert.NoError(t, err)

@@ -23,7 +23,9 @@ func IngressAws(params manifests.Params) (*networkingv1.Ingress, error) {
 	var annotations map[string]string
 	annotations = maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
 	ingressAnnotations := params.OtelMdaiIngressComb.MdaiIngress.Spec.Annotations
-	maps.Copy(annotations, ingressAnnotations)
+	if annotations != nil && ingressAnnotations != nil {
+		maps.Copy(annotations, ingressAnnotations)
+	}
 
 	var rules []networkingv1.IngressRule
 	compPortsEndpoints, err := servicePortsUrlPathsFromCfg(params)

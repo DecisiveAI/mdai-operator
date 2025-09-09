@@ -12,27 +12,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 )
 
-// headless and monitoring labels are to differentiate the base/headless/monitoring services from the clusterIP service.
-const (
-	headlessLabel    = "operator.opentelemetry.io/collector-headless-service"
-	monitoringLabel  = "operator.opentelemetry.io/collector-monitoring-service"
-	serviceTypeLabel = "operator.opentelemetry.io/collector-service-type"
-	valueExists      = "Exists"
-)
-
-type ServiceType int
-
-const (
-	BaseServiceType ServiceType = iota
-	HeadlessServiceType
-	MonitoringServiceType
-	ExtensionServiceType
-)
-
-func (s ServiceType) String() string {
-	return [...]string{"base", "headless", "monitoring", "extension"}[s]
-}
-
 type PortNumberKey struct {
 	Port     int32
 	Protocol corev1.Protocol

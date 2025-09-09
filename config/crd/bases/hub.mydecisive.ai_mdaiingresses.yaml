@@ -77,6 +77,8 @@ spec:
                     - LoadBalancer
                     - ExternalName
                     type: string
+                required:
+                - type
                 type: object
               ingressClassName:
                 description: |-
@@ -101,9 +103,13 @@ spec:
                     - LoadBalancer
                     - ExternalName
                     type: string
+                required:
+                - type
                 type: object
             required:
             - cloudType
+            - grpcService
+            - nonGrpcService
             type: object
           status:
             description: MdaiIngressStatus defines the observed state of MdaiIngress

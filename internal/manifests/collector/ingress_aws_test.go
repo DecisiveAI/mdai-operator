@@ -20,9 +20,9 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/decisiveai/mdai-operator/internal/components/config"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/mdai-operator/internal/manifests"
-	"github.com/decisiveai/opentelemetry-operator/apis/v1beta1"
+	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	"github.com/stretchr/testify/assert"
 	networkingv1 "k8s.io/api/networking/v1"
 )
@@ -32,14 +32,16 @@ const testFileIngressAws = "testdata/ingress_aws_testdata.yaml"
 func TestDesiredIngressesAws(t *testing.T) {
 	t.Run("should return nil invalid ingress type", func(t *testing.T) {
 		params := manifests.Params{
-			Config: config.Config{},
-			Log:    testLogger,
-			OtelCol: v1beta1.OpenTelemetryCollector{
-				Spec: v1beta1.OpenTelemetryCollectorSpec{
-					Ingress: v1beta1.Ingress{
-						Type: v1beta1.IngressType("unknown"),
+			Log: testLogger,
+			OtelMdaiIngressComb: mdaiv1.OtelMdaiIngressComb{
+				Otelcol: v1beta1.OpenTelemetryCollector{
+					Spec: v1beta1.OpenTelemetryCollectorSpec{
+						Ingress: v1beta1.Ingress{
+							Type: v1beta1.IngressType("unknown"),
+						},
 					},
 				},
+				MdaiIngress: mdaiv1.MdaiIngress{},
 			},
 		}
 
@@ -50,12 +52,14 @@ func TestDesiredIngressesAws(t *testing.T) {
 
 	t.Run("should return nil, no ingress set", func(t *testing.T) {
 		params := manifests.Params{
-			Config: config.Config{},
-			Log:    testLogger,
-			OtelCol: v1beta1.OpenTelemetryCollector{
-				Spec: v1beta1.OpenTelemetryCollectorSpec{
-					Mode: "Deployment",
+			Log: testLogger,
+			OtelMdaiIngressComb: mdaiv1.OtelMdaiIngressComb{
+				Otelcol: v1beta1.OpenTelemetryCollector{
+					Spec: v1beta1.OpenTelemetryCollectorSpec{
+						Mode: "Deployment",
+					},
 				},
+				MdaiIngress: mdaiv1.MdaiIngress{},
 			},
 		}
 
@@ -66,15 +70,17 @@ func TestDesiredIngressesAws(t *testing.T) {
 
 	t.Run("should return nil unable to parse receiver ports", func(t *testing.T) {
 		params := manifests.Params{
-			Config: config.Config{},
-			Log:    testLogger,
-			OtelCol: v1beta1.OpenTelemetryCollector{
-				Spec: v1beta1.OpenTelemetryCollectorSpec{
-					Config: v1beta1.Config{},
-					Ingress: v1beta1.Ingress{
-						Type: v1beta1.IngressTypeIngress,
+			Log: testLogger,
+			OtelMdaiIngressComb: mdaiv1.OtelMdaiIngressComb{
+				Otelcol: v1beta1.OpenTelemetryCollector{
+					Spec: v1beta1.OpenTelemetryCollectorSpec{
+						Config: v1beta1.Config{},
+						Ingress: v1beta1.Ingress{
+							Type: v1beta1.IngressTypeIngress,
+						},
 					},
 				},
+				MdaiIngress: mdaiv1.MdaiIngress{},
 			},
 		}
 
@@ -86,19 +92,17 @@ func TestDesiredIngressesAws(t *testing.T) {
 	t.Run("multiple grpc receivers", func(t *testing.T) {
 		var (
 			ns               = "test"
-			hostname         = "example.com"
 			ingressClassName = "aws"
 		)
 
-		params, err := newParams("something:tag", testFileIngressAws)
+		params, err := newParams(testFileIngressAws)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		params.OtelCol.Namespace = ns
-		params.OtelCol.Spec.Ingress = v1beta1.Ingress{
-			Type:             v1beta1.IngressTypeIngress,
-			Hostname:         hostname,
+		params.OtelMdaiIngressComb.Otelcol.Namespace = ns
+		params.OtelMdaiIngressComb.MdaiIngress.Spec = mdaiv1.MdaiIngressSpec{
+			CloudType:        mdaiv1.CloudProviderAws,
 			Annotations:      map[string]string{"some.key": "some.value"},
 			IngressClassName: &ingressClassName,
 			CollectorEndpoints: map[string]string{
@@ -260,19 +264,17 @@ func TestDesiredIngressesAws(t *testing.T) {
 	t.Run("multiple grpc receivers, ONE host-to-component mapping record absent", func(t *testing.T) {
 		var (
 			ns               = "test"
-			hostname         = "example.com"
 			ingressClassName = "aws"
 		)
 
-		params, err := newParams("something:tag", testFileIngressAws)
+		params, err := newParams(testFileIngressAws)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		params.OtelCol.Namespace = ns
-		params.OtelCol.Spec.Ingress = v1beta1.Ingress{
-			Type:             v1beta1.IngressTypeIngress,
-			Hostname:         hostname,
+		params.OtelMdaiIngressComb.Otelcol.Namespace = ns
+		params.OtelMdaiIngressComb.MdaiIngress.Spec = mdaiv1.MdaiIngressSpec{
+			CloudType:        mdaiv1.CloudProviderAws,
 			Annotations:      map[string]string{"some.key": "some.value"},
 			IngressClassName: &ingressClassName,
 			CollectorEndpoints: map[string]string{
@@ -400,19 +402,17 @@ func TestDesiredIngressesAws(t *testing.T) {
 	t.Run("multiple grpc receivers, ALL host-to-component mapping records absent", func(t *testing.T) {
 		var (
 			ns               = "test"
-			hostname         = "example.com"
 			ingressClassName = "aws"
 		)
 
-		params, err := newParams("something:tag", testFileIngressAws)
+		params, err := newParams(testFileIngressAws)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		params.OtelCol.Namespace = ns
-		params.OtelCol.Spec.Ingress = v1beta1.Ingress{
-			Type:               v1beta1.IngressTypeIngress,
-			Hostname:           hostname,
+		params.OtelMdaiIngressComb.Otelcol.Namespace = ns
+		params.OtelMdaiIngressComb.MdaiIngress.Spec = mdaiv1.MdaiIngressSpec{
+			CloudType:          mdaiv1.CloudProviderAws,
 			Annotations:        map[string]string{"some.key": "some.value"},
 			IngressClassName:   &ingressClassName,
 			CollectorEndpoints: map[string]string{},

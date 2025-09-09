@@ -28,7 +28,9 @@ func GrpcService(params manifests.Params) (*corev1.Service, error) {
 	var annotations map[string]string
 	annotations = maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
 	serviceAnnotations := params.OtelMdaiIngressComb.MdaiIngress.Spec.GrpcService.Annotations
-	maps.Copy(annotations, serviceAnnotations)
+	if annotations != nil && serviceAnnotations != nil {
+		maps.Copy(annotations, serviceAnnotations)
+	}
 
 	ports, err := servicePortsFromCfg(params.Log, params.OtelMdaiIngressComb.Otelcol)
 	if err != nil {
@@ -39,24 +41,6 @@ func GrpcService(params manifests.Params) (*corev1.Service, error) {
 		if ports[i].AppProtocol == nil || (ports[i].AppProtocol != nil && *ports[i].AppProtocol != "grpc") {
 			ports = append(ports[:i], ports[i+1:]...)
 		}
-	}
-
-	if len(params.OtelMdaiIngressComb.Otelcol.Spec.Ports) > 0 {
-		// we should add all the ports from the CR
-		// there are two cases where problems might occur:
-		// 1) when the port number is already being used by a receiver
-		// 2) same, but for the port name
-		//
-		// in the first case, we remove the port we inferred from the list
-		// in the second case, we rename our inferred port to something like "port-%d"
-		portNumbers, portNames := extractPortNumbersAndNames(params.OtelMdaiIngressComb.Otelcol.Spec.Ports)
-		var resultingInferredPorts []corev1.ServicePort
-		for _, inferred := range ports {
-			if filtered := filterPort(params.Log, inferred, portNumbers, portNames); filtered != nil {
-				resultingInferredPorts = append(resultingInferredPorts, *filtered)
-			}
-		}
-		ports = append(toServicePorts(params.OtelMdaiIngressComb.Otelcol.Spec.Ports), resultingInferredPorts...)
 	}
 
 	// if we have no ports, we don't need a service
@@ -121,17 +105,13 @@ func NonGrpcService(params manifests.Params) (*corev1.Service, error) {
 	annotations = maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
 	serviceAnnotations := params.OtelMdaiIngressComb.MdaiIngress.Spec.NonGrpcService.Annotations
 
-	maps.Copy(annotations, serviceAnnotations)
+	if annotations != nil && serviceAnnotations != nil {
+		maps.Copy(annotations, serviceAnnotations)
+	}
 
 	ports, err := params.OtelMdaiIngressComb.Otelcol.Spec.Config.GetAllPorts(logrLogger)
 	if err != nil {
 		return nil, err
-	}
-
-	for i := len(ports) - 1; i >= 0; i-- {
-		if ports[i].AppProtocol != nil && *ports[i].AppProtocol == "grpc" {
-			ports = append(ports[:i], ports[i+1:]...)
-		}
 	}
 
 	if len(params.OtelMdaiIngressComb.Otelcol.Spec.Ports) > 0 {
@@ -151,6 +131,12 @@ func NonGrpcService(params manifests.Params) (*corev1.Service, error) {
 		}
 
 		ports = append(toServicePorts(params.OtelMdaiIngressComb.Otelcol.Spec.Ports), resultingInferredPorts...)
+	}
+
+	for i := len(ports) - 1; i >= 0; i-- {
+		if ports[i].AppProtocol != nil && *ports[i].AppProtocol == "grpc" {
+			ports = append(ports[:i], ports[i+1:]...)
+		}
 	}
 
 	// if we have no ports, we don't need a service

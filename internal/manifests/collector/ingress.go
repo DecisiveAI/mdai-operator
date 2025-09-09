@@ -11,16 +11,13 @@ import (
 
 	"github.com/decisiveai/mdai-operator/internal/manifests"
 	//"github.com/decisiveai/mdai-operator/internal/manifests/manifestutils"
-	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 )
 
 func Ingress(params manifests.Params) (*networkingv1.Ingress, error) {
-	// TODO: re-work labels
-	//name := naming.Ingress(params.OtelCol.Name)
-	//labels := manifestutils.Labels(params.OtelCol.ObjectMeta, name, params.OtelCol.Spec.Image, ComponentOpenTelemetryCollector, params.Config.LabelsFilter)
 	// mydecisive
-	if params.OtelMdaiIngressComb.Otelcol.Spec.Ingress.Type == "" && params.OtelMdaiIngressComb.MdaiIngress.Spec.CloudType == hubv1.CloudProviderAws {
+	if params.OtelMdaiIngressComb.Otelcol.Spec.Ingress.Type == "" && params.OtelMdaiIngressComb.MdaiIngress.Spec.CloudType == mdaiv1.CloudProviderAws {
 		return IngressAws(params)
 	} else {
 		return nil, nil

@@ -20,7 +20,6 @@ const (
 type IngressService struct {
 	// Type defines the type of the Service.
 	// +kubebuilder:validation:Enum=ClusterIP;NodePort;LoadBalancer;ExternalName
-	// +optional
 	Type corev1.ServiceType `json:"type"`
 	// Annotations to add to service.
 	// +optional
@@ -43,11 +42,9 @@ type MdaiIngressSpec struct {
 	// +optional
 	IngressClassName *string `json:"ingressClassName,omitempty"`
 
-	// +optional
-	GrpcService *IngressService `json:"grpcService,omitempty"`
+	GrpcService *IngressService `json:"grpcService"`
 
-	// +optional
-	NonGrpcService *IngressService `json:"nonGrpcService,omitempty"`
+	NonGrpcService *IngressService `json:"nonGrpcService"`
 
 	// CollectorEndpoints should contain dns names for all collectors endpoints (grpc receivers)
 	// mapped to receivers names e.g. :
