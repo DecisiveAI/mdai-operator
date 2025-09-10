@@ -41,16 +41,21 @@ func (c *OtelMdaiIngressComb) getPortsWithUrlPathsForComponentKinds(logger *zap.
 			retriever = exporters.ParserFor
 			cfg = c.Otelcol.Spec.Config.Exporters
 		case v1beta1.KindProcessor:
-			break
+			continue
+		case v1beta1.KindExtension:
+			continue
+		default:
+			logger.Error("Unsupported component kind:", zap.Int("componentKind", int(componentKind)))
+			continue
 		}
 		for componentName := range enabledComponents[componentKind] {
 			// TODO: Clean up the naming here and make it simpler to use a retriever.
 			parser := retriever(componentName)
-			if parsedPorts, err := parser.PortsWithUrlPaths(logger, componentName, cfg.Object[componentName]); err != nil {
+			parsedPorts, err := parser.PortsWithUrlPaths(logger, componentName, cfg.Object[componentName])
+			if err != nil {
 				return nil, err
-			} else {
-				componentsPortsUrlPaths[componentName] = parsedPorts
 			}
+			componentsPortsUrlPaths[componentName] = parsedPorts
 		}
 	}
 

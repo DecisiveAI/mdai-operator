@@ -78,9 +78,11 @@ type MdaiIngress struct {
 type MdaiIngressList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []MdaiIngress `json:"items"`
+
+	Items []MdaiIngress `json:"items"`
 }
 
+//nolint:gochecknoinits
 func init() {
 	SchemeBuilder.Register(&MdaiIngress{}, &MdaiIngressList{})
 }
