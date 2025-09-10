@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/decisiveai/mdai-data-core/events"
+	events "github.com/decisiveai/mdai-data-core/eventing/rule"
 	"go.uber.org/zap"
 
 	"github.com/decisiveai/mdai-data-core/audit"
@@ -424,7 +424,7 @@ func (c HubAdapter) restartCollectorAndAudit(ctx context.Context, collector v1be
 		return err
 	}
 
-	auditAdapter := audit.NewAuditAdapter(c.zapLogger, c.valKeyClient, c.valkeyAuditStreamExpiry)
+	auditAdapter := audit.NewAuditAdapter(c.zapLogger, c.valKeyClient)
 	restartEvent := auditAdapter.CreateRestartEvent(c.mdaiCR.Name, envMap)
 	logFields := []any{"mdai-logstream", "audit"}
 	for k, v := range restartEvent {

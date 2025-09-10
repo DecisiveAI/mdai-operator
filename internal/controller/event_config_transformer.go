@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/decisiveai/mdai-data-core/events"
-	"github.com/decisiveai/mdai-data-core/events/triggers"
+	events "github.com/decisiveai/mdai-data-core/eventing/rule"
+	"github.com/decisiveai/mdai-data-core/eventing/triggers"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"k8s.io/utils/ptr"
 )

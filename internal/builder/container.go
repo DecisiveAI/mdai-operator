@@ -21,7 +21,7 @@ func (b *ContainerBuilder) WithCommand(cmd ...string) *ContainerBuilder {
 }
 
 func (b *ContainerBuilder) WithPorts(ports ...corev1.ContainerPort) *ContainerBuilder {
-	b.container.Ports = append(b.container.Ports, ports...)
+	b.container.Ports = ports
 	return b
 }
 

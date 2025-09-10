@@ -2,7 +2,6 @@ package builder
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 type ServiceBuilder struct {
@@ -29,13 +28,8 @@ func (b *ServiceBuilder) WithSelectorLabel(key, value string) *ServiceBuilder {
 	return b
 }
 
-func (b *ServiceBuilder) WithPort(name string, protocol corev1.Protocol, port int32, targetPort string) *ServiceBuilder {
-	b.svc.Spec.Ports = append(b.svc.Spec.Ports, corev1.ServicePort{
-		Name:       name,
-		Protocol:   protocol,
-		Port:       port,
-		TargetPort: intstr.FromString(targetPort),
-	})
+func (b *ServiceBuilder) WithPorts(ports ...corev1.ServicePort) *ServiceBuilder {
+	b.svc.Spec.Ports = ports
 	return b
 }
 

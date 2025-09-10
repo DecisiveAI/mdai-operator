@@ -3,7 +3,7 @@ package controller
 import (
 	"testing"
 
-	"github.com/decisiveai/mdai-data-core/events/triggers"
+	"github.com/decisiveai/mdai-data-core/eventing/triggers"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
