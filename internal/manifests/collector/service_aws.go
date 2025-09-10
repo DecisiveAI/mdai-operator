@@ -1,4 +1,4 @@
-// noling:goconst
+// nolint:goconst
 package collector
 
 import (
