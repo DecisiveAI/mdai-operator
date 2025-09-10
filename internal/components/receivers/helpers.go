@@ -1,12 +1,39 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+// nolint:gofumpt
 package receivers
 
 import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/decisiveai/mdai-operator/internal/components"
+)
+
+const (
+	DefaultStatsdPort              = 8125
+	DefaultOtlpGrpcPort            = 4317
+	DefaultOtlpHttpPort            = 4318
+	DefaultSkyWalkingGrpcPort      = 11800
+	DefaultSkyWalkingHttpPort      = 12800
+	DefaultJaegerGrpcPort          = 14250
+	DefaultJaegerThriftHttpPort    = 14268
+	DefaultJaegerThriftCompactPort = 6831
+	DefaultJaegerThriftBinaryPort  = 6832
+	DefaultLokiGrpcPort            = 9095
+	DefaultLokiHttpPort            = 3100
+	DefaultAwsXrayPort             = 2000
+	DefaultCarbonPort              = 2003
+	DefaultCollectdPort            = 8081
+	DefaultFluentForwardPort       = 8006
+	DefaultInfluxDBPort            = 8086
+	DefaultOpencensusPort          = 55678
+	DefaultSapmPort                = 7276
+	DefaultSignalFxPort            = 9943
+	DefaultSplunkHecPort           = 8088
+	DefaultWaveFrontPort           = 2003
+	DefaultZipkinPort              = 9411
+	DefaultZipkinTargetPort        = 3100
 )
 
 // registry holds a record of all known receiver parsers.
@@ -39,9 +66,9 @@ func NewScraperParser(name string) *components.GenericParser[any] {
 var (
 	componentParsers = []components.Parser{
 		components.NewMultiPortReceiverBuilder("otlp").
-			AddPortMapping(components.NewProtocolBuilder("grpc", 4317).
+			AddPortMapping(components.NewProtocolBuilder("grpc", DefaultOtlpGrpcPort).
 				WithAppProtocol(&components.GrpcProtocol).
-				WithTargetPort(4317).
+				WithTargetPort(DefaultOtlpGrpcPort).
 				// mydecisive
 				WithUrlPaths(
 					[]string{
@@ -49,13 +76,13 @@ var (
 						"/opentelemetry.proto.collector.traces.v1.TracesService",
 						"/opentelemetry.proto.collector.metrics.v1.MetricsService",
 					})).
-			AddPortMapping(components.NewProtocolBuilder("http", 4318).
+			AddPortMapping(components.NewProtocolBuilder("http", DefaultOtlpHttpPort).
 				WithAppProtocol(&components.HttpProtocol).
-				WithTargetPort(4318)).
+				WithTargetPort(DefaultOtlpHttpPort)).
 			MustBuild(),
 		components.NewMultiPortReceiverBuilder("skywalking").
-			AddPortMapping(components.NewProtocolBuilder(components.GrpcProtocol, 11800).
-				WithTargetPort(11800).
+			AddPortMapping(components.NewProtocolBuilder(components.GrpcProtocol, DefaultSkyWalkingGrpcPort).
+				WithTargetPort(DefaultSkyWalkingGrpcPort).
 				WithAppProtocol(&components.GrpcProtocol).
 				// mydecisive
 				WithUrlPaths(
@@ -64,13 +91,13 @@ var (
 						"/skywalking.v3/TraceSegmentReportService",
 						"/skywalking.v3/JVMMetricReportService",
 					})).
-			AddPortMapping(components.NewProtocolBuilder(components.HttpProtocol, 12800).
-				WithTargetPort(12800).
+			AddPortMapping(components.NewProtocolBuilder(components.HttpProtocol, DefaultSkyWalkingHttpPort).
+				WithTargetPort(DefaultSkyWalkingHttpPort).
 				WithAppProtocol(&components.HttpProtocol)).
 			MustBuild(),
 		components.NewMultiPortReceiverBuilder("jaeger").
-			AddPortMapping(components.NewProtocolBuilder(components.GrpcProtocol, 14250).
-				WithTargetPort(14250).
+			AddPortMapping(components.NewProtocolBuilder(components.GrpcProtocol, DefaultJaegerGrpcPort).
+				WithTargetPort(DefaultJaegerGrpcPort).
 				WithProtocol(corev1.ProtocolTCP).
 				WithAppProtocol(&components.GrpcProtocol).
 				// mydecisive
@@ -79,62 +106,62 @@ var (
 						"/jaeger.api_v2/CollectorService",
 						"/jaeger.api_v3/QueryService",
 					})).
-			AddPortMapping(components.NewProtocolBuilder("thrift_http", 14268).
-				WithTargetPort(14268).
+			AddPortMapping(components.NewProtocolBuilder("thrift_http", DefaultJaegerThriftHttpPort).
+				WithTargetPort(DefaultJaegerThriftHttpPort).
 				WithProtocol(corev1.ProtocolTCP).
 				WithAppProtocol(&components.HttpProtocol)).
-			AddPortMapping(components.NewProtocolBuilder("thrift_compact", 6831).
-				WithTargetPort(6831).
+			AddPortMapping(components.NewProtocolBuilder("thrift_compact", DefaultJaegerThriftCompactPort).
+				WithTargetPort(DefaultJaegerThriftCompactPort).
 				WithProtocol(corev1.ProtocolUDP)).
-			AddPortMapping(components.NewProtocolBuilder("thrift_binary", 6832).
-				WithTargetPort(6832).
+			AddPortMapping(components.NewProtocolBuilder("thrift_binary", DefaultJaegerThriftBinaryPort).
+				WithTargetPort(DefaultJaegerThriftBinaryPort).
 				WithProtocol(corev1.ProtocolUDP)).
 			MustBuild(),
 		components.NewMultiPortReceiverBuilder("loki").
-			AddPortMapping(components.NewProtocolBuilder(components.GrpcProtocol, 9095).
-				WithTargetPort(9095).
+			AddPortMapping(components.NewProtocolBuilder(components.GrpcProtocol, DefaultLokiGrpcPort).
+				WithTargetPort(DefaultLokiGrpcPort).
 				WithAppProtocol(&components.GrpcProtocol).
 				// mydecisive
 				WithUrlPaths(
 					[]string{
 						"/logproto.Pusher",
 					})).
-			AddPortMapping(components.NewProtocolBuilder(components.HttpProtocol, 3100).
-				WithTargetPort(3100).
+			AddPortMapping(components.NewProtocolBuilder(components.HttpProtocol, DefaultLokiHttpPort).
+				WithTargetPort(DefaultLokiHttpPort).
 				WithAppProtocol(&components.HttpProtocol)).
 			MustBuild(),
-		components.NewSinglePortParserBuilder("awsxray", 2000).
-			WithTargetPort(2000).
+		components.NewSinglePortParserBuilder("awsxray", DefaultAwsXrayPort).
+			WithTargetPort(DefaultAwsXrayPort).
 			WithProtocol(corev1.ProtocolUDP).
 			MustBuild(),
-		components.NewSinglePortParserBuilder("carbon", 2003).
-			WithTargetPort(2003).
+		components.NewSinglePortParserBuilder("carbon", DefaultCarbonPort).
+			WithTargetPort(DefaultCarbonPort).
 			MustBuild(),
-		components.NewSinglePortParserBuilder("collectd", 8081).
-			WithTargetPort(8081).
+		components.NewSinglePortParserBuilder("collectd", DefaultCollectdPort).
+			WithTargetPort(DefaultCollectdPort).
 			MustBuild(),
-		components.NewSinglePortParserBuilder("fluentforward", 8006).
-			WithTargetPort(8006).
+		components.NewSinglePortParserBuilder("fluentforward", DefaultFluentForwardPort).
+			WithTargetPort(DefaultFluentForwardPort).
 			MustBuild(),
-		components.NewSinglePortParserBuilder("influxdb", 8086).
-			WithTargetPort(8086).
+		components.NewSinglePortParserBuilder("influxdb", DefaultInfluxDBPort).
+			WithTargetPort(DefaultInfluxDBPort).
 			MustBuild(),
-		components.NewSinglePortParserBuilder("opencensus", 55678).
+		components.NewSinglePortParserBuilder("opencensus", DefaultOpencensusPort).
 			WithAppProtocol(nil).
-			WithTargetPort(55678).
+			WithTargetPort(DefaultOpencensusPort).
 			MustBuild(),
-		components.NewSinglePortParserBuilder("sapm", 7276).
-			WithTargetPort(7276).
+		components.NewSinglePortParserBuilder("sapm", DefaultSapmPort).
+			WithTargetPort(DefaultSapmPort).
 			MustBuild(),
-		components.NewSinglePortParserBuilder("signalfx", 9943).
-			WithTargetPort(9943).
+		components.NewSinglePortParserBuilder("signalfx", DefaultSignalFxPort).
+			WithTargetPort(DefaultSignalFxPort).
 			MustBuild(),
-		components.NewSinglePortParserBuilder("splunk_hec", 8088).
-			WithTargetPort(8088).
+		components.NewSinglePortParserBuilder("splunk_hec", DefaultSplunkHecPort).
+			WithTargetPort(DefaultSplunkHecPort).
 			MustBuild(),
-		components.NewSinglePortParserBuilder("statsd", 8125).
+		components.NewSinglePortParserBuilder("statsd", DefaultStatsdPort).
 			WithProtocol(corev1.ProtocolUDP).
-			WithTargetPort(8125).
+			WithTargetPort(DefaultStatsdPort).
 			MustBuild(),
 		components.NewSinglePortParserBuilder("tcplog", components.UnsetPort).
 			WithProtocol(corev1.ProtocolTCP).
@@ -142,13 +169,13 @@ var (
 		components.NewSinglePortParserBuilder("udplog", components.UnsetPort).
 			WithProtocol(corev1.ProtocolUDP).
 			MustBuild(),
-		components.NewSinglePortParserBuilder("wavefront", 2003).
-			WithTargetPort(2003).
+		components.NewSinglePortParserBuilder("wavefront", DefaultWaveFrontPort).
+			WithTargetPort(DefaultWaveFrontPort).
 			MustBuild(),
-		components.NewSinglePortParserBuilder("zipkin", 9411).
+		components.NewSinglePortParserBuilder("zipkin", DefaultZipkinPort).
 			WithAppProtocol(&components.HttpProtocol).
 			WithProtocol(corev1.ProtocolTCP).
-			WithTargetPort(3100).
+			WithTargetPort(DefaultZipkinTargetPort).
 			MustBuild(),
 		components.NewBuilder[kubeletStatsConfig]().WithName("kubeletstats").
 			WithRbacGen(generateKubeletStatsRbacRules).
@@ -196,7 +223,7 @@ var (
 	}
 )
 
-func init() {
+func init() { //nolint:gochecknoinits
 	for _, parser := range componentParsers {
 		Register(parser.ParserType(), parser)
 	}

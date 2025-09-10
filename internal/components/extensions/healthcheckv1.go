@@ -22,10 +22,11 @@ const (
 
 type healthcheckV1Config struct {
 	components.SingleEndpointConfig `mapstructure:",squash"`
-	Path                            string `mapstructure:"path"`
+
+	Path string `mapstructure:"path"`
 }
 
-func healthCheckV1AddressDefaulter(logger *zap.Logger, defaultRecAddr string, port int32, config healthcheckV1Config) (map[string]interface{}, error) {
+func healthCheckV1AddressDefaulter(logger *zap.Logger, defaultRecAddr string, port int32, config healthcheckV1Config) (map[string]any, error) {
 	if config.Endpoint == "" {
 		config.Endpoint = fmt.Sprintf("%s:%d", defaultRecAddr, port)
 	} else {
@@ -39,7 +40,7 @@ func healthCheckV1AddressDefaulter(logger *zap.Logger, defaultRecAddr string, po
 		config.Path = defaultHealthcheckV1Path
 	}
 
-	res := make(map[string]interface{})
+	res := make(map[string]any)
 	err := mapstructure.Decode(config, &res)
 	return res, err
 }
@@ -51,7 +52,7 @@ func healthCheckV1Probe(logger *zap.Logger, config healthcheckV1Config) (*corev1
 	// but since the function runs only when manifests are deployed,
 	// we must keep these runtime defaults for backward compatibility.
 	path := config.Path
-	if len(path) == 0 {
+	if path == "" {
 		path = defaultHealthcheckV1Path
 	}
 	return &corev1.Probe{

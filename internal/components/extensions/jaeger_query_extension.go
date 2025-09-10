@@ -1,6 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+// nolint:gofumpt
 package extensions
 
 import (
@@ -44,10 +45,10 @@ func (g *JaegerQueryExtensionConfig) GetPortNumOrDefault(logger *zap.Logger, p i
 // GetPortNum attempts to get the port for the given config. If it cannot, the UnsetPort and the given missingPortError
 // are returned.
 func (g *JaegerQueryExtensionConfig) GetPortNum() (int32, error) {
-	if len(g.HTTP.Endpoint) > 0 {
+	if g.HTTP.Endpoint != "" {
 		return components.PortFromEndpoint(g.HTTP.Endpoint)
 	}
-	return components.UnsetPort, components.PortNotFoundErr
+	return components.UnsetPort, components.ErrPortNotFound
 }
 
 func ParseJaegerQueryExtensionConfig(logger *zap.Logger, name string, defaultPort *corev1.ServicePort, cfg *JaegerQueryExtensionConfig) ([]corev1.ServicePort, error) {
@@ -68,7 +69,7 @@ func NewJaegerQueryExtensionParserBuilder() components.Builder[*JaegerQueryExten
 	return components.NewBuilder[*JaegerQueryExtensionConfig]().WithPort(port).WithName(name).WithPortParser(ParseJaegerQueryExtensionConfig).WithDefaultsApplier(endpointDefaulter).WithDefaultRecAddress(components.DefaultRecAddress).WithTargetPort(port)
 }
 
-func endpointDefaulter(_ *zap.Logger, defaultRecAddr string, port int32, config *JaegerQueryExtensionConfig) (map[string]interface{}, error) {
+func endpointDefaulter(_ *zap.Logger, defaultRecAddr string, port int32, config *JaegerQueryExtensionConfig) (map[string]any, error) {
 	if config == nil {
 		config = &JaegerQueryExtensionConfig{}
 	}
@@ -82,7 +83,7 @@ func endpointDefaulter(_ *zap.Logger, defaultRecAddr string, port int32, config 
 		}
 	}
 
-	res := make(map[string]interface{})
+	res := make(map[string]any)
 	err := mapstructure.Decode(config, &res)
 	return res, err
 }

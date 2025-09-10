@@ -1,6 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+// nolint:goconst
 package collector
 
 import (
@@ -8,12 +9,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
-
-const testFileIngress = "testdata/ingress_testdata.yaml"
 
 func TestServicePortsFromCfg(t *testing.T) {
 	t.Run("should return nil invalid ingress type", func(t *testing.T) {
@@ -23,7 +23,7 @@ func TestServicePortsFromCfg(t *testing.T) {
 		grpc := "grpc"
 
 		params, err := newParams("testdata/ingress_aws_testdata_2_and_2.yaml")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		expected := []corev1.ServicePort{
 			{
@@ -113,7 +113,7 @@ func TestServicePortsFromCfg(t *testing.T) {
 		}
 
 		actual, err := servicePortsFromCfg(logger, params.OtelMdaiIngressComb.Otelcol)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.ElementsMatch(t, expected, actual)
 	})
 }

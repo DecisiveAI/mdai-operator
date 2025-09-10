@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -16,15 +17,15 @@ import (
 )
 
 var (
-	httpConfig = map[string]interface{}{
-		"protocols": map[string]interface{}{
-			"http": map[string]interface{}{},
+	httpConfig = map[string]any{
+		"protocols": map[string]any{
+			"http": map[string]any{},
 		},
 	}
-	httpAndGrpcConfig = map[string]interface{}{
-		"protocols": map[string]interface{}{
-			"http": map[string]interface{}{},
-			"grpc": map[string]interface{}{},
+	httpAndGrpcConfig = map[string]any{
+		"protocols": map[string]any{
+			"http": map[string]any{},
+			"grpc": map[string]any{},
 		},
 	}
 )
@@ -58,7 +59,7 @@ func TestMultiPortReceiver_ParserName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s, err := tt.fields.b.Build()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equalf(t, tt.want, s.ParserName(), "ParserName()")
 		})
 	}
@@ -93,7 +94,7 @@ func TestMultiPortReceiver_ParserType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s, err := tt.fields.b.Build()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equalf(t, tt.want, s.ParserType(), "ParserType()")
 		})
 	}
@@ -105,7 +106,7 @@ func TestMultiPortReceiver_Ports(t *testing.T) {
 		b    components.MultiPortBuilder[*components.MultiProtocolEndpointConfig]
 	}
 	type args struct {
-		config interface{}
+		config any
 	}
 	tests := []struct {
 		name         string
@@ -297,9 +298,9 @@ func TestMultiPortReceiver_Ports(t *testing.T) {
 				b:    components.NewMultiPortReceiverBuilder("receiver2").AddPortMapping(components.NewProtocolBuilder("http", 80)),
 			},
 			args: args{
-				config: map[string]interface{}{
-					"protocols": map[string]interface{}{
-						"unknown": map[string]interface{}{},
+				config: map[string]any{
+					"protocols": map[string]any{
+						"unknown": map[string]any{},
 					},
 				},
 			},
@@ -314,7 +315,7 @@ func TestMultiPortReceiver_Ports(t *testing.T) {
 				b:    components.MultiPortBuilder[*components.MultiProtocolEndpointConfig]{},
 			},
 			args: args{
-				config: map[string]interface{}{},
+				config: map[string]any{},
 			},
 			want:         nil,
 			wantBuildErr: assert.Error,
@@ -326,7 +327,7 @@ func TestMultiPortReceiver_Ports(t *testing.T) {
 				b:    components.NewMultiPortReceiverBuilder("receiver2").AddPortMapping(components.NewBuilder[*components.MultiProtocolEndpointConfig]()),
 			},
 			args: args{
-				config: map[string]interface{}{},
+				config: map[string]any{},
 			},
 			want:         nil,
 			wantErr:      assert.NoError,
@@ -345,13 +346,13 @@ func TestMultiPortReceiver_Ports(t *testing.T) {
 			}
 			assert.ElementsMatchf(t, tt.want, got, "Ports(%v)", tt.args.config)
 			rbacGen, err := s.GetRBACRules(zap.NewNop(), tt.args.config)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Nil(t, rbacGen)
 			livenessProbe, livenessErr := s.GetLivenessProbe(zap.NewNop(), tt.args.config)
-			assert.NoError(t, livenessErr)
+			require.NoError(t, livenessErr)
 			assert.Nil(t, livenessProbe)
 			readinessProbe, readinessErr := s.GetReadinessProbe(zap.NewNop(), tt.args.config)
-			assert.NoError(t, readinessErr)
+			require.NoError(t, readinessErr)
 			assert.Nil(t, readinessProbe)
 		})
 	}
@@ -360,13 +361,13 @@ func TestMultiPortReceiver_Ports(t *testing.T) {
 func TestMultiPortReceiver_GetDefaultConfig(t *testing.T) {
 	type args struct {
 		logger *zap.Logger
-		config interface{}
+		config any
 	}
 	type testCase struct {
 		name    string
 		m       components.Parser
 		args    args
-		want    interface{}
+		want    any
 		wantErr assert.ErrorAssertionFunc
 	}
 
@@ -379,15 +380,15 @@ func TestMultiPortReceiver_GetDefaultConfig(t *testing.T) {
 					WithTargetPort(8080)).MustBuild(),
 			args: args{
 				logger: zap.NewNop(),
-				config: map[string]interface{}{
-					"protocols": map[string]interface{}{
+				config: map[string]any{
+					"protocols": map[string]any{
 						"http": nil,
 					},
 				},
 			},
-			want: map[string]interface{}{
-				"protocols": map[string]interface{}{
-					"http": map[string]interface{}{
+			want: map[string]any{
+				"protocols": map[string]any{
+					"http": map[string]any{
 						"endpoint": "0.0.0.0:80",
 					},
 				},
@@ -405,19 +406,19 @@ func TestMultiPortReceiver_GetDefaultConfig(t *testing.T) {
 					WithTargetPort(8080)).MustBuild(),
 			args: args{
 				logger: zap.NewNop(),
-				config: map[string]interface{}{
-					"protocols": map[string]interface{}{
+				config: map[string]any{
+					"protocols": map[string]any{
 						"http": nil,
 						"grpc": nil,
 					},
 				},
 			},
-			want: map[string]interface{}{
-				"protocols": map[string]interface{}{
-					"http": map[string]interface{}{
+			want: map[string]any{
+				"protocols": map[string]any{
+					"http": map[string]any{
 						"endpoint": "0.0.0.0:80",
 					},
-					"grpc": map[string]interface{}{
+					"grpc": map[string]any{
 						"endpoint": "0.0.0.0:90",
 					},
 				},
@@ -435,23 +436,23 @@ func TestMultiPortReceiver_GetDefaultConfig(t *testing.T) {
 					WithTargetPort(8080)).MustBuild(),
 			args: args{
 				logger: zap.NewNop(),
-				config: map[string]interface{}{
-					"protocols": map[string]interface{}{
-						"http": map[string]interface{}{
+				config: map[string]any{
+					"protocols": map[string]any{
+						"http": map[string]any{
 							"endpoint": "0.0.0.0:8080",
 						},
-						"grpc": map[string]interface{}{
+						"grpc": map[string]any{
 							"endpoint": "0.0.0.0:9090",
 						},
 					},
 				},
 			},
-			want: map[string]interface{}{
-				"protocols": map[string]interface{}{
-					"http": map[string]interface{}{
+			want: map[string]any{
+				"protocols": map[string]any{
+					"http": map[string]any{
 						"endpoint": "0.0.0.0:8080",
 					},
-					"grpc": map[string]interface{}{
+					"grpc": map[string]any{
 						"endpoint": "0.0.0.0:9090",
 					},
 				},
@@ -463,9 +464,9 @@ func TestMultiPortReceiver_GetDefaultConfig(t *testing.T) {
 			m:    components.NewMultiPortReceiverBuilder("receiver1").MustBuild(),
 			args: args{
 				logger: zap.NewNop(),
-				config: map[string]interface{}{
-					"protocols": map[string]interface{}{
-						"unknown": map[string]interface{}{
+				config: map[string]any{
+					"protocols": map[string]any{
+						"unknown": map[string]any{
 							"endpoint": "http://localhost",
 						},
 					},
@@ -479,9 +480,9 @@ func TestMultiPortReceiver_GetDefaultConfig(t *testing.T) {
 			m:    components.NewMultiPortReceiverBuilder("receiver1").MustBuild(),
 			args: args{
 				logger: zap.NewNop(),
-				config: map[string]interface{}{
-					"protocols": map[string]interface{}{
-						"http": map[string]interface{}{
+				config: map[string]any{
+					"protocols": map[string]any{
+						"http": map[string]any{
 							"listen_address": "0.0.0.0:8080",
 						},
 					},

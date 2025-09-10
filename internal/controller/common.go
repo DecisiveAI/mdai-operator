@@ -48,13 +48,17 @@ func getList[T client.Object](ctx context.Context, cl client.Client, l T, option
 	if err != nil {
 		return nil, err
 	}
+	// nolint:perfsprint
 	gvk.Kind = fmt.Sprintf("%sList", gvk.Kind)
 	list, err := cl.Scheme().New(gvk)
 	if err != nil {
 		return nil, fmt.Errorf("unable to list objects of type %s: %w", gvk.Kind, err)
 	}
 
-	objList := list.(client.ObjectList)
+	objList, ok := list.(client.ObjectList)
+	if !ok {
+		return ownedObjects, fmt.Errorf("unable to cast %v to ObjectList", list)
+	}
 
 	err = cl.List(ctx, objList, options...)
 	if err != nil {
@@ -101,7 +105,10 @@ func reconcileDesiredObjects(ctx context.Context, kubeClient client.Client, logg
 		}
 		// existing is an object the controller runtime will hydrate for us
 		// we obtain the existing object by deep copying the desired object because it's the most convenient way
-		existing := desired.DeepCopyObject().(client.Object)
+		existing, ok := desired.DeepCopyObject().(client.Object)
+		if !ok {
+			return errors.New("failed to convert desired object to client.Object")
+		}
 		mutateFn := manifests.MutateFuncFor(existing, desired)
 		var op controllerutil.OperationResult
 		crudErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -109,7 +116,7 @@ func reconcileDesiredObjects(ctx context.Context, kubeClient client.Client, logg
 			op = result
 			return createOrUpdateErr
 		})
-		if crudErr != nil && errors.As(crudErr, &manifests.ImmutableChangeErr) {
+		if crudErr != nil && errors.As(crudErr, &manifests.ErrImmutableChange) {
 			l.Error(crudErr, "detected immutable field change, trying to delete, new object will be created on next reconcile", "existing", existing.GetName())
 			delErr := kubeClient.Delete(ctx, existing)
 			if delErr != nil {

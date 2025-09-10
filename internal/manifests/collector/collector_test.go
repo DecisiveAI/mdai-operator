@@ -8,6 +8,7 @@ import (
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuild1(t *testing.T) {
@@ -19,7 +20,7 @@ func TestBuild1(t *testing.T) {
 		)
 
 		params, err := newParams("testdata/ingress_aws_testdata_2_and_2.yaml")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		params.OtelMdaiIngressComb.Otelcol.Namespace = ns
 		params.OtelMdaiIngressComb.MdaiIngress.Spec = mdaiv1.MdaiIngressSpec{
@@ -34,9 +35,8 @@ func TestBuild1(t *testing.T) {
 		}
 
 		objects, err := Build(params)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, objects, expectedObjects)
-
 	})
 	t.Run("1 grpc 1 non-grpc receivers", func(t *testing.T) {
 		var (
@@ -46,7 +46,7 @@ func TestBuild1(t *testing.T) {
 		)
 
 		params, err := newParams("testdata/ingress_aws_testdata_1_and_1.yaml")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		params.OtelMdaiIngressComb.Otelcol.Namespace = ns
 		params.OtelMdaiIngressComb.MdaiIngress.Spec = mdaiv1.MdaiIngressSpec{
@@ -60,9 +60,8 @@ func TestBuild1(t *testing.T) {
 		}
 
 		objects, err := Build(params)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, objects, expectedObjects)
-
 	})
 	t.Run("1 grpc receiver", func(t *testing.T) {
 		var (
@@ -73,7 +72,7 @@ func TestBuild1(t *testing.T) {
 		)
 
 		params, err := newParams("testdata/ingress_aws_testdata_1_grpc.yaml")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		params.OtelMdaiIngressComb.Otelcol.Namespace = ns
 		params.OtelMdaiIngressComb.MdaiIngress.Spec = mdaiv1.MdaiIngressSpec{
@@ -88,9 +87,8 @@ func TestBuild1(t *testing.T) {
 		}
 
 		objects, err := Build(params)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, objects, expectedObjects)
-
 	})
 	t.Run("1 non-grpc receiver", func(t *testing.T) {
 		var (
@@ -100,7 +98,7 @@ func TestBuild1(t *testing.T) {
 		)
 
 		params, err := newParams("testdata/ingress_aws_testdata_1_non_grpc.yaml")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		params.OtelMdaiIngressComb.Otelcol.Namespace = ns
 		params.OtelMdaiIngressComb.MdaiIngress.Spec = mdaiv1.MdaiIngressSpec{
@@ -115,7 +113,7 @@ func TestBuild1(t *testing.T) {
 		}
 
 		objects, err := Build(params)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, objects, expectedObjects)
 	})
 }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package naming is for determining the names for components (containers, services, ...).
+// nolint:mnd
 package naming
 
 // ConfigMap builds the name for the config map used in the OpenTelemetryCollector containers.

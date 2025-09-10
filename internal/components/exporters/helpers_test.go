@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/decisiveai/mdai-operator/internal/components"
@@ -18,11 +19,11 @@ func TestParserForReturns(t *testing.T) {
 	parser := ParserFor(testComponentName)
 	assert.Equal(t, "test", parser.ParserType())
 	assert.Equal(t, "__test", parser.ParserName())
-	ports, err := parser.Ports(zap.NewNop(), testComponentName, map[string]interface{}{
+	ports, err := parser.Ports(zap.NewNop(), testComponentName, map[string]any{
 		"endpoint": "localhost:9000",
 	})
-	assert.NoError(t, err)
-	assert.Len(t, ports, 0) // Should use the nop parser
+	require.NoError(t, err)
+	assert.Empty(t, ports) // Should use the nop parser
 }
 
 func TestCanRegister(t *testing.T) {
@@ -31,10 +32,10 @@ func TestCanRegister(t *testing.T) {
 	parser := ParserFor(testComponentName)
 	assert.Equal(t, "test", parser.ParserType())
 	assert.Equal(t, "__test", parser.ParserName())
-	ports, err := parser.Ports(zap.NewNop(), testComponentName, map[string]interface{}{})
-	assert.NoError(t, err)
+	ports, err := parser.Ports(zap.NewNop(), testComponentName, map[string]any{})
+	require.NoError(t, err)
 	assert.Len(t, ports, 1)
-	assert.Equal(t, ports[0].Port, int32(9000))
+	assert.Equal(t, int32(9000), ports[0].Port)
 }
 
 func TestExporterComponentParsers(t *testing.T) {
@@ -66,16 +67,16 @@ func TestExporterComponentParsers(t *testing.T) {
 				parser := ParserFor(tt.exporterName)
 
 				// test
-				ports, err := parser.Ports(zap.NewNop(), tt.exporterName, map[string]interface{}{})
+				ports, err := parser.Ports(zap.NewNop(), tt.exporterName, map[string]any{})
 
 				if tt.defaultPort == 0 {
-					assert.Len(t, ports, 0)
+					assert.Empty(t, ports)
 					return
 				}
 				// verify
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Len(t, ports, 1)
-				assert.EqualValues(t, tt.defaultPort, ports[0].Port)
+				assert.Equal(t, tt.defaultPort, ports[0].Port)
 				assert.Equal(t, naming.PortName(tt.exporterName, tt.defaultPort), ports[0].Name)
 			})
 
@@ -84,12 +85,12 @@ func TestExporterComponentParsers(t *testing.T) {
 				parser := ParserFor(tt.exporterName)
 
 				// test
-				ports, err := parser.Ports(zap.NewNop(), tt.exporterName, map[string]interface{}{
+				ports, err := parser.Ports(zap.NewNop(), tt.exporterName, map[string]any{
 					"endpoint": "0.0.0.0:65535",
 				})
 
 				// verify
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Len(t, ports, 1)
 				assert.EqualValues(t, 65535, ports[0].Port)
 				assert.Equal(t, naming.PortName(tt.exporterName, tt.defaultPort), ports[0].Name)

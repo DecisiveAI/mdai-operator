@@ -1,6 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+// nolint:gofumpt,goimports
 package collector
 
 import (
@@ -8,7 +9,7 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	"github.com/stretchr/testify/assert"
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 )
 
 func TestExtractPortNumbersAndNames(t *testing.T) {
@@ -30,12 +31,10 @@ func TestExtractPortNumbersAndNames(t *testing.T) {
 		actualPortNumbers, actualPortNames := extractPortNumbersAndNames(ports)
 		assert.Equal(t, expectedPortNames, actualPortNames)
 		assert.Equal(t, expectedPortNumbers, actualPortNumbers)
-
 	})
 }
 
 func TestFilterPort(t *testing.T) {
-
 	tests := []struct {
 		name        string
 		candidate   v1.ServicePort
@@ -128,8 +127,6 @@ func TestFilterPort(t *testing.T) {
 				return
 			}
 			assert.Nil(t, actual)
-
 		})
-
 	}
 }

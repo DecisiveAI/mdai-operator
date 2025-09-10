@@ -1,3 +1,4 @@
+// nolint:goconst,gofumpt
 package collector
 
 import (
@@ -20,8 +21,7 @@ func IngressAws(params manifests.Params) (*networkingv1.Ingress, error) {
 	// TODO: rework labels & annotations
 	labels := params.OtelMdaiIngressComb.MdaiIngress.Labels
 
-	var annotations map[string]string
-	annotations = maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
+	annotations := maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
 	ingressAnnotations := params.OtelMdaiIngressComb.MdaiIngress.Spec.Annotations
 	if annotations != nil && ingressAnnotations != nil {
 		maps.Copy(annotations, ingressAnnotations)
@@ -49,7 +49,6 @@ func IngressAws(params manifests.Params) (*networkingv1.Ingress, error) {
 			compPortsEndpoints[comp] = portsEndpoints
 		} else {
 			delete(compPortsEndpoints, comp)
-
 		}
 	}
 	// if we have no grpc ports, we don't need an ingress entry
@@ -59,30 +58,35 @@ func IngressAws(params manifests.Params) (*networkingv1.Ingress, error) {
 			zap.String("instance.name", params.OtelMdaiIngressComb.Otelcol.Name),
 			zap.String("instance.namespace", params.OtelMdaiIngressComb.Otelcol.Namespace),
 		)
-		return nil, nil
+		return nil, nil // nolint:nilnil
 	}
 
 	switch params.OtelMdaiIngressComb.Otelcol.Spec.Ingress.RuleType {
 	case v1beta1.IngressRuleTypePath, "":
-		if params.OtelMdaiIngressComb.MdaiIngress.Spec.CollectorEndpoints == nil || len(params.OtelMdaiIngressComb.MdaiIngress.Spec.CollectorEndpoints) == 0 {
+		if len(params.OtelMdaiIngressComb.MdaiIngress.Spec.CollectorEndpoints) == 0 {
 			return nil, errors.New("empty components to hostnames mapping")
-		} else {
-			rules = createPathIngressRulesUrlPaths(params.Log, params.OtelMdaiIngressComb.Otelcol.Name, params.OtelMdaiIngressComb.MdaiIngress.Spec.CollectorEndpoints, compPortsEndpoints)
 		}
+		rules = createPathIngressRulesUrlPaths(params.Log, params.OtelMdaiIngressComb.Otelcol.Name, params.OtelMdaiIngressComb.MdaiIngress.Spec.CollectorEndpoints, compPortsEndpoints)
 	case v1beta1.IngressRuleTypeSubdomain:
 		params.Log.Info("Only  IngressRuleType = \"path\" is supported for AWS",
 			zap.String("ingress.type", string(hubv1.CloudProviderAws)),
 			zap.String("ingress.ruleType", string(v1beta1.IngressRuleTypeSubdomain)),
 		)
 		return nil, err
+	default:
+		params.Log.Info("Unsupported IngressRuleType",
+			zap.String("ingress.type", string(hubv1.CloudProviderAws)),
+			zap.String("ingress.ruleType", string(params.OtelMdaiIngressComb.Otelcol.Spec.Ingress.RuleType)),
+		)
+		return nil, err
 	}
-	if rules == nil || len(rules) == 0 {
+	if len(rules) == 0 {
 		params.Log.Info(
 			"could not configure any ingress rules for the instance's configuration, skipping ingress",
 			zap.String("instance.name", params.OtelMdaiIngressComb.Otelcol.Name),
 			zap.String("instance.namespace", params.OtelMdaiIngressComb.Otelcol.Namespace),
 		)
-		return nil, nil
+		return nil, nil // nolint:nilnil
 	}
 
 	sort.Slice(rules, func(i, j int) bool {
@@ -132,21 +136,22 @@ func createPathIngressRulesUrlPaths(logger *zap.Logger, otelcol string, colEndpo
 				}
 				i++
 			}
-			if host, ok := colEndpoints[comp]; ok {
-				ingressRule := networkingv1.IngressRule{
-					Host: host,
-					IngressRuleValue: networkingv1.IngressRuleValue{
-						HTTP: &networkingv1.HTTPIngressRuleValue{
-							Paths: paths,
-						},
-					},
-				}
-				ingressRules = append(ingressRules, ingressRule)
-			} else {
+			host, ok := colEndpoints[comp]
+			if !ok {
 				err := errors.New("missing or invalid mapping")
 				logger.Error("missing or invalid mapping for", zap.String("component", comp), zap.Error(err))
 				continue
 			}
+
+			ingressRule := networkingv1.IngressRule{
+				Host: host,
+				IngressRuleValue: networkingv1.IngressRuleValue{
+					HTTP: &networkingv1.HTTPIngressRuleValue{
+						Paths: paths,
+					},
+				},
+			}
+			ingressRules = append(ingressRules, ingressRule)
 		}
 	}
 	return ingressRules

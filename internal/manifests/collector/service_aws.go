@@ -1,3 +1,4 @@
+// noling:goconst
 package collector
 
 import (
@@ -17,16 +18,16 @@ import (
 // mydecisive.
 func GrpcService(params manifests.Params) (*corev1.Service, error) {
 	// we need this service for aws only
-	if !(params.OtelMdaiIngressComb.Otelcol.Spec.Ingress.Type == "" && params.OtelMdaiIngressComb.MdaiIngress.Spec.CloudType == hubv1.CloudProviderAws) {
-		return nil, nil
+	if params.OtelMdaiIngressComb.Otelcol.Spec.Ingress.Type != "" ||
+		params.OtelMdaiIngressComb.MdaiIngress.Spec.CloudType != hubv1.CloudProviderAws {
+		return nil, nil // nolint:nilnil
 	}
 
 	// TODO: rework labels & annotations
 	name := naming.GrpcService(params.OtelMdaiIngressComb.Otelcol.Name)
 	labels := manifestutils.Labels(params.OtelMdaiIngressComb.Otelcol.ObjectMeta, name, params.OtelMdaiIngressComb.Otelcol.Spec.Image, ComponentOpenTelemetryCollector, []string{})
 
-	var annotations map[string]string
-	annotations = maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
+	annotations := maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
 	serviceAnnotations := params.OtelMdaiIngressComb.MdaiIngress.Spec.GrpcService.Annotations
 	if annotations != nil && serviceAnnotations != nil {
 		maps.Copy(annotations, serviceAnnotations)
@@ -81,28 +82,17 @@ func GrpcService(params manifests.Params) (*corev1.Service, error) {
 }
 
 func NonGrpcService(params manifests.Params) (*corev1.Service, error) {
-
 	logrLogger := zapr.NewLogger(params.Log)
 	// we need this service for aws only
-	if !(params.OtelMdaiIngressComb.Otelcol.Spec.Ingress.Type == "" && params.OtelMdaiIngressComb.MdaiIngress.Spec.CloudType == hubv1.CloudProviderAws) {
-		return nil, nil
+	if params.OtelMdaiIngressComb.Otelcol.Spec.Ingress.Type != "" ||
+		params.OtelMdaiIngressComb.MdaiIngress.Spec.CloudType != hubv1.CloudProviderAws {
+		return nil, nil // nolint:nilnil
 	}
 
 	name := naming.NonGrpcService(params.OtelMdaiIngressComb.Otelcol.Name)
 	labels := manifestutils.Labels(params.OtelMdaiIngressComb.Otelcol.ObjectMeta, name, params.OtelMdaiIngressComb.Otelcol.Spec.Image, ComponentOpenTelemetryCollector, []string{})
 
-	//annotations, err := manifestutils.Annotations(params.OtelMdaiIngressComb.Otelcol, []string{})
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//ingressAnnotations, err := manifestutils.NonGrpcServiceAnnotations(params.OtelMdaiIngressComb, []string{})
-	//if err != nil {
-	//	return nil, err
-	//}
-
-	var annotations map[string]string
-	annotations = maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
+	annotations := maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
 	serviceAnnotations := params.OtelMdaiIngressComb.MdaiIngress.Spec.NonGrpcService.Annotations
 
 	if annotations != nil && serviceAnnotations != nil {
@@ -160,8 +150,7 @@ func NonGrpcService(params manifests.Params) (*corev1.Service, error) {
 		}
 	}
 
-	var spec corev1.ServiceSpec
-	spec = corev1.ServiceSpec{
+	spec := corev1.ServiceSpec{
 		InternalTrafficPolicy: &trafficPolicy,
 		Selector:              manifestutils.SelectorLabels(params.OtelMdaiIngressComb.Otelcol.ObjectMeta, ComponentOpenTelemetryCollector),
 		Type:                  serviceType,

@@ -1,10 +1,11 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+// nolint:gofumpt
 package components
 
 import (
-	"fmt"
+	"errors"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -136,8 +137,8 @@ func (b Builder[ComponentConfigType]) WithUrlPaths(urlPaths []string) Builder[Co
 func (b Builder[ComponentConfigType]) Build() (*GenericParser[ComponentConfigType], error) {
 	o := NewEmptySettings[ComponentConfigType]()
 	o.Apply(b...)
-	if len(o.name) == 0 {
-		return nil, fmt.Errorf("invalid settings struct, no name specified")
+	if o.name == "" {
+		return nil, errors.New("invalid settings struct, no name specified")
 	}
 	return &GenericParser[ComponentConfigType]{
 		name:            o.name,
@@ -152,9 +153,9 @@ func (b Builder[ComponentConfigType]) Build() (*GenericParser[ComponentConfigTyp
 }
 
 func (b Builder[ComponentConfigType]) MustBuild() *GenericParser[ComponentConfigType] {
-	if p, err := b.Build(); err != nil {
+	p, err := b.Build()
+	if err != nil {
 		panic(err)
-	} else {
-		return p
 	}
+	return p
 }

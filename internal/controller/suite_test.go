@@ -14,7 +14,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
 
@@ -39,7 +38,7 @@ var _ = BeforeSuite(func() {
 	err = mdaiv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = hubv1.AddToScheme(scheme.Scheme)
+	err = mdaiv1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:scheme

@@ -1,9 +1,11 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+// nolint:gofumpt
 package manifests
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -14,16 +16,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-type ImmutableFieldChangeErr struct {
+type ImmutableFieldChangeError struct {
 	Field string
 }
 
-func (e *ImmutableFieldChangeErr) Error() string {
+func (e *ImmutableFieldChangeError) Error() string {
+	// nolint:perfsprint
 	return fmt.Sprintf("Immutable field change attempted: %s", e.Field)
 }
 
 var (
-	ImmutableChangeErr *ImmutableFieldChangeErr
+	ErrImmutableChange *ImmutableFieldChangeError
 )
 
 // MutateFuncFor returns a mutate function based on the
@@ -57,15 +60,28 @@ func MutateFuncFor(existing, desired client.Object) controllerutil.MutateFn {
 			existing.SetOwnerReferences(ownerRefs)
 		}
 
+		//nolint:gocritic
 		switch existing.(type) {
 		case *corev1.Service:
-			svc := existing.(*corev1.Service)
-			wantSvc := desired.(*corev1.Service)
+			svc, ok := existing.(*corev1.Service)
+			if !ok {
+				return errors.New("cannot cast to Service")
+			}
+			wantSvc, ok := desired.(*corev1.Service)
+			if !ok {
+				return errors.New("cannot cast to Service")
+			}
 			mutateService(svc, wantSvc)
 
 		case *networkingv1.Ingress:
-			ing := existing.(*networkingv1.Ingress)
-			wantIng := desired.(*networkingv1.Ingress)
+			ing, ok := existing.(*networkingv1.Ingress)
+			if !ok {
+				return errors.New("cannot cast to Ingress")
+			}
+			wantIng, ok := desired.(*networkingv1.Ingress)
+			if !ok {
+				return errors.New("cannot cast to Ingress")
+			}
 			mutateIngress(ing, wantIng)
 
 		default:
@@ -76,7 +92,7 @@ func MutateFuncFor(existing, desired client.Object) controllerutil.MutateFn {
 	}
 }
 
-func mergeWithOverride(dst, src interface{}) error {
+func mergeWithOverride(dst, src any) error {
 	return mergo.Merge(dst, src, mergo.WithOverride)
 }
 
@@ -96,7 +112,7 @@ func mutateService(existing, desired *corev1.Service) {
 func hasImmutableLabelChange(existingSelectorLabels, desiredLabels map[string]string) error {
 	for k, v := range existingSelectorLabels {
 		if vv, ok := desiredLabels[k]; !ok || vv != v {
-			return &ImmutableFieldChangeErr{Field: "Spec.Template.Metadata.Labels"}
+			return &ImmutableFieldChangeError{Field: "Spec.Template.Metadata.Labels"}
 		}
 	}
 	return nil

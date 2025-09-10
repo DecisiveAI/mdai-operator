@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/decisiveai/mdai-operator/internal/components/receivers"
@@ -64,11 +65,11 @@ func TestScraperParsers(t *testing.T) {
 				parser := receivers.ReceiverFor(tt.receiverName)
 
 				// test
-				ports, err := parser.Ports(logger, tt.receiverName, map[string]interface{}{})
+				ports, err := parser.Ports(logger, tt.receiverName, map[string]any{})
 
 				// verify
-				assert.NoError(t, err)
-				assert.Len(t, ports, 0)
+				require.NoError(t, err)
+				assert.Empty(t, ports)
 			})
 
 			t.Run("always returns nothing", func(t *testing.T) {
@@ -76,13 +77,13 @@ func TestScraperParsers(t *testing.T) {
 				parser := receivers.ReceiverFor(tt.receiverName)
 
 				// test
-				ports, err := parser.Ports(logger, tt.receiverName, map[string]interface{}{
+				ports, err := parser.Ports(logger, tt.receiverName, map[string]any{
 					"endpoint": "0.0.0.0:65535",
 				})
 
 				// verify
-				assert.NoError(t, err)
-				assert.Len(t, ports, 0)
+				require.NoError(t, err)
+				assert.Empty(t, ports)
 			})
 		})
 	}

@@ -13,10 +13,8 @@ import (
 
 // Params holds the reconciliation-specific parameters.
 type Params struct {
-	Client client.Client
-	Scheme *runtime.Scheme
-	// TODO: replace with zap logger
-	//Log logr.Logger
+	Client              client.Client
+	Scheme              *runtime.Scheme
 	Log                 *zap.Logger
 	OtelMdaiIngressComb mdaiv1.OtelMdaiIngressComb
 }

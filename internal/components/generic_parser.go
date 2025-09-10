@@ -1,6 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+// nolint:gofumpt
 package components
 
 import (
@@ -29,7 +30,7 @@ type GenericParser[T any] struct {
 	defaultsApplier Defaulter[T]
 }
 
-func (g *GenericParser[T]) GetDefaultConfig(logger *zap.Logger, config interface{}) (interface{}, error) {
+func (g *GenericParser[T]) GetDefaultConfig(logger *zap.Logger, config any) (any, error) {
 	if g.settings == nil || g.defaultsApplier == nil {
 		return config, nil
 	}
@@ -45,9 +46,9 @@ func (g *GenericParser[T]) GetDefaultConfig(logger *zap.Logger, config interface
 	return g.defaultsApplier(logger, g.settings.defaultRecAddr, g.settings.port, parsed)
 }
 
-func (g *GenericParser[T]) GetLivenessProbe(logger *zap.Logger, config interface{}) (*corev1.Probe, error) {
+func (g *GenericParser[T]) GetLivenessProbe(logger *zap.Logger, config any) (*corev1.Probe, error) {
 	if g.livenessGen == nil {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	var parsed T
 	if err := mapstructure.Decode(config, &parsed); err != nil {
@@ -56,9 +57,9 @@ func (g *GenericParser[T]) GetLivenessProbe(logger *zap.Logger, config interface
 	return g.livenessGen(logger, parsed)
 }
 
-func (g *GenericParser[T]) GetReadinessProbe(logger *zap.Logger, config interface{}) (*corev1.Probe, error) {
+func (g *GenericParser[T]) GetReadinessProbe(logger *zap.Logger, config any) (*corev1.Probe, error) {
 	if g.readinessGen == nil {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 	var parsed T
 	if err := mapstructure.Decode(config, &parsed); err != nil {
@@ -67,7 +68,7 @@ func (g *GenericParser[T]) GetReadinessProbe(logger *zap.Logger, config interfac
 	return g.readinessGen(logger, parsed)
 }
 
-func (g *GenericParser[T]) GetRBACRules(logger *zap.Logger, config interface{}) ([]rbacv1.PolicyRule, error) {
+func (g *GenericParser[T]) GetRBACRules(logger *zap.Logger, config any) ([]rbacv1.PolicyRule, error) {
 	if g.rbacGen == nil {
 		return nil, nil
 	}
@@ -78,7 +79,7 @@ func (g *GenericParser[T]) GetRBACRules(logger *zap.Logger, config interface{}) 
 	return g.rbacGen(logger, parsed)
 }
 
-func (g *GenericParser[T]) GetEnvironmentVariables(logger *zap.Logger, config interface{}) ([]corev1.EnvVar, error) {
+func (g *GenericParser[T]) GetEnvironmentVariables(logger *zap.Logger, config any) ([]corev1.EnvVar, error) {
 	if g.envVarGen == nil {
 		return nil, nil
 	}
@@ -89,7 +90,7 @@ func (g *GenericParser[T]) GetEnvironmentVariables(logger *zap.Logger, config in
 	return g.envVarGen(logger, parsed)
 }
 
-func (g *GenericParser[T]) Ports(logger *zap.Logger, name string, config interface{}) ([]corev1.ServicePort, error) {
+func (g *GenericParser[T]) Ports(logger *zap.Logger, name string, config any) ([]corev1.ServicePort, error) {
 	if g.portParser == nil {
 		return nil, nil
 	}
@@ -101,7 +102,9 @@ func (g *GenericParser[T]) Ports(logger *zap.Logger, name string, config interfa
 }
 
 // mydecisive
-func (n *GenericParser[T]) PortsWithUrlPaths(logger *zap.Logger, name string, config interface{}) ([]PortUrlPaths, error) {
+//
+//revive:disable-next-line:unused-receiver
+func (g *GenericParser[T]) PortsWithUrlPaths(logger *zap.Logger, name string, config any) ([]PortUrlPaths, error) {
 	return []PortUrlPaths{}, nil
 }
 
@@ -110,5 +113,6 @@ func (g *GenericParser[T]) ParserType() string {
 }
 
 func (g *GenericParser[T]) ParserName() string {
+	// nolint:perfsprint
 	return fmt.Sprintf("__%s", g.name)
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -21,7 +22,7 @@ var (
 func TestMultiEndpointReceiverParsers(t *testing.T) {
 	type testCase struct {
 		name        string
-		config      interface{}
+		config      any
 		expectedErr error
 		expectedSvc []corev1.ServicePort
 	}
@@ -37,9 +38,9 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 			cases: []testCase{
 				{
 					name: "minimal config",
-					config: map[string]interface{}{
-						"protocols": map[string]interface{}{
-							"grpc": map[string]interface{}{},
+					config: map[string]any{
+						"protocols": map[string]any{
+							"grpc": map[string]any{},
 						},
 					},
 					expectedErr: nil,
@@ -55,9 +56,9 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 				},
 				{
 					name: "grpc overridden",
-					config: map[string]interface{}{
-						"protocols": map[string]interface{}{
-							"grpc": map[string]interface{}{
+					config: map[string]any{
+						"protocols": map[string]any{
+							"grpc": map[string]any{
 								"endpoint": "0.0.0.0:1234",
 							},
 						},
@@ -75,12 +76,12 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 				},
 				{
 					name: "all defaults",
-					config: map[string]interface{}{
-						"protocols": map[string]interface{}{
-							"grpc":           map[string]interface{}{},
-							"thrift_http":    map[string]interface{}{},
-							"thrift_compact": map[string]interface{}{},
-							"thrift_binary":  map[string]interface{}{},
+					config: map[string]any{
+						"protocols": map[string]any{
+							"grpc":           map[string]any{},
+							"thrift_http":    map[string]any{},
+							"thrift_compact": map[string]any{},
+							"thrift_binary":  map[string]any{},
 						},
 					},
 					expectedErr: nil,
@@ -121,9 +122,9 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 			cases: []testCase{
 				{
 					name: "minimal config",
-					config: map[string]interface{}{
-						"protocols": map[string]interface{}{
-							"grpc": map[string]interface{}{},
+					config: map[string]any{
+						"protocols": map[string]any{
+							"grpc": map[string]any{},
 						},
 					},
 					expectedErr: nil,
@@ -138,9 +139,9 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 				},
 				{
 					name: "grpc overridden",
-					config: map[string]interface{}{
-						"protocols": map[string]interface{}{
-							"grpc": map[string]interface{}{
+					config: map[string]any{
+						"protocols": map[string]any{
+							"grpc": map[string]any{
 								"endpoint": "0.0.0.0:1234",
 							},
 						},
@@ -157,10 +158,10 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 				},
 				{
 					name: "all defaults",
-					config: map[string]interface{}{
-						"protocols": map[string]interface{}{
-							"grpc": map[string]interface{}{},
-							"http": map[string]interface{}{},
+					config: map[string]any{
+						"protocols": map[string]any{
+							"grpc": map[string]any{},
+							"http": map[string]any{},
 						},
 					},
 					expectedErr: nil,
@@ -187,9 +188,9 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 			cases: []testCase{
 				{
 					name: "minimal config",
-					config: map[string]interface{}{
-						"protocols": map[string]interface{}{
-							"grpc": map[string]interface{}{},
+					config: map[string]any{
+						"protocols": map[string]any{
+							"grpc": map[string]any{},
 						},
 					},
 					expectedErr: nil,
@@ -204,9 +205,9 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 				},
 				{
 					name: "grpc overridden",
-					config: map[string]interface{}{
-						"protocols": map[string]interface{}{
-							"grpc": map[string]interface{}{
+					config: map[string]any{
+						"protocols": map[string]any{
+							"grpc": map[string]any{
 								"endpoint": "0.0.0.0:1234",
 							},
 						},
@@ -223,10 +224,10 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 				},
 				{
 					name: "all defaults",
-					config: map[string]interface{}{
-						"protocols": map[string]interface{}{
-							"grpc": map[string]interface{}{},
-							"http": map[string]interface{}{},
+					config: map[string]any{
+						"protocols": map[string]any{
+							"grpc": map[string]any{},
+							"http": map[string]any{},
 						},
 					},
 					expectedErr: nil,
@@ -253,9 +254,9 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 			cases: []testCase{
 				{
 					name: "minimal config",
-					config: map[string]interface{}{
-						"protocols": map[string]interface{}{
-							"grpc": map[string]interface{}{},
+					config: map[string]any{
+						"protocols": map[string]any{
+							"grpc": map[string]any{},
 						},
 					},
 					expectedErr: nil,
@@ -270,9 +271,9 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 				},
 				{
 					name: "grpc overridden",
-					config: map[string]interface{}{
-						"protocols": map[string]interface{}{
-							"grpc": map[string]interface{}{
+					config: map[string]any{
+						"protocols": map[string]any{
+							"grpc": map[string]any{
 								"endpoint": "0.0.0.0:1234",
 							},
 						},
@@ -289,10 +290,10 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 				},
 				{
 					name: "all defaults",
-					config: map[string]interface{}{
-						"protocols": map[string]interface{}{
-							"grpc": map[string]interface{}{},
-							"http": map[string]interface{}{},
+					config: map[string]any{
+						"protocols": map[string]any{
+							"grpc": map[string]any{},
+							"http": map[string]any{},
 						},
 					},
 					expectedErr: nil,
@@ -319,9 +320,9 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 			cases: []testCase{
 				{
 					name: "minimal config",
-					config: map[string]interface{}{
-						"protocols": map[string]interface{}{
-							"grpc": map[string]interface{}{},
+					config: map[string]any{
+						"protocols": map[string]any{
+							"grpc": map[string]any{},
 						},
 					},
 					expectedErr: nil,
@@ -336,9 +337,9 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 				},
 				{
 					name: "grpc overridden",
-					config: map[string]interface{}{
-						"protocols": map[string]interface{}{
-							"grpc": map[string]interface{}{
+					config: map[string]any{
+						"protocols": map[string]any{
+							"grpc": map[string]any{
 								"endpoint": "0.0.0.0:1234",
 							},
 						},
@@ -355,10 +356,10 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 				},
 				{
 					name: "all defaults",
-					config: map[string]interface{}{
-						"protocols": map[string]interface{}{
-							"grpc": map[string]interface{}{},
-							"http": map[string]interface{}{},
+					config: map[string]any{
+						"protocols": map[string]any{
+							"grpc": map[string]any{},
+							"http": map[string]any{},
 						},
 					},
 					expectedErr: nil,
@@ -396,7 +397,7 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 				parser := receivers.ReceiverFor(tt.receiverName)
 
 				// test
-				_, err := parser.Ports(logger, tt.receiverName, []interface{}{"junk"})
+				_, err := parser.Ports(logger, tt.receiverName, []any{"junk"})
 
 				// verify
 				assert.ErrorContains(t, err, "expected a map, got 'slice'")
@@ -406,9 +407,9 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 				parser := receivers.ReceiverFor(tt.receiverName)
 
 				// test
-				_, err := parser.Ports(logger, tt.receiverName, map[string]interface{}{
-					"protocols": map[string]interface{}{
-						"garbage": map[string]interface{}{},
+				_, err := parser.Ports(logger, tt.receiverName, map[string]any{
+					"protocols": map[string]any{
+						"garbage": map[string]any{},
 					},
 				})
 
@@ -428,12 +429,11 @@ func TestMultiEndpointReceiverParsers(t *testing.T) {
 					}
 
 					// verify
-					assert.NoError(t, err)
+					require.NoError(t, err)
 					assert.Len(t, ports, len(kase.expectedSvc))
 					assert.ElementsMatch(t, ports, kase.expectedSvc)
 				})
 			}
-
 		})
 	}
 }

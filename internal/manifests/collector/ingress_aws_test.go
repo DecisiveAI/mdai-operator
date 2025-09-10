@@ -24,6 +24,7 @@ import (
 	"github.com/decisiveai/mdai-operator/internal/manifests"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	networkingv1 "k8s.io/api/networking/v1"
 )
 
@@ -113,7 +114,7 @@ func TestDesiredIngressesAws(t *testing.T) {
 		}
 
 		got, err := IngressAws(params)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		pathType := networkingv1.PathTypePrefix
 
@@ -244,20 +245,20 @@ func TestDesiredIngressesAws(t *testing.T) {
 			},
 		}
 
-		assert.True(t, len(ingressRulesExpected) == len(ingressRulesGot))
-		for i := 0; i < len(ingressRulesExpected); i++ {
+		assert.Len(t, ingressRulesGot, len(ingressRulesExpected))
+		for i := range ingressRulesExpected {
 			sort.Slice(ingressRulesGot, func(i, j int) bool { return ingressRulesGot[i].Host < ingressRulesGot[j].Host })
 			sort.Slice(ingressRulesExpected, func(i, j int) bool { return ingressRulesExpected[i].Host < ingressRulesExpected[j].Host })
-			assert.True(t, ingressRulesExpected[i].Host == ingressRulesGot[i].Host)
+			assert.Equal(t, ingressRulesExpected[i].Host, ingressRulesGot[i].Host)
 		}
 
-		for i := 0; i < len(ingressRulesExpected); i++ {
-			pathsGot := ingressRulesGot[i].IngressRuleValue.HTTP.Paths
-			pathsExpected := ingressRulesExpected[i].IngressRuleValue.HTTP.Paths
+		for i := range ingressRulesExpected {
+			pathsGot := ingressRulesGot[i].HTTP.Paths
+			pathsExpected := ingressRulesExpected[i].HTTP.Paths
 			sort.Slice(pathsGot, func(i, j int) bool { return pathsGot[i].Path < pathsGot[j].Path })
 			sort.Slice(pathsExpected, func(i, j int) bool { return pathsExpected[i].Path < pathsExpected[j].Path })
 
-			assert.True(t, ingressRulesExpected[i].Host == ingressRulesGot[i].Host)
+			assert.Equal(t, ingressRulesExpected[i].Host, ingressRulesGot[i].Host)
 			assert.Equal(t, ingressRulesExpected, ingressRulesGot)
 		}
 	})
@@ -284,7 +285,7 @@ func TestDesiredIngressesAws(t *testing.T) {
 		}
 
 		got, err := IngressAws(params)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		pathType := networkingv1.PathTypePrefix
 
@@ -382,20 +383,20 @@ func TestDesiredIngressesAws(t *testing.T) {
 			},
 		}
 
-		assert.True(t, len(ingressRulesExpected) == len(ingressRulesGot))
-		for i := 0; i < len(ingressRulesExpected); i++ {
+		assert.Len(t, ingressRulesGot, len(ingressRulesExpected))
+		for i := range ingressRulesExpected {
 			sort.Slice(ingressRulesGot, func(i, j int) bool { return ingressRulesGot[i].Host < ingressRulesGot[j].Host })
 			sort.Slice(ingressRulesExpected, func(i, j int) bool { return ingressRulesExpected[i].Host < ingressRulesExpected[j].Host })
-			assert.True(t, ingressRulesExpected[i].Host == ingressRulesGot[i].Host)
+			assert.Equal(t, ingressRulesExpected[i].Host, ingressRulesGot[i].Host)
 		}
 
-		for i := 0; i < len(ingressRulesExpected); i++ {
-			pathsGot := ingressRulesGot[i].IngressRuleValue.HTTP.Paths
-			pathsExpected := ingressRulesExpected[i].IngressRuleValue.HTTP.Paths
+		for i := range ingressRulesExpected {
+			pathsGot := ingressRulesGot[i].HTTP.Paths
+			pathsExpected := ingressRulesExpected[i].HTTP.Paths
 			sort.Slice(pathsGot, func(i, j int) bool { return pathsGot[i].Path < pathsGot[j].Path })
 			sort.Slice(pathsExpected, func(i, j int) bool { return pathsExpected[i].Path < pathsExpected[j].Path })
 
-			assert.True(t, ingressRulesExpected[i].Host == ingressRulesGot[i].Host)
+			assert.Equal(t, ingressRulesExpected[i].Host, ingressRulesGot[i].Host)
 			assert.Equal(t, ingressRulesExpected, ingressRulesGot)
 		}
 	})
@@ -419,7 +420,7 @@ func TestDesiredIngressesAws(t *testing.T) {
 		}
 
 		got, err := IngressAws(params)
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, err, errors.New("empty components to hostnames mapping"))
 		assert.Nil(t, got)
 	})

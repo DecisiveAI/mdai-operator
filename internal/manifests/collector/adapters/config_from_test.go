@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/decisiveai/mdai-operator/internal/manifests/collector/adapters"
 )
@@ -23,6 +24,6 @@ func TestInvalidYAML(t *testing.T) {
 func TestEmptyString(t *testing.T) {
 	// test and verify
 	res, err := adapters.ConfigFromString("")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Empty(t, res, 0)
 }

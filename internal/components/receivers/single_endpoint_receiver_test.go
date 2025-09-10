@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 
@@ -23,12 +24,12 @@ func TestParseEndpoint(t *testing.T) {
 	parser := receivers.ReceiverFor("myreceiver")
 
 	// test
-	ports, err := parser.Ports(logger, "myreceiver", map[string]interface{}{
+	ports, err := parser.Ports(logger, "myreceiver", map[string]any{
 		"endpoint": "0.0.0.0:1234",
 	})
 
 	// verify
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Len(t, ports, 1)
 	assert.EqualValues(t, 1234, ports[0].Port)
 }
@@ -39,13 +40,13 @@ func TestFailedToParseEndpoint(t *testing.T) {
 	parser := receivers.ReceiverFor("myreceiver")
 
 	// test
-	ports, err := parser.Ports(logger, "myreceiver", map[string]interface{}{
+	ports, err := parser.Ports(logger, "myreceiver", map[string]any{
 		"endpoint": "0.0.0.0",
 	})
 
 	// verify
-	assert.NoError(t, err)
-	assert.Len(t, ports, 0)
+	require.NoError(t, err)
+	assert.Empty(t, ports)
 }
 
 func TestDownstreamParsers(t *testing.T) {
@@ -97,16 +98,16 @@ func TestDownstreamParsers(t *testing.T) {
 				parser := receivers.ReceiverFor(tt.receiverName)
 
 				// test
-				ports, err := parser.Ports(logger, tt.receiverName, map[string]interface{}{})
+				ports, err := parser.Ports(logger, tt.receiverName, map[string]any{})
 
 				if tt.defaultPort == 0 {
-					assert.Len(t, ports, 0)
+					assert.Empty(t, ports)
 					return
 				}
 				// verify
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Len(t, ports, 1)
-				assert.EqualValues(t, tt.defaultPort, ports[0].Port)
+				assert.Equal(t, tt.defaultPort, ports[0].Port)
 				assert.Equal(t, naming.PortName(tt.receiverName, tt.defaultPort), ports[0].Name)
 			})
 
@@ -118,17 +119,17 @@ func TestDownstreamParsers(t *testing.T) {
 				var ports []corev1.ServicePort
 				var err error
 				if tt.listenAddrParser {
-					ports, err = parser.Ports(logger, tt.receiverName, map[string]interface{}{
+					ports, err = parser.Ports(logger, tt.receiverName, map[string]any{
 						"listen_address": "0.0.0.0:65535",
 					})
 				} else {
-					ports, err = parser.Ports(logger, tt.receiverName, map[string]interface{}{
+					ports, err = parser.Ports(logger, tt.receiverName, map[string]any{
 						"endpoint": "0.0.0.0:65535",
 					})
 				}
 
 				// verify
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Len(t, ports, 1)
 				assert.EqualValues(t, 65535, ports[0].Port)
 				assert.Equal(t, naming.PortName(tt.receiverName, tt.defaultPort), ports[0].Name)
@@ -139,11 +140,11 @@ func TestDownstreamParsers(t *testing.T) {
 				parser := receivers.ReceiverFor(tt.receiverName)
 
 				// test
-				config, err := parser.GetDefaultConfig(logger, map[string]interface{}{})
+				config, err := parser.GetDefaultConfig(logger, map[string]any{})
 
 				// verify
-				assert.NoError(t, err)
-				configMap, ok := config.(map[string]interface{})
+				require.NoError(t, err)
+				configMap, ok := config.(map[string]any)
 				assert.True(t, ok)
 				if tt.defaultPort == 0 {
 					assert.Empty(t, configMap, 0)

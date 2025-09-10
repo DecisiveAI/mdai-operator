@@ -1,3 +1,4 @@
+// nolint: mnd
 package main
 
 import (
@@ -292,7 +293,7 @@ func main() {
 		Logger: zapLogger,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MdaiIngress")
-		os.Exit(1)
+		gracefullyShutdownWithCode(1)
 	}
 	// +kubebuilder:scaffold:builder
 

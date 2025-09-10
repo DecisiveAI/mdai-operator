@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// nolint:gofumpt,goconst
 package collector
 
 import (
@@ -21,6 +22,7 @@ import (
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -29,7 +31,6 @@ import (
 const testFileServiceAws = "testdata/service_aws_testdata.yaml"
 
 func TestDesiredServiceAws(t *testing.T) {
-
 	grpc := "grpc"
 	http := "http"
 
@@ -42,11 +43,9 @@ func TestDesiredServiceAws(t *testing.T) {
 		params.OtelMdaiIngressComb.Otelcol.Spec.Ports = []v1beta1.PortsSpec{}
 		params.OtelMdaiIngressComb.MdaiIngress.Spec.GrpcService = &mdaiv1.IngressService{Type: corev1.ServiceTypeNodePort}
 		params.OtelMdaiIngressComb.MdaiIngress.Spec.NonGrpcService = &mdaiv1.IngressService{Type: corev1.ServiceTypeLoadBalancer}
-		trafficPolicy := corev1.ServiceInternalTrafficPolicyCluster
 
 		desiredGrpcSpec := corev1.ServiceSpec{
-			Type:                  corev1.ServiceTypeNodePort,
-			InternalTrafficPolicy: &trafficPolicy,
+			Type: corev1.ServiceTypeNodePort,
 			Ports: []corev1.ServicePort{
 				{
 					Name:        "jaeger-grpc",
@@ -72,8 +71,7 @@ func TestDesiredServiceAws(t *testing.T) {
 			},
 		}
 		desiredNonGrpcSpec := corev1.ServiceSpec{
-			Type:                  corev1.ServiceTypeLoadBalancer,
-			InternalTrafficPolicy: &trafficPolicy,
+			Type: corev1.ServiceTypeLoadBalancer,
 			Ports: []corev1.ServicePort{
 				{
 					Name:        "otlp-1-http",
@@ -100,7 +98,7 @@ func TestDesiredServiceAws(t *testing.T) {
 		}
 
 		actualGrpc, err := GrpcService(params)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, desiredGrpcSpec.Type, actualGrpc.Spec.Type)
 
 		desiredPorts := desiredGrpcSpec.Ports
@@ -110,7 +108,7 @@ func TestDesiredServiceAws(t *testing.T) {
 		assert.Equal(t, desiredPorts, actualPorts)
 
 		actualNonGrpc, err := NonGrpcService(params)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, desiredNonGrpcSpec.Type, actualNonGrpc.Spec.Type)
 
 		desiredPorts = desiredNonGrpcSpec.Ports
@@ -119,10 +117,8 @@ func TestDesiredServiceAws(t *testing.T) {
 		sort.Slice(actualPorts, func(i, j int) bool { return actualPorts[i].Name < actualPorts[j].Name })
 		assert.Equal(t, desiredPorts, actualPorts)
 	})
-
 }
 func TestAnnotationsForNonGrpcService(t *testing.T) {
-
 	http := "http"
 
 	t.Run("create non-gRPC Service", func(t *testing.T) {
@@ -169,17 +165,15 @@ func TestAnnotationsForNonGrpcService(t *testing.T) {
 		}
 
 		actualNonGrpcService, err := NonGrpcService(params)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		desiredAnnotations := desiredNonGrpcService.Annotations
 		actualAnnotations := actualNonGrpcService.Annotations
 		assert.Equal(t, desiredAnnotations, actualAnnotations)
 	})
-
 }
 
 func TestDesiredServiceAwsEmptyServiceTypes(t *testing.T) {
-
 	t.Run("create gRPC and non-gRPC Services", func(t *testing.T) {
 		params, err := newParams(testFileServiceAws)
 		if err != nil {
@@ -189,13 +183,11 @@ func TestDesiredServiceAwsEmptyServiceTypes(t *testing.T) {
 		params.OtelMdaiIngressComb.Otelcol.Spec.Ports = []v1beta1.PortsSpec{}
 
 		actualGrpc, err := GrpcService(params)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, corev1.ServiceTypeClusterIP, actualGrpc.Spec.Type)
 
 		actualNonGrpc, err := NonGrpcService(params)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, corev1.ServiceTypeClusterIP, actualNonGrpc.Spec.Type)
-
 	})
-
 }

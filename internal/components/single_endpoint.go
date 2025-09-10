@@ -1,6 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+// nolint: gofumpt
 package components
 
 import (
@@ -39,12 +40,12 @@ func (g *SingleEndpointConfig) GetPortNumOrDefault(logger *zap.Logger, p int32) 
 // GetPortNum attempts to get the port for the given config. If it cannot, the UnsetPort and the given missingPortError
 // are returned.
 func (g *SingleEndpointConfig) GetPortNum() (int32, error) {
-	if len(g.Endpoint) > 0 {
+	if g.Endpoint != "" {
 		return PortFromEndpoint(g.Endpoint)
-	} else if len(g.ListenAddress) > 0 {
+	} else if g.ListenAddress != "" {
 		return PortFromEndpoint(g.ListenAddress)
 	}
-	return UnsetPort, PortNotFoundErr
+	return UnsetPort, ErrPortNotFound
 }
 
 func ParseSingleEndpointSilent(logger *zap.Logger, name string, defaultPort *corev1.ServicePort, singleEndpointConfig *SingleEndpointConfig) ([]corev1.ServicePort, error) {
@@ -55,6 +56,7 @@ func ParseSingleEndpoint(logger *zap.Logger, name string, defaultPort *corev1.Se
 	return internalParseSingleEndpoint(logger, name, false, defaultPort, singleEndpointConfig)
 }
 
+// revive:disable:flag-parameter
 func internalParseSingleEndpoint(logger *zap.Logger, name string, failSilently bool, defaultPort *corev1.ServicePort, singleEndpointConfig *SingleEndpointConfig) ([]corev1.ServicePort, error) {
 	if singleEndpointConfig == nil {
 		return nil, nil
@@ -74,6 +76,8 @@ func internalParseSingleEndpoint(logger *zap.Logger, name string, failSilently b
 	return []corev1.ServicePort{ConstructServicePort(svcPort, port)}, nil
 }
 
+// revive:enable:flag-parameter
+
 func NewSinglePortParserBuilder(name string, port int32) Builder[*SingleEndpointConfig] {
 	return NewBuilder[*SingleEndpointConfig]().WithPort(port).WithName(name).WithPortParser(ParseSingleEndpoint).WithDefaultsApplier(AddressDefaulter).WithDefaultRecAddress(DefaultRecAddress)
 }
@@ -82,7 +86,7 @@ func NewSilentSinglePortParserBuilder(name string, port int32) Builder[*SingleEn
 	return NewBuilder[*SingleEndpointConfig]().WithPort(port).WithName(name).WithPortParser(ParseSingleEndpointSilent).WithDefaultsApplier(AddressDefaulter).WithDefaultRecAddress(DefaultRecAddress)
 }
 
-func AddressDefaulter(logger *zap.Logger, defaultRecAddr string, port int32, config *SingleEndpointConfig) (map[string]interface{}, error) {
+func AddressDefaulter(logger *zap.Logger, defaultRecAddr string, port int32, config *SingleEndpointConfig) (map[string]any, error) {
 	if config == nil {
 		config = &SingleEndpointConfig{}
 	}
@@ -96,7 +100,7 @@ func AddressDefaulter(logger *zap.Logger, defaultRecAddr string, port int32, con
 		}
 	}
 
-	res := make(map[string]interface{})
+	res := make(map[string]any)
 	err := mapstructure.Decode(config, &res)
 	return res, err
 }

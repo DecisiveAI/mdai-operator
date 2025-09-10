@@ -4,10 +4,11 @@
 package components_test
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -20,7 +21,7 @@ func TestBuilder_Build(t *testing.T) {
 	type sampleConfig struct {
 		example string
 		number  int
-		m       map[string]interface{}
+		m       map[string]any
 	}
 	type want struct {
 		name           string
@@ -33,7 +34,7 @@ func TestBuilder_Build(t *testing.T) {
 		b components.Builder[T]
 	}
 	type params struct {
-		conf interface{}
+		conf any
 	}
 	type testCase[T any] struct {
 		name            string
@@ -135,7 +136,7 @@ func TestBuilder_Build(t *testing.T) {
 				conf: sampleConfig{
 					example: "test",
 					number:  100,
-					m: map[string]interface{}{
+					m: map[string]any{
 						"key": "value",
 					},
 				},
@@ -173,7 +174,7 @@ func TestBuilder_Build(t *testing.T) {
 							},
 						}
 						if v, ok := config.m["key"]; ok && v == "value" {
-							return nil, fmt.Errorf("errors from function")
+							return nil, errors.New("errors from function")
 						}
 						return rules, nil
 					}),
@@ -182,7 +183,7 @@ func TestBuilder_Build(t *testing.T) {
 				conf: sampleConfig{
 					example: "test",
 					number:  100,
-					m: map[string]interface{}{
+					m: map[string]any{
 						"key": "value",
 					},
 				},
@@ -210,7 +211,7 @@ func TestBuilder_Build(t *testing.T) {
 				conf: sampleConfig{
 					example: "test",
 					number:  100,
-					m: map[string]interface{}{
+					m: map[string]any{
 						"key": "value",
 					},
 				},
@@ -247,14 +248,14 @@ func TestBuilder_Build(t *testing.T) {
 					WithPort(443).
 					WithProtocol(corev1.ProtocolTCP).
 					WithLivenessGen(func(logger *zap.Logger, config sampleConfig) (*corev1.Probe, error) {
-						return nil, fmt.Errorf("no probe")
+						return nil, errors.New("no probe")
 					}),
 			},
 			params: params{
 				conf: sampleConfig{
 					example: "test",
 					number:  100,
-					m: map[string]interface{}{
+					m: map[string]any{
 						"key": "value",
 					},
 				},
@@ -277,7 +278,7 @@ func TestBuilder_Build(t *testing.T) {
 			}
 			assert.Equalf(t, tt.want.name, got.ParserName(), "ParserName()")
 			ports, err := got.Ports(zap.NewNop(), got.ParserType(), tt.params.conf)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equalf(t, tt.want.ports, ports, "Ports()")
 			rules, rbacErr := got.GetRBACRules(zap.NewNop(), tt.params.conf)
 			if tt.wantRbacErr(t, rbacErr, "WantRbacErr()") && rbacErr != nil {
@@ -290,7 +291,7 @@ func TestBuilder_Build(t *testing.T) {
 			}
 			assert.Equalf(t, tt.want.livenessProbe, livenessProbe, "GetLivenessProbe()")
 			readinessProbe, readinessErr := got.GetReadinessProbe(zap.NewNop(), tt.params.conf)
-			assert.NoError(t, readinessErr)
+			require.NoError(t, readinessErr)
 			assert.Equalf(t, tt.want.readinessProbe, readinessProbe, "GetReadinessProbe()")
 		})
 	}

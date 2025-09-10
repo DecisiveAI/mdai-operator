@@ -4,9 +4,9 @@
 package components
 
 import (
+	"errors"
 	"fmt"
 
-	//"github.com/go-logr/logr"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -36,23 +36,23 @@ type MultiPortReceiver struct {
 	urlPathsMapping map[string]*[]string
 }
 
-func (m *MultiPortReceiver) Ports(logger *zap.Logger, name string, config interface{}) ([]corev1.ServicePort, error) {
+func (m *MultiPortReceiver) Ports(logger *zap.Logger, name string, config any) ([]corev1.ServicePort, error) {
 	multiProtoEndpointCfg := &MultiProtocolEndpointConfig{}
 	if err := mapstructure.Decode(config, multiProtoEndpointCfg); err != nil {
 		return nil, err
 	}
 	var ports []corev1.ServicePort
 	for protocol, ec := range multiProtoEndpointCfg.Protocols {
-		if defaultSvc, ok := m.portMappings[protocol]; ok {
-			port := defaultSvc.Port
-			if ec != nil {
-				port = ec.GetPortNumOrDefault(logger, port)
-			}
-			defaultSvc.Name = naming.PortName(fmt.Sprintf("%s-%s", name, protocol), port)
-			ports = append(ports, ConstructServicePort(defaultSvc, port))
-		} else {
+		defaultSvc, ok := m.portMappings[protocol]
+		if !ok {
 			return nil, fmt.Errorf("unknown protocol set: %s", protocol)
 		}
+		port := defaultSvc.Port
+		if ec != nil {
+			port = ec.GetPortNumOrDefault(logger, port)
+		}
+		defaultSvc.Name = naming.PortName(fmt.Sprintf("%s-%s", name, protocol), port)
+		ports = append(ports, ConstructServicePort(defaultSvc, port))
 	}
 	return ports, nil
 }
@@ -62,53 +62,58 @@ func (m *MultiPortReceiver) ParserType() string {
 }
 
 func (m *MultiPortReceiver) ParserName() string {
+	// nolint:perfsprint
 	return fmt.Sprintf("__%s", m.name)
 }
 
-func (m *MultiPortReceiver) GetDefaultConfig(logger *zap.Logger, config interface{}) (interface{}, error) {
+func (m *MultiPortReceiver) GetDefaultConfig(logger *zap.Logger, config any) (any, error) {
 	multiProtoEndpointCfg := &MultiProtocolEndpointConfig{}
 	if err := mapstructure.Decode(config, multiProtoEndpointCfg); err != nil {
 		return nil, err
 	}
-	defaultedConfig := map[string]interface{}{}
+	defaultedConfig := map[string]any{}
 	for protocol, ec := range multiProtoEndpointCfg.Protocols {
-		if defaultSvc, ok := m.portMappings[protocol]; ok {
-			port := defaultSvc.Port
-			if ec != nil {
-				port = ec.GetPortNumOrDefault(logger, port)
-			}
-			addr := m.defaultRecAddr
-			if defaultAddr, ok := m.addrMappings[protocol]; ok {
-				addr = defaultAddr
-			}
-			conf, err := AddressDefaulter(logger, addr, port, ec)
-			if err != nil {
-				return nil, err
-			}
-			defaultedConfig[protocol] = conf
-		} else {
+		defaultSvc, ok := m.portMappings[protocol]
+		if !ok {
 			return nil, fmt.Errorf("unknown protocol set: %s", protocol)
 		}
+		port := defaultSvc.Port
+		if ec != nil {
+			port = ec.GetPortNumOrDefault(logger, port)
+		}
+		addr := m.defaultRecAddr
+		if defaultAddr, ok := m.addrMappings[protocol]; ok {
+			addr = defaultAddr
+		}
+		conf, err := AddressDefaulter(logger, addr, port, ec)
+		if err != nil {
+			return nil, err
+		}
+		defaultedConfig[protocol] = conf
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"protocols": defaultedConfig,
 	}, nil
 }
 
-func (m *MultiPortReceiver) GetLivenessProbe(logger *zap.Logger, config interface{}) (*corev1.Probe, error) {
-	return nil, nil
+//revive:disable-next-line:unused-receiver
+func (m *MultiPortReceiver) GetLivenessProbe(logger *zap.Logger, config any) (*corev1.Probe, error) {
+	return nil, nil //nolint:nilnil
 }
 
-func (m *MultiPortReceiver) GetReadinessProbe(logger *zap.Logger, config interface{}) (*corev1.Probe, error) {
-	return nil, nil
+//revive:disable-next-line:unused-receiver
+func (m *MultiPortReceiver) GetReadinessProbe(logger *zap.Logger, config any) (*corev1.Probe, error) {
+	return nil, nil //nolint:nilnil
 }
 
-func (m *MultiPortReceiver) GetRBACRules(*zap.Logger, interface{}) ([]rbacv1.PolicyRule, error) {
-	return nil, nil
+//revive:disable-next-line:unused-receiver
+func (m *MultiPortReceiver) GetRBACRules(*zap.Logger, any) ([]rbacv1.PolicyRule, error) {
+	return nil, nil //nolint:nilnil
 }
 
-func (m *MultiPortReceiver) GetEnvironmentVariables(logger *zap.Logger, config interface{}) ([]corev1.EnvVar, error) {
-	return nil, nil
+//revive:disable-next-line:unused-receiver
+func (m *MultiPortReceiver) GetEnvironmentVariables(logger *zap.Logger, config any) ([]corev1.EnvVar, error) {
+	return nil, nil //nolint:nilnil
 }
 
 type MultiPortBuilder[ComponentConfigType any] []Builder[ComponentConfigType]
@@ -127,7 +132,7 @@ func (mp MultiPortBuilder[ComponentConfigType]) AddPortMapping(builder Builder[C
 
 func (mp MultiPortBuilder[ComponentConfigType]) Build() (*MultiPortReceiver, error) {
 	if len(mp) < 1 {
-		return nil, fmt.Errorf("must provide at least one port mapping")
+		return nil, errors.New("must provide at least one port mapping")
 	}
 
 	mb := mp[0].MustBuild()
@@ -153,31 +158,32 @@ func (mp MultiPortBuilder[ComponentConfigType]) Build() (*MultiPortReceiver, err
 }
 
 func (mp MultiPortBuilder[ComponentConfigType]) MustBuild() *MultiPortReceiver {
-	if p, err := mp.Build(); err != nil {
+	p, err := mp.Build()
+	if err != nil {
 		panic(err)
-	} else {
-		return p
 	}
+	return p
 }
 
-func (m *MultiPortReceiver) PortsWithUrlPaths(logger *zap.Logger, name string, config interface{}) ([]PortUrlPaths, error) {
+func (m *MultiPortReceiver) PortsWithUrlPaths(logger *zap.Logger, name string, config any) ([]PortUrlPaths, error) {
 	multiProtoEndpointCfg := &MultiProtocolEndpointConfig{}
 	if err := mapstructure.Decode(config, multiProtoEndpointCfg); err != nil {
-		return []PortUrlPaths{}, nil
+		return []PortUrlPaths{}, err
 	}
-	portsUrlParts := []PortUrlPaths{}
+	var portsUrlParts []PortUrlPaths
 	for protocol, ec := range multiProtoEndpointCfg.Protocols {
-		if defaultSvc, ok := m.portMappings[protocol]; ok {
-			port := defaultSvc.Port
-			if ec != nil {
-				port = ec.GetPortNumOrDefault(logger, port)
-			}
-			defaultSvc.Name = naming.PortName(fmt.Sprintf("%s-%s", name, protocol), port)
-			// TODO since this is used for gRPC only, we actually dont need to construct this, as gRPC urls are hardcoded
-			portsUrlParts = append(portsUrlParts, PortUrlPaths{ConstructServicePort(defaultSvc, port), *m.urlPathsMapping[protocol]})
-		} else {
+		defaultSvc, ok := m.portMappings[protocol]
+		if !ok {
 			return nil, fmt.Errorf("unknown protocol set: %s", protocol)
 		}
+
+		port := defaultSvc.Port
+		if ec != nil {
+			port = ec.GetPortNumOrDefault(logger, port)
+		}
+		defaultSvc.Name = naming.PortName(fmt.Sprintf("%s-%s", name, protocol), port)
+		// TODO since this is used for gRPC only, we actually don't need to construct this, as gRPC URLs are hardcoded
+		portsUrlParts = append(portsUrlParts, PortUrlPaths{ConstructServicePort(defaultSvc, port), *m.urlPathsMapping[protocol]})
 	}
 	return portsUrlParts, nil
 }

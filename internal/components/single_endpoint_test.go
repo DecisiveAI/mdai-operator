@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -123,7 +124,7 @@ func TestSingleEndpointParser_ParserName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s, err := tt.fields.b.Build()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equalf(t, tt.want, s.ParserName(), "ParserName()")
 		})
 	}
@@ -156,7 +157,7 @@ func TestSingleEndpointParser_ParserType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s, err := tt.fields.b.Build()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equalf(t, tt.want, s.ParserType(), "ParserType()")
 		})
 	}
@@ -167,7 +168,7 @@ func TestSingleEndpointParser_Ports(t *testing.T) {
 		b components.Builder[*components.SingleEndpointConfig]
 	}
 	type args struct {
-		config interface{}
+		config any
 	}
 	tests := []struct {
 		name    string
@@ -182,7 +183,7 @@ func TestSingleEndpointParser_Ports(t *testing.T) {
 				b: components.NewSinglePortParserBuilder("testparser", 8080),
 			},
 			args: args{
-				config: map[string]interface{}{
+				config: map[string]any{
 					"port": 8080,
 				},
 			},
@@ -208,7 +209,7 @@ func TestSingleEndpointParser_Ports(t *testing.T) {
 				b: components.NewSinglePortParserBuilder("testparser", 8080),
 			},
 			args: args{
-				config: map[string]interface{}{},
+				config: map[string]any{},
 			},
 			want: []corev1.ServicePort{
 				{Name: "testparser", Port: 8080},
@@ -224,7 +225,7 @@ func TestSingleEndpointParser_Ports(t *testing.T) {
 					WithAppProtocol(&components.GrpcProtocol),
 			},
 			args: args{
-				config: map[string]interface{}{},
+				config: map[string]any{},
 			},
 			want: []corev1.ServicePort{
 				{
@@ -243,7 +244,7 @@ func TestSingleEndpointParser_Ports(t *testing.T) {
 				b: components.NewSinglePortParserBuilder("testparser", components.UnsetPort),
 			},
 			args: args{
-				config: map[string]interface{}{
+				config: map[string]any{
 					"endpoint": "garbageeeee",
 				},
 			},
@@ -265,7 +266,7 @@ func TestSingleEndpointParser_Ports(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s, err := tt.fields.b.Build()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			got, err := s.Ports(zap.NewNop(), s.ParserType(), tt.args.config)
 			if !tt.wantErr(t, err, fmt.Sprintf("Ports(%v)", tt.args.config)) {
 				return
@@ -276,12 +277,11 @@ func TestSingleEndpointParser_Ports(t *testing.T) {
 }
 
 func TestNewSilentSinglePortParser_Ports(t *testing.T) {
-
 	type fields struct {
 		b components.Builder[*components.SingleEndpointConfig]
 	}
 	type args struct {
-		config interface{}
+		config any
 	}
 	tests := []struct {
 		name    string
@@ -296,7 +296,7 @@ func TestNewSilentSinglePortParser_Ports(t *testing.T) {
 				b: components.NewSilentSinglePortParserBuilder("testparser", 8080),
 			},
 			args: args{
-				config: map[string]interface{}{
+				config: map[string]any{
 					"port": 8080,
 				},
 			},
@@ -311,7 +311,7 @@ func TestNewSilentSinglePortParser_Ports(t *testing.T) {
 				b: components.NewSilentSinglePortParserBuilder("testparser", 8080),
 			},
 			args: args{
-				config: map[string]interface{}{},
+				config: map[string]any{},
 			},
 			want: []corev1.ServicePort{
 				{Name: "testparser", Port: 8080},
@@ -327,7 +327,7 @@ func TestNewSilentSinglePortParser_Ports(t *testing.T) {
 					WithAppProtocol(&components.GrpcProtocol),
 			},
 			args: args{
-				config: map[string]interface{}{},
+				config: map[string]any{},
 			},
 			want: []corev1.ServicePort{
 				{
@@ -346,7 +346,7 @@ func TestNewSilentSinglePortParser_Ports(t *testing.T) {
 				b: components.NewSilentSinglePortParserBuilder("testparser", components.UnsetPort),
 			},
 			args: args{
-				config: map[string]interface{}{
+				config: map[string]any{
 					"endpoint": "garbageeeee",
 				},
 			},
@@ -368,7 +368,7 @@ func TestNewSilentSinglePortParser_Ports(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s, err := tt.fields.b.Build()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			got, err := s.Ports(zap.NewNop(), s.ParserType(), tt.args.config)
 			if !tt.wantErr(t, err, fmt.Sprintf("Ports(%v)", tt.args.config)) {
 				return

@@ -1,6 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+// nolint:gofumpt
 package components
 
 import (
@@ -16,14 +17,15 @@ import (
 )
 
 var (
-	GrpcProtocol          = "grpc"
-	HttpProtocol          = "http"
-	UnsetPort       int32 = 0
-	PortNotFoundErr       = errors.New("port should not be empty")
+	GrpcProtocol    = "grpc"
+	HttpProtocol    = "http"
+	UnsetPort       int32
+	ErrPortNotFound = errors.New("port should not be empty")
 )
 
 type PortRetriever interface {
 	GetPortNum() (int32, error)
+	//nolint:inamedparam
 	GetPortNumOrDefault(*zap.Logger, int32) int32
 }
 
@@ -53,7 +55,7 @@ type EnvVarGenerator[ComponentConfigType any] func(logger *zap.Logger, config Co
 
 // Defaulter is a function that applies given defaults to the passed Config.
 // It's expected that type Config is the configuration used by a parser.
-type Defaulter[ComponentConfigType any] func(logger *zap.Logger, defaultAddr string, defaultPort int32, config ComponentConfigType) (map[string]interface{}, error)
+type Defaulter[ComponentConfigType any] func(logger *zap.Logger, defaultAddr string, defaultPort int32, config ComponentConfigType) (map[string]any, error)
 
 // ComponentType returns the type for a given component name.
 // components have a name like:
@@ -62,6 +64,7 @@ type Defaulter[ComponentConfigType any] func(logger *zap.Logger, defaultAddr str
 // we extract the "mycomponent" part and see if we have a parser for the component.
 func ComponentType(name string) string {
 	if strings.Contains(name, "/") {
+		//nolint:gocritic // offBy1: input is always safe
 		return name[:strings.Index(name, "/")]
 	}
 	return name
@@ -71,11 +74,11 @@ func PortFromEndpoint(endpoint string) (int32, error) {
 	var err error
 	var port int64
 
-	r := regexp.MustCompile(":[0-9]+")
+	r := regexp.MustCompile(`:\d+`)
 
 	if r.MatchString(endpoint) {
 		portStr := r.FindString(endpoint)
-		cleanedPortStr := strings.Replace(portStr, ":", "", -1)
+		cleanedPortStr := strings.ReplaceAll(portStr, ":", "")
 		port, err = strconv.ParseInt(cleanedPortStr, 10, 32)
 
 		if err != nil {
@@ -84,7 +87,7 @@ func PortFromEndpoint(endpoint string) (int32, error) {
 	}
 
 	if port == 0 {
-		return UnsetPort, PortNotFoundErr
+		return UnsetPort, ErrPortNotFound
 	}
 
 	return int32(port), err //nolint: gosec // disable G115, this is guaranteed to not overflow due to the bitSize in the ParseInt call
@@ -95,23 +98,23 @@ type ParserRetriever func(string) Parser
 type Parser interface {
 	// GetDefaultConfig returns a config with set default values.
 	// NOTE: Config merging must be done by the caller if desired.
-	GetDefaultConfig(logger *zap.Logger, config interface{}) (interface{}, error)
+	GetDefaultConfig(logger *zap.Logger, config any) (any, error)
 
 	// Ports returns the service ports parsed based on the component's configuration where name is the component's name
 	// of the form "name" or "type/name"
-	Ports(logger *zap.Logger, name string, config interface{}) ([]corev1.ServicePort, error)
+	Ports(logger *zap.Logger, name string, config any) ([]corev1.ServicePort, error)
 
 	// GetRBACRules returns the rbac rules for this component
-	GetRBACRules(logger *zap.Logger, config interface{}) ([]rbacv1.PolicyRule, error)
+	GetRBACRules(logger *zap.Logger, config any) ([]rbacv1.PolicyRule, error)
 
 	// GetLivenessProbe returns a liveness probe set for the collector
-	GetLivenessProbe(logger *zap.Logger, config interface{}) (*corev1.Probe, error)
+	GetLivenessProbe(logger *zap.Logger, config any) (*corev1.Probe, error)
 
 	// GetEnvironmentVariables returns a list of environment variables for the collector
-	GetEnvironmentVariables(logger *zap.Logger, config interface{}) ([]corev1.EnvVar, error)
+	GetEnvironmentVariables(logger *zap.Logger, config any) ([]corev1.EnvVar, error)
 
 	// GetReadinessProbe returns a readiness probe set for the collector
-	GetReadinessProbe(logger *zap.Logger, config interface{}) (*corev1.Probe, error)
+	GetReadinessProbe(logger *zap.Logger, config any) (*corev1.Probe, error)
 
 	// ParserType returns the type of this parser
 	ParserType() string
@@ -120,7 +123,7 @@ type Parser interface {
 	ParserName() string
 
 	// PortsWithUrlPaths returns the service ports + URL paths parsed based on the receiver's configuration
-	PortsWithUrlPaths(logger *zap.Logger, name string, config interface{}) ([]PortUrlPaths, error)
+	PortsWithUrlPaths(logger *zap.Logger, name string, config any) ([]PortUrlPaths, error)
 }
 
 func ConstructServicePort(current *corev1.ServicePort, port int32) corev1.ServicePort {

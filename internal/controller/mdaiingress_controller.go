@@ -31,6 +31,7 @@ const resourceOwnerKey = "metadata.ownerReferences.name"
 // MdaiIngressReconciler reconciles a MdaiIngress object
 type MdaiIngressReconciler struct {
 	client.Client
+
 	Scheme *runtime.Scheme
 	Cache  cache.Cache
 	Logger *zap.Logger
@@ -68,13 +69,9 @@ func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	OtelMdaiComb := hubv1.NewOtelIngressConfig(instanceOtel, instanceMdaiIngress)
+	otelMdaiComb := hubv1.NewOtelIngressConfig(instanceOtel, instanceMdaiIngress)
 
-	params, err := r.GetParams(ctx, *OtelMdaiComb)
-	if err != nil {
-		log.Error(err, "Failed to create manifest.Params")
-		return ctrl.Result{}, err
-	}
+	params := r.GetParams(*otelMdaiComb)
 
 	desiredObjects, buildErr := BuildCollector(params)
 	if buildErr != nil {
@@ -82,6 +79,9 @@ func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	ownedObjects, err := r.findMdaiIngressOwnedObjects(ctx, params)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	err = reconcileDesiredObjects(ctx, r.Client, log, &instanceMdaiIngress, params.Scheme, desiredObjects, ownedObjects)
 	if err != nil {
@@ -95,14 +95,58 @@ func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 // SetupWithManager sets up the controller with the Manager.
 func (r *MdaiIngressReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	ctx := context.Background()
+	// Index for Service
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&corev1.Service{},
+		resourceOwnerKey,
+		func(rawObj client.Object) []string {
+			service, ok := rawObj.(*corev1.Service)
+			if !ok {
+				return nil
+			}
+			owners := service.GetOwnerReferences()
+			if len(owners) == 0 {
+				return nil
+			}
+			return []string{owners[0].Name}
+		},
+	); err != nil {
+		return err
+	}
+	// Index for Ingress
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&networkingv1.Ingress{},
+		resourceOwnerKey,
+		func(rawObj client.Object) []string {
+			ing, ok := rawObj.(*networkingv1.Ingress)
+			if !ok {
+				return nil
+			}
+			var ownerNames []string
+			for _, owner := range ing.GetOwnerReferences() {
+				ownerNames = append(ownerNames, owner.Name)
+			}
+			return ownerNames
+		},
+	); err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&hubv1.MdaiIngress{}, builder.WithPredicates(predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
-				cr := e.Object.(*hubv1.MdaiIngress)
+				cr, ok := e.Object.(*hubv1.MdaiIngress)
+				if !ok {
+					return false
+				}
 				return r.pairOtelcolMdaiIngressExist(ctx, cr.Name, cr.Namespace)
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				newCr := e.ObjectNew.(*hubv1.MdaiIngress)
+				newCr, ok := e.ObjectNew.(*hubv1.MdaiIngress)
+				if !ok {
+					return false
+				}
 				return r.pairOtelcolMdaiIngressExist(ctx, newCr.Name, newCr.Namespace)
 			},
 			DeleteFunc: func(e event.DeleteEvent) bool { // TODO: implement deletion logic
@@ -115,15 +159,24 @@ func (r *MdaiIngressReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			// TODO: try to narrow down the watches if possible
 			&v1beta1.OpenTelemetryCollector{},
-			handler.EnqueueRequestsFromMapFunc(r.requeueByCollectorRef),
+			handler.EnqueueRequestsFromMapFunc(requeueByCollectorRef),
 			builder.WithPredicates(predicate.Funcs{
 				UpdateFunc: func(e event.UpdateEvent) bool {
-					oldCR := e.ObjectOld.(*v1beta1.OpenTelemetryCollector)
-					newCR := e.ObjectNew.(*v1beta1.OpenTelemetryCollector)
+					oldCR, okOld := e.ObjectOld.(*v1beta1.OpenTelemetryCollector)
+					if !okOld {
+						return false
+					}
+					newCR, okNew := e.ObjectNew.(*v1beta1.OpenTelemetryCollector)
+					if !okNew {
+						return false
+					}
 					return !reflect.DeepEqual(oldCR.Spec.Config, newCR.Spec.Config) && r.pairOtelcolMdaiIngressExist(ctx, newCR.Name, newCR.Namespace)
 				},
 				CreateFunc: func(e event.CreateEvent) bool {
-					cr := e.Object.(*v1beta1.OpenTelemetryCollector)
+					cr, ok := e.Object.(*v1beta1.OpenTelemetryCollector)
+					if !ok {
+						return false
+					}
 					return r.pairOtelcolMdaiIngressExist(ctx, cr.Name, cr.Namespace)
 				},
 				DeleteFunc: func(e event.DeleteEvent) bool { // TODO: implement deletion logic
@@ -137,7 +190,7 @@ func (r *MdaiIngressReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *MdaiIngressReconciler) requeueByCollectorRef(ctx context.Context, obj client.Object) []reconcile.Request {
+func requeueByCollectorRef(ctx context.Context, obj client.Object) []reconcile.Request {
 	log := logger.FromContext(ctx)
 	log.Info("-- Requeueing MdaiIngress triggered by otel collector", "collector name", obj.GetName(), "namespace", obj.GetNamespace())
 
@@ -151,6 +204,32 @@ func (r *MdaiIngressReconciler) requeueByCollectorRef(ctx context.Context, obj c
 			},
 		},
 	}
+}
+
+// BuildCollector returns the generation and collected errors of all manifests for a given instance.
+func BuildCollector(params manifests.Params) ([]client.Object, error) {
+	mBuilders := []manifests.Builder[manifests.Params]{
+		collector.Build,
+	}
+	var resources []client.Object
+	for _, mBuilder := range mBuilders {
+		objs, err := mBuilder(params)
+		if err != nil {
+			return nil, err
+		}
+		resources = append(resources, objs...)
+	}
+	return resources, nil
+}
+
+func (r *MdaiIngressReconciler) GetParams(otelMdaiComb hubv1.OtelMdaiIngressComb) manifests.Params {
+	p := manifests.Params{
+		Client:              r.Client,
+		OtelMdaiIngressComb: otelMdaiComb,
+		Log:                 r.Logger,
+		Scheme:              r.Scheme,
+	}
+	return p
 }
 
 // pairOtelcolMdaiIngressExist checks if there is a MdaiIngress with the same name and namespace as the provided OpentelemetryCollector
@@ -174,36 +253,9 @@ func (r *MdaiIngressReconciler) pairOtelcolMdaiIngressExist(ctx context.Context,
 	return true
 }
 
-// BuildCollector returns the generation and collected errors of all manifests for a given instance.
-func BuildCollector(params manifests.Params) ([]client.Object, error) {
-	mBuilders := []manifests.Builder[manifests.Params]{
-		collector.Build,
-	}
-	var resources []client.Object
-	for _, mBuilder := range mBuilders {
-		objs, err := mBuilder(params)
-		if err != nil {
-			return nil, err
-		}
-		resources = append(resources, objs...)
-	}
-	return resources, nil
-}
-
-func (r *MdaiIngressReconciler) GetParams(ctx context.Context, otelMdaiComb hubv1.OtelMdaiIngressComb) (manifests.Params, error) {
-	p := manifests.Params{
-		Client:              r.Client,
-		OtelMdaiIngressComb: otelMdaiComb,
-		Log:                 r.Logger,
-		Scheme:              r.Scheme,
-	}
-
-	return p, nil
-}
-
 func (r *MdaiIngressReconciler) findMdaiIngressOwnedObjects(ctx context.Context, params manifests.Params) (map[types.UID]client.Object, error) {
 	ownedObjects := map[types.UID]client.Object{}
-	ownedObjectTypes := r.GetOwnedResourceTypes()
+	ownedObjectTypes := GetOwnedResourceTypes()
 	listOpts := []client.ListOption{
 		client.InNamespace(params.OtelMdaiIngressComb.Otelcol.Namespace),
 		client.MatchingFields{resourceOwnerKey: params.OtelMdaiIngressComb.MdaiIngress.Name},
@@ -223,7 +275,7 @@ func (r *MdaiIngressReconciler) findMdaiIngressOwnedObjects(ctx context.Context,
 
 // GetOwnedResourceTypes returns all the resource types the controller can own. Even though this method returns an array
 // of client.Object, these are (empty) example structs rather than actual resources.
-func (r *MdaiIngressReconciler) GetOwnedResourceTypes() []client.Object {
+func GetOwnedResourceTypes() []client.Object {
 	ownedResources := []client.Object{
 		&corev1.Service{},
 		&networkingv1.Ingress{},
