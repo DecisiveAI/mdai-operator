@@ -6,4 +6,26 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: mdaiingress-sample
 spec:
-  # TODO(user): Add fields here
+  cloudType: aws
+  annotations:
+    alb.ingress.kubernetes.io/certificate-arn: 'arn:aws:acm:${AWS_REGION}:${AWS_ACCOUNT}:certificate/${AWS_CERT_ARN}'
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/load-balancer-name: mdai-grpc-endpoint
+    alb.ingress.kubernetes.io/backend-protocol-version: GRPC
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/target-type: ip
+    kubernetes.io/ingress.class: alb
+  grpcService:
+    type: NodePort
+  nonGrpcService:
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-name: mdai-non-grpc-endpoint
+      service.beta.kubernetes.io/aws-load-balancer-type: external
+      service.beta.kubernetes.io/aws-load-balancer-backend-protocol: http
+      service.beta.kubernetes.io/aws-load-balancer-scheme: internal
+      service.beta.kubernetes.io/aws-load-balancer-ssl-cert: 'arn:aws:acm:${AWS_REGION}:${AWS_ACCOUNT}:certificate/${AWS_CERT_ARN}'
+  collectorEndpoints:
+    otlp: otlp.mdai.io
+    jaeger: jaeger.mdai.io
+
