@@ -39,9 +39,47 @@ spec:
           spec:
             description: MdaiReplaySpec defines the desired state of MdaiReplay.
             properties:
-              foo:
-                description: Foo is an example field of MdaiReplay. Edit mdaireplay_types.go
-                  to remove/update
+              destination:
+                properties:
+                  otlpHttp:
+                    properties:
+                      endpoint:
+                        type: string
+                    required:
+                    - endpoint
+                    type: object
+                type: object
+              endTime:
+                format: date-time
+                type: string
+              source:
+                properties:
+                  aws:
+                    properties:
+                      awsAccessKeySecret:
+                        type: string
+                    type: object
+                  s3:
+                    properties:
+                      filePrefix:
+                        type: string
+                      s3Bucket:
+                        type: string
+                      s3Partition:
+                        type: string
+                      s3Region:
+                        type: string
+                    required:
+                    - filePrefix
+                    - s3Bucket
+                    - s3Partition
+                    - s3Region
+                    type: object
+                type: object
+              startTime:
+                format: date-time
+                type: string
+              telemetryType:
                 type: string
             type: object
           status:

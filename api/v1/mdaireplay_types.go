@@ -7,13 +7,52 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+type MdaiReplayTelemetryType string
+type MdaiReplayS3Partition string
+
+const (
+	LogsReplayTelemetryType     MdaiReplayTelemetryType = "Logs"
+	MetricssReplayTelemetryType MdaiReplayTelemetryType = "Metrics"
+	TracesReplayTelemetryType   MdaiReplayTelemetryType = "Traces"
+
+	S3ReplayMinutePartition MdaiReplayS3Partition = "Minute"
+	S3ReplayHourPartition   MdaiReplayS3Partition = "Hour"
+)
+
+type MdaiReplayAwsConfig struct {
+	AWSAccessKeySecret *string `json:"awsAccessKeySecret,omitempty" yaml:"aws_access_key_secret,omitempty"`
+}
+
+type MdaiReplayS3Configuration struct {
+	S3Region    string                `json:"s3Region" yaml:"s3_region"`
+	S3Bucket    string                `json:"s3Bucket" yaml:"s3_bucket"`
+	FilePrefix  string                `json:"filePrefix" yaml:"file_prefix"`
+	S3Partition MdaiReplayS3Partition `json:"s3Partition" yaml:"s3_partition"`
+}
+
+type MdaiReplaySourceConfiguration struct {
+	// +optional
+	AWSConfig *MdaiReplayAwsConfig `json:"aws,omitempty" yaml:"aws,omitempty"`
+	// +optional
+	S3 *MdaiReplayS3Configuration `json:"s3,omitempty" yaml:"s3,omitempty"`
+}
+
+type MdaiReplayOtlpHttpDestinationConfiguration struct {
+	Endpoint string `json:"endpoint" yaml:"endpoint"`
+}
+
+type MdaiReplayDestinationConfiguration struct {
+	// +optional
+	OtlpHttp *MdaiReplayOtlpHttpDestinationConfiguration `json:"otlpHttp,omitempty" yaml:"otlp_http,omitempty"`
+}
+
 // MdaiReplaySpec defines the desired state of MdaiReplay.
 type MdaiReplaySpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of MdaiReplay. Edit mdaireplay_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	StartTime     *metav1.Time                       `json:"startTime,omitempty" yaml:"start_time,omitempty"`
+	EndTime       *metav1.Time                       `json:"endTime,omitempty" yaml:"end_time,omitempty"`
+	TelemetryType MdaiReplayTelemetryType            `json:"telemetryType,omitempty" yaml:"telemetry_type,omitempty"`
+	Source        MdaiReplaySourceConfiguration      `json:"source,omitempty" yaml:"source,omitempty"`
+	Destination   MdaiReplayDestinationConfiguration `json:"destination,omitempty" yaml:"destination,omitempty"`
 }
 
 // MdaiReplayStatus defines the observed state of MdaiReplay.
