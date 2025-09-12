@@ -1,0 +1,18 @@
+---
+receivers:
+  otlp/1:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:12345
+  jaeger:
+    protocols:
+      thrift_http:
+exporters:
+  logging:
+    loglevel: debug
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp/1, jaeger]
+      exporters: [nop]

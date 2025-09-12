@@ -1,0 +1,15 @@
+---
+receivers:
+  otlp/1:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+exporters:
+  logging:
+    loglevel: debug
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp/1]
+      exporters: [nop]

@@ -90,6 +90,7 @@ rules:
   resources:
   - mdaicollectors
   - mdaihubs
+  - mdaiingresses
   - mdaiobservers
   verbs:
   - create
@@ -104,6 +105,7 @@ rules:
   resources:
   - mdaicollectors/finalizers
   - mdaihubs/finalizers
+  - mdaiingresses/finalizers
   - mdaiobservers/finalizers
   verbs:
   - update
@@ -112,6 +114,7 @@ rules:
   resources:
   - mdaicollectors/status
   - mdaihubs/status
+  - mdaiingresses/status
   - mdaiobservers/status
   verbs:
   - get
@@ -121,6 +124,18 @@ rules:
   - monitoring.coreos.com
   resources:
   - prometheusrules
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
   verbs:
   - create
   - delete
