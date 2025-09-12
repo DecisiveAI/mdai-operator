@@ -55,10 +55,25 @@ type MdaiReplaySpec struct {
 	Destination   MdaiReplayDestinationConfiguration `json:"destination,omitempty" yaml:"destination,omitempty"`
 }
 
+type MdaiReplayStatusType string
+
+const (
+	MdaiReplayStatusTypeStarted   MdaiReplayStatusType = "Started"
+	MdaiReplayStatusTypeCompleted MdaiReplayStatusType = "Completed"
+	MdaiReplayStatusTypeFailed    MdaiReplayStatusType = "Failed"
+)
+
 // MdaiReplayStatus defines the observed state of MdaiReplay.
 type MdaiReplayStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	ReplayStatus MdaiReplayStatusType `json:"replayStatus"`
+
+	// Time when last Replay Configuration change was detected
+	// Right now it's updated on each reconcile, we have to skip when reconciliation detects no changes
+	// +optional
+	LastUpdatedTime *metav1.Time `json:"lastUpdatedTime,omitempty"`
+
+	// Conditions store the status conditions of the Replay instances
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
 // +kubebuilder:object:root=true

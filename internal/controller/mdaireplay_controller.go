@@ -2,19 +2,25 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/client-go/tools/record"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	logger "sigs.k8s.io/controller-runtime/pkg/log"
 
-	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
+
+var _ Controller = (*MdaiReplayReconciler)(nil)
 
 // MdaiReplayReconciler reconciles a MdaiReplay object
 type MdaiReplayReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaireplays,verbs=get;list;watch;create;update;patch;delete
@@ -31,9 +37,54 @@ type MdaiReplayReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.20.4/pkg/reconcile
 func (r *MdaiReplayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logger.FromContext(ctx)
+	log.Info("-- Starting MdaiReplay reconciliation --", "namespace", req.NamespacedName, "name", req.Name)
 
-	// TODO(user): your logic here
+	fetchedCR := &mdaiv1.MdaiReplay{}
+	if err := r.Get(ctx, req.NamespacedName, fetchedCR); err != nil {
+		// we'll ignore not-found errors, since they can't be fixed by an immediate
+		// requeue (we'll need to wait for a new notification), and we can get them
+		// on deleted requests.
+		if !apierrors.IsNotFound(err) {
+			log.Error(err, "unable to fetch MdaiReplay CR:"+req.Namespace+" : "+req.Name)
+		}
+		log.Info("-- Exiting MdaiReplay reconciliation, CR is deleted already --")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	_, err := r.ReconcileHandler(ctx, *NewReplayAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme))
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	log.Info("-- Finished MdaiReplay reconciliation --")
+
+	return ctrl.Result{}, nil
+}
+
+// ReconcileHandler processes the MdaiReplay CR and performs the necessary operations.
+func (*MdaiReplayReconciler) ReconcileHandler(ctx context.Context, adapter Adapter) (ctrl.Result, error) {
+	ReplayAdapter, ok := adapter.(MdaiReplayAdapter)
+	if !ok {
+		return ctrl.Result{}, fmt.Errorf("unexpected adapter type: %T", adapter)
+	}
+
+	operations := []ReconcileOperation{
+		ReplayAdapter.ensureDeletionProcessed,
+		ReplayAdapter.ensureStatusInitialized,
+		ReplayAdapter.ensureFinalizerInitialized,
+		ReplayAdapter.ensureSynchronized,
+		ReplayAdapter.ensureStatusSetToDone,
+	}
+	for _, operation := range operations {
+		result, err := operation(ctx)
+		if err != nil || result.RequeueRequest {
+			return ctrl.Result{RequeueAfter: result.RequeueDelay}, err
+		}
+		if result.CancelRequest {
+			return ctrl.Result{}, nil
+		}
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -41,7 +92,7 @@ func (r *MdaiReplayReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MdaiReplayReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&hubv1.MdaiReplay{}).
+		For(&mdaiv1.MdaiReplay{}).
 		Named("mdaireplay").
 		Complete(r)
 }
