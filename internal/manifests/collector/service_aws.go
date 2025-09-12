@@ -1,4 +1,4 @@
-// nolint:goconst
+// nolint: goconst,gofumpt
 package collector
 
 import (
@@ -27,9 +27,13 @@ func GrpcService(params manifests.Params) (*corev1.Service, error) {
 	name := naming.GrpcService(params.OtelMdaiIngressComb.Otelcol.Name)
 	labels := manifestutils.Labels(params.OtelMdaiIngressComb.Otelcol.ObjectMeta, name, params.OtelMdaiIngressComb.Otelcol.Spec.Image, ComponentOpenTelemetryCollector, []string{})
 
-	annotations := maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
+	var annotations = make(map[string]string)
+	otelcolAnnotations := maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
 	serviceAnnotations := params.OtelMdaiIngressComb.MdaiIngress.Spec.GrpcService.Annotations
-	if annotations != nil && serviceAnnotations != nil {
+	if len(otelcolAnnotations) > 0 {
+		maps.Copy(annotations, otelcolAnnotations)
+	}
+	if len(serviceAnnotations) > 0 {
 		maps.Copy(annotations, serviceAnnotations)
 	}
 
@@ -92,10 +96,13 @@ func NonGrpcService(params manifests.Params) (*corev1.Service, error) {
 	name := naming.NonGrpcService(params.OtelMdaiIngressComb.Otelcol.Name)
 	labels := manifestutils.Labels(params.OtelMdaiIngressComb.Otelcol.ObjectMeta, name, params.OtelMdaiIngressComb.Otelcol.Spec.Image, ComponentOpenTelemetryCollector, []string{})
 
-	annotations := maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
+	var annotations = make(map[string]string)
+	otelcolAnnotations := maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
 	serviceAnnotations := params.OtelMdaiIngressComb.MdaiIngress.Spec.NonGrpcService.Annotations
-
-	if annotations != nil && serviceAnnotations != nil {
+	if len(otelcolAnnotations) > 0 {
+		maps.Copy(annotations, otelcolAnnotations)
+	}
+	if len(serviceAnnotations) > 0 {
 		maps.Copy(annotations, serviceAnnotations)
 	}
 

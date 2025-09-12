@@ -21,9 +21,13 @@ func IngressAws(params manifests.Params) (*networkingv1.Ingress, error) {
 	// TODO: rework labels & annotations
 	labels := params.OtelMdaiIngressComb.MdaiIngress.Labels
 
-	annotations := maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
+	var annotations = make(map[string]string)
+	otelcolAnnotations := maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
 	ingressAnnotations := params.OtelMdaiIngressComb.MdaiIngress.Spec.Annotations
-	if annotations != nil && ingressAnnotations != nil {
+	if len(otelcolAnnotations) > 0 {
+		maps.Copy(annotations, otelcolAnnotations)
+	}
+	if len(ingressAnnotations) > 0 {
 		maps.Copy(annotations, ingressAnnotations)
 	}
 

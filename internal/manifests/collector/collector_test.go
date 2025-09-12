@@ -27,6 +27,8 @@ func TestBuild1(t *testing.T) {
 			CloudType:        mdaiv1.CloudProviderAws,
 			Annotations:      map[string]string{"some.key": "some.value"},
 			IngressClassName: &ingressClassName,
+			GrpcService:      &mdaiv1.IngressService{},
+			NonGrpcService:   &mdaiv1.IngressService{},
 			CollectorEndpoints: map[string]string{
 				"otlp/1": "otlp-1.some.domain.io",
 				"otlp/2": "otlp-2.some.domain.io",
@@ -53,6 +55,8 @@ func TestBuild1(t *testing.T) {
 			CloudType:        mdaiv1.CloudProviderAws,
 			Annotations:      map[string]string{"some.key": "some.value"},
 			IngressClassName: &ingressClassName,
+			GrpcService:      &mdaiv1.IngressService{},
+			NonGrpcService:   &mdaiv1.IngressService{},
 			CollectorEndpoints: map[string]string{
 				"otlp/1": "otlp-1.some.domain.io",
 				"jaeger": "jaeger.some.domain.io",
