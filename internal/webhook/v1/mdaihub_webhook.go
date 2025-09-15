@@ -264,6 +264,8 @@ func validateAction(actionPath *field.Path, action mdaiv1.Action, knownVarKeys m
 	var errs field.ErrorList
 	present := 0
 
+	// TODO add new action types to this validation function
+
 	if action.AddToSet != nil {
 		present++
 		errs = append(errs, validateSetAction(actionPath.Child("addToSet"), action.AddToSet, knownVarKeys)...)
@@ -274,6 +276,21 @@ func validateAction(actionPath *field.Path, action mdaiv1.Action, knownVarKeys m
 		errs = append(errs, validateSetAction(actionPath.Child("removeFromSet"), action.RemoveFromSet, knownVarKeys)...)
 	}
 
+	if action.SetVariable != nil {
+		present++
+		errs = append(errs, validateScalarAction(actionPath.Child("setVariable"), action.SetVariable, knownVarKeys)...)
+	}
+
+	if action.AddToMap != nil {
+		present++
+		errs = append(errs, validateMapAction(actionPath.Child("addToMap"), action.AddToMap, knownVarKeys)...)
+	}
+
+	if action.RemoveFromMap != nil {
+		present++
+		errs = append(errs, validateMapAction(actionPath.Child("removeFromMap"), action.RemoveFromMap, knownVarKeys)...)
+	}
+
 	if action.CallWebhook != nil {
 		present++
 		errs = append(errs, validateWebhookCall(actionPath.Child("callWebhook"), action.CallWebhook)...)
@@ -282,6 +299,55 @@ func validateAction(actionPath *field.Path, action mdaiv1.Action, knownVarKeys m
 	if present == 0 {
 		errs = append(errs, field.Invalid(actionPath, "<action>", "at least one action must be specified"))
 	}
+
+	if present > 1 {
+		errs = append(errs, field.Invalid(actionPath, "<action>", "only one action may be specified"))
+	}
+	return errs
+}
+
+func validateScalarAction(p *field.Path, a *mdaiv1.ScalarAction, knownVarKeys map[string]struct{}) field.ErrorList {
+	var errs field.ErrorList
+
+	scalar := strings.TrimSpace(a.Scalar)
+	if scalar == "" {
+		errs = append(errs, field.Required(p.Child("scalar"), "required"))
+	} else if !hasKey(knownVarKeys, scalar) {
+		errs = append(errs, field.Invalid(p.Child("scalar"), scalar, "not defined in spec.variables"))
+	}
+
+	// CRD enforces MinLength=1, but keep a defensive check for clarity:
+	val := strings.TrimSpace(a.Value)
+	if val == "" {
+		errs = append(errs, field.Required(p.Child("value"), "required"))
+	}
+
+	return errs
+}
+
+func validateMapAction(p *field.Path, a *mdaiv1.MapAction, knownVarKeys map[string]struct{}) field.ErrorList {
+	var errs field.ErrorList
+
+	mapName := strings.TrimSpace(a.Map)
+	if mapName == "" {
+		errs = append(errs, field.Required(p.Child("map"), "required"))
+	} else if !hasKey(knownVarKeys, mapName) {
+		errs = append(errs, field.Invalid(p.Child("map"), mapName, "not defined in spec.variables"))
+	}
+
+	key := strings.TrimSpace(a.Key)
+	if key == "" {
+		errs = append(errs, field.Required(p.Child("key"), "required"))
+	}
+
+	// Require value for addToMap; allow it to be omitted for removeFromMap.
+	isAdd := strings.HasSuffix(p.String(), ".addToMap")
+	if isAdd {
+		if a.Value == nil || strings.TrimSpace(ptr.Deref(a.Value, "")) == "" {
+			errs = append(errs, field.Required(p.Child("value"), "required for addToMap"))
+		}
+	}
+
 	return errs
 }
 

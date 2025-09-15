@@ -95,6 +95,22 @@ spec:
                         rule is triggered.
                       items:
                         properties:
+                          addToMap:
+                            properties:
+                              key:
+                                minLength: 1
+                                type: string
+                              map:
+                                description: Map Target map name
+                                minLength: 1
+                                type: string
+                              value:
+                                description: Value is not required for remove operations.
+                                type: string
+                            required:
+                            - key
+                            - map
+                            type: object
                           addToSet:
                             description: Payloads (one required depending on Type)
                             properties:
@@ -212,6 +228,22 @@ spec:
                                   rule: (has(self.value)?1:0)+(has(self.valueFrom)?1:0)==1
                             required:
                             - url
+                            type: object
+                          removeFromMap:
+                            properties:
+                              key:
+                                minLength: 1
+                                type: string
+                              map:
+                                description: Map Target map name
+                                minLength: 1
+                                type: string
+                              value:
+                                description: Value is not required for remove operations.
+                                type: string
+                            required:
+                            - key
+                            - map
                             type: object
                           removeFromSet:
                             properties:

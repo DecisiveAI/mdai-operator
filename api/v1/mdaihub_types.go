@@ -108,7 +108,8 @@ type Action struct {
 
 	SetVariable *ScalarAction `json:"setVariable,omitempty"`
 
-	// TODO add more actions to update variables here
+	AddToMap      *MapAction `json:"addToMap,omitempty"`
+	RemoveFromMap *MapAction `json:"removeFromMap,omitempty"`
 
 	CallWebhook *CallWebhookAction `json:"callWebhook,omitempty"`
 }
@@ -129,6 +130,18 @@ type ScalarAction struct {
 	// Value to add (templated string allowed)
 	// +kubebuilder:validation:MinLength=1
 	Value string `json:"value"`
+}
+
+type MapAction struct {
+	// Map Target map name
+	// +kubebuilder:validation:MinLength=1
+	Map string `json:"map"`
+
+	// +kubebuilder:validation:MinLength=1
+	Key string `json:"key"`
+	// +optional
+	// Value is not required for remove operations.
+	Value *string `json:"value,omitempty"`
 }
 
 // CallWebhookAction is used to call a webhook with the provided template.

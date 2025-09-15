@@ -90,6 +90,10 @@ spec:
         - addToSet:
             set: service_list
             value: "{{ service_name }}"
+        - addToMap:
+            map: severity_filters_by_level
+            key: "{{ service_name }}"
+            value: high
     - name: HandleRemoveNoisyServiceFromSet
       when:
         alertName: logBytesOutTooHighBySvc
@@ -98,6 +102,9 @@ spec:
         - removeFromSet:
             set: service_list
             value: "{{ service_name }}"
+        - removeFromMap:
+            map: severity_filters_by_level
+            key: "{{ service_name }}"
     - name: TrackCriticalRiskLevel
       when:
         variableUpdated: riskLevel
@@ -106,6 +113,10 @@ spec:
         - addToSet:
             set: highRiskStates
             value: "{{ variable_value }}"
+        - setVariable:
+            scalar: severity_number
+            value: "3"
+
     - name: anomalous_error_rate
       when:
         alertName: anomalous_error_rate
