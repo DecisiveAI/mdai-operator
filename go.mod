@@ -7,7 +7,7 @@ godebug default=go1.24
 require (
 	dario.cat/mergo v1.0.2
 	github.com/cenkalti/backoff/v5 v5.0.3
-	github.com/decisiveai/mdai-data-core v0.2.4-0.20250912141653-3b100e180808
+	github.com/decisiveai/mdai-data-core v0.2.6
 	github.com/go-logr/logr v1.4.3
 	github.com/go-logr/zapr v1.3.0
 	github.com/goccy/go-yaml v1.18.0

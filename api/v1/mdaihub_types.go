@@ -276,9 +276,9 @@ type (
 const (
 	VariableSourceTypeBuiltInValkey VariableStorageType = "mdai-valkey"
 
-	// VariableTypeManual Variable type that is managed externally by the user, not attached to any OODA loop
+	// VariableTypeManual Variable type that is managed externally by the user, not attached to any automation rule
 	VariableTypeManual VariableType = "manual"
-	// VariableTypeComputed Variable type that is computed internally by MDAI, attached to an OODA loop
+	// VariableTypeComputed Variable type that is computed internally by MDAI, attached to an automation rule
 	VariableTypeComputed VariableType = "computed"
 	// VariableTypeMeta Variable type that is derived from manual and computed variables
 	VariableTypeMeta VariableType = "meta"
