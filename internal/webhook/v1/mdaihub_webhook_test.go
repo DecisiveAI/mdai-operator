@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -173,10 +174,12 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 
 var _ = Describe("MdaiHub Webhook", func() {
 	var (
-		obj       *mdaiv1.MdaiHub
-		oldObj    *mdaiv1.MdaiHub
-		validator MdaiHubCustomValidator
-		defaulter MdaiHubCustomDefaulter
+		obj          *mdaiv1.MdaiHub
+		oldObj       *mdaiv1.MdaiHub
+		validator    MdaiHubCustomValidator
+		defaulter    MdaiHubCustomDefaulter
+		actionPath   *field.Path
+		knownVarKeys map[string]struct{}
 	)
 
 	BeforeEach(func() {
@@ -188,7 +191,12 @@ var _ = Describe("MdaiHub Webhook", func() {
 		Expect(defaulter).NotTo(BeNil(), "Expected defaulter to be initialized")
 		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")
 		Expect(obj).NotTo(BeNil(), "Expected obj to be initialized")
-		// TODO (user): Add any setup logic common to all tests
+		actionPath = field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+		knownVarKeys = map[string]struct{}{
+			"service_list_1": {},
+			"map_1":          {},
+			"string_1":       {},
+		}
 	})
 
 	AfterEach(func() {
@@ -526,6 +534,121 @@ var _ = Describe("MdaiHub Webhook", func() {
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("passes with exactly one action specified (addToSet)", func() {
+			action := mdaiv1.Action{
+				AddToSet: &mdaiv1.SetAction{
+					Set:   "service_list_1",
+					Value: "val1",
+				},
+			}
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(BeEmpty(),
+				"single valid action should not trigger multi/zero-action errors")
+		})
+
+		It("passes with exactly one action specified (removeFromSet)", func() {
+			action := mdaiv1.Action{
+				RemoveFromSet: &mdaiv1.SetAction{
+					Set:   "service_list_1",
+					Value: "valX",
+				},
+			}
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(BeEmpty())
+		})
+
+		It("fails validation if no action is specified", func() {
+			action := mdaiv1.Action{} // all nil
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeInvalid))
+			Expect(errs[0].Field).To(Equal(actionPath.String()))
+			Expect(errs[0].BadValue).To(Equal("<action>"))
+			Expect(errs[0].Detail).To(Equal("at least one action must be specified"))
+		})
+
+		It("should fail validation if an action specifies both addToSet and removeFromSet", func() {
+			action := mdaiv1.Action{
+				AddToSet: &mdaiv1.SetAction{
+					Set:   "service_list_1",
+					Value: "val1",
+				},
+				RemoveFromSet: &mdaiv1.SetAction{
+					Set:   "service_list_1",
+					Value: "val2",
+				},
+			}
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeInvalid))
+			Expect(errs[0].Field).To(Equal(actionPath.String()))
+			Expect(errs[0].BadValue).To(Equal("<action>"))
+			Expect(errs[0].Detail).To(Equal("only one action may be specified"))
+		})
+
+		It("should pass validation when a single 'setVariable' action is specified", func() {
+			knownVarKeys := map[string]struct{}{"int": {}}
+			action := mdaiv1.Action{
+				SetVariable: &mdaiv1.ScalarAction{
+					Scalar: "int",
+					Value:  "123",
+				},
+			}
+			actionPath := field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(BeEmpty())
+		})
+
+		It("should pass validation when a single 'addToMap' action is specified", func() {
+			action := mdaiv1.Action{
+				AddToMap: &mdaiv1.MapAction{
+					Map:   "map",
+					Key:   "new-key",
+					Value: ptr.To("new-value"),
+				},
+			}
+			knownVars := map[string]struct{}{
+				"map": {},
+			}
+			actionPath := field.NewPath("spec").Child("rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVars)
+			Expect(errs).To(BeEmpty())
+		})
+
+		It("should pass validation when a single 'removeFromMap' action is specified", func() {
+			knownVarKeys := map[string]struct{}{"map": {}}
+			action := mdaiv1.Action{
+				RemoveFromMap: &mdaiv1.MapAction{
+					Map: "map",
+					Key: "some-key",
+				},
+			}
+			actionPath := field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(BeEmpty())
+		})
+
+		It("should pass validation when a single 'callWebhook' action is specified", func() {
+			action := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL:    mdaiv1.StringOrFrom{Value: ptr.To("http://example.com/webhook")},
+					Method: "POST",
+				},
+			}
+			knownVarKeys := map[string]struct{}{}
+			actionPath := field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(BeEmpty())
 		})
 	})
 })

@@ -115,8 +115,11 @@ type Action struct {
 }
 
 type SetAction struct {
-	// Target set name
+	// Target set variable name
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Required
 	Set string `json:"set"`
 	// Value to add (templated string allowed)
 	// +kubebuilder:validation:MinLength=1
@@ -124,8 +127,11 @@ type SetAction struct {
 }
 
 type ScalarAction struct {
-	// Target set name
+	// Target set variable name
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Required
 	Scalar string `json:"scalar"`
 	// Value to add (templated string allowed)
 	// +kubebuilder:validation:MinLength=1
@@ -133,14 +139,18 @@ type ScalarAction struct {
 }
 
 type MapAction struct {
-	// Map Target map name
+	// Map Target map variable name
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Required
 	Map string `json:"map"`
 
+	// Key to add or remove
 	// +kubebuilder:validation:MinLength=1
 	Key string `json:"key"`
 	// +optional
-	// Value is not required for remove operations.
+	// Value for key. Is not required for remove operations.
 	Value *string `json:"value,omitempty"`
 }
 

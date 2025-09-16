@@ -98,14 +98,18 @@ spec:
                           addToMap:
                             properties:
                               key:
+                                description: Key to add or remove
                                 minLength: 1
                                 type: string
                               map:
-                                description: Map Target map name
+                                description: Map Target map variable name
+                                maxLength: 63
                                 minLength: 1
+                                pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                                 type: string
                               value:
-                                description: Value is not required for remove operations.
+                                description: Value for key. Is not required for remove
+                                  operations.
                                 type: string
                             required:
                             - key
@@ -115,8 +119,10 @@ spec:
                             description: Payloads (one required depending on Type)
                             properties:
                               set:
-                                description: Target set name
+                                description: Target set variable name
+                                maxLength: 63
                                 minLength: 1
+                                pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                                 type: string
                               value:
                                 description: Value to add (templated string allowed)
@@ -232,14 +238,18 @@ spec:
                           removeFromMap:
                             properties:
                               key:
+                                description: Key to add or remove
                                 minLength: 1
                                 type: string
                               map:
-                                description: Map Target map name
+                                description: Map Target map variable name
+                                maxLength: 63
                                 minLength: 1
+                                pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                                 type: string
                               value:
-                                description: Value is not required for remove operations.
+                                description: Value for key. Is not required for remove
+                                  operations.
                                 type: string
                             required:
                             - key
@@ -248,8 +258,10 @@ spec:
                           removeFromSet:
                             properties:
                               set:
-                                description: Target set name
+                                description: Target set variable name
+                                maxLength: 63
                                 minLength: 1
+                                pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                                 type: string
                               value:
                                 description: Value to add (templated string allowed)
@@ -262,8 +274,10 @@ spec:
                           setVariable:
                             properties:
                               scalar:
-                                description: Target set name
+                                description: Target set variable name
+                                maxLength: 63
                                 minLength: 1
+                                pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                                 type: string
                               value:
                                 description: Value to add (templated string allowed)

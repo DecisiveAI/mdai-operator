@@ -40,13 +40,13 @@ when:
 ```
 This rule will be triggered whenever a new item is added to the ACTIVE_USERS set.
 ## `then` - Actions
-The then block is an array of actions to be executed sequentially when the when condition is met. These actions are used to modify computed variables or call external webhooks.  
+The then block is an array of actions to be executed sequentially when the `when` condition is met. These actions are used to modify computed variables or call external webhooks.  
 ### Modifying Variables
 These actions update the values of computed variables stored in Valkey.
 #### setVariable
 Sets or updates the value of a scalar variable (`string`, `int`, `boolean`).  
-`key`: The key of the variable to update.  
-`value`: The new value for the variable. Value could use interpolation. See details: [TODO add link]
+`key`: The name of the variable to update.  
+`value`: The new value for the variable. Value could use interpolation. 
 ```yaml
 then:
   - setVariable:
@@ -55,8 +55,8 @@ then:
 ```
 #### addToSet
 Adds a new item to a set variable.  
-`set`: The key of the set variable.  
-`value`: The string value to add to the set. Value could use interpolation. See details: [TODO add link]
+`set`: The name of the set variable.  
+`value`: The string value to add to the set. Value could use interpolation.
 ```yaml
 then:
   - addToSet:
@@ -65,7 +65,7 @@ then:
 ```
 #### removeFromSet
 Removes an item from a set variable.  
-`set`: The key of the set variable.  
+`set`: The name of the set variable.  
 `value`: The string value to remove from the set.  
 ```yaml
 then:
@@ -75,9 +75,9 @@ then:
 ```
 #### addToMap
 Adds or updates a key-value pair in a map variable.  
-`map`: The key of the map variable.  
+`map`: The name of the map variable.  
 `key`: The key within the map to add or update.  
-`value`: The value to set for the key.  
+`value`: The value to set for the key. Value could use interpolation.
 ```yaml
 then:
   - addToMap:
@@ -87,7 +87,7 @@ then:
 ```
 #### removeFromMap
 Removes a key-value pair from a map variable.  
-`map`: The key of the map variable.  
+`map`: The name of the map variable.  
 `key`: The key within the map to remove.  
 ```yaml
 then:
