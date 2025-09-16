@@ -25,3 +25,13 @@ spec:
       for: 5m
       labels:
         severity: warning
+    - alert: anomalous_error_rate
+      annotations:
+        alert_name: anomalous_error_rate
+        current_value: '{{ $value | printf "%.2f" }}'
+        expression: sum(increase(error_logs_by_service_total[5m])) by (mdai_service) > 2 * sum(avg_over_time(increase(error_logs_by_service_total[5m])[1h:])) by (mdai_service) and (sum by (mdai_service) (error_logs_by_service_total offset 1h))
+        hub_name: mdaihub-sample
+      expr: sum(increase(error_logs_by_service_total[5m])) by (mdai_service) > 2 * sum(avg_over_time(increase(error_logs_by_service_total[5m])[1h:])) by (mdai_service) and (sum by (mdai_service) (error_logs_by_service_total offset 1h))
+      for: 3m
+      labels:
+        severity: warning

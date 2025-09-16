@@ -190,25 +190,24 @@ func (*MdaiHubCustomValidator) validateAutomations(mdaihub *mdaiv1.MdaiHub) (adm
 		return warnings, nil
 	}
 
-	// TODO create a map with variable names and alert names for faster lookup
 	vars := mdaihub.Spec.Variables
 	varKeys := make(map[string]struct{}, len(vars))
 	for i := range vars {
-		key := strings.TrimSpace(vars[i].Key)
+		key := vars[i].Key
 		if key == "" {
 			continue
 		}
-		varKeys[strings.ToLower(key)] = struct{}{}
+		varKeys[key] = struct{}{}
 	}
 
 	alerts := mdaihub.Spec.PrometheusAlerts
 	alertNames := make(map[string]struct{}, len(alerts))
 	for i := range alerts {
-		key := strings.TrimSpace(alerts[i].Name)
+		key := alerts[i].Name
 		if key == "" {
 			continue
 		}
-		alertNames[strings.ToLower(key)] = struct{}{}
+		alertNames[key] = struct{}{}
 	}
 
 	specPath := field.NewPath("spec")
@@ -255,42 +254,110 @@ func validateWhen(path *field.Path, when mdaiv1.When, knownVarKeys map[string]st
 	return errs
 }
 
-func hasKey(set map[string]struct{}, key string) bool {
-	_, ok := set[strings.ToLower(strings.TrimSpace(key))]
+func hasKey(knownVarKeys map[string]struct{}, key string) bool {
+	_, ok := knownVarKeys[key]
 	return ok
 }
 
 func validateAction(actionPath *field.Path, action mdaiv1.Action, knownVarKeys map[string]struct{}) field.ErrorList {
-	var errs field.ErrorList
-	present := 0
+	const (
+		errAtLeastOneAction = "at least one action must be specified"
+		errOnlyOneAction    = "only one action may be specified"
+	)
 
-	if action.AddToSet != nil {
-		present++
-		errs = append(errs, validateSetAction(actionPath.Child("addToSet"), action.AddToSet, knownVarKeys)...)
+	actions := []struct {
+		key      string
+		present  bool
+		validate func() field.ErrorList
+	}{
+		{
+			key:     "addToSet",
+			present: action.AddToSet != nil,
+			validate: func() field.ErrorList {
+				return validateVariableAction(actionPath.Child("addToSet"), action.AddToSet.Set, knownVarKeys, "set")
+			},
+		},
+		{
+			key:     "removeFromSet",
+			present: action.RemoveFromSet != nil,
+			validate: func() field.ErrorList {
+				return validateVariableAction(actionPath.Child("removeFromSet"), action.RemoveFromSet.Set, knownVarKeys, "set")
+			},
+		},
+		{
+			key:     "setVariable",
+			present: action.SetVariable != nil,
+			validate: func() field.ErrorList {
+				return validateVariableAction(actionPath.Child("setVariable"), action.SetVariable.Scalar, knownVarKeys, "scalar")
+			},
+		},
+		{
+			key:     "addToMap",
+			present: action.AddToMap != nil,
+			validate: func() field.ErrorList {
+				return validateMapAction(actionPath.Child("addToMap"), action.AddToMap, knownVarKeys)
+			},
+		},
+		{
+			key:     "removeFromMap",
+			present: action.RemoveFromMap != nil,
+			validate: func() field.ErrorList {
+				return validateMapAction(actionPath.Child("removeFromMap"), action.RemoveFromMap, knownVarKeys)
+			},
+		},
+		{
+			key:     "callWebhook",
+			present: action.CallWebhook != nil,
+			validate: func() field.ErrorList {
+				return validateWebhookCall(actionPath.Child("callWebhook"), action.CallWebhook)
+			},
+		},
 	}
 
-	if action.RemoveFromSet != nil {
-		present++
-		errs = append(errs, validateSetAction(actionPath.Child("removeFromSet"), action.RemoveFromSet, knownVarKeys)...)
+	// find exactly one present; short-circuit on multi
+	presentIdx := -1
+	for i, a := range actions {
+		if a.present {
+			if presentIdx != -1 {
+				return field.ErrorList{field.Invalid(actionPath, "<action>", errOnlyOneAction)}
+			}
+			presentIdx = i
+		}
 	}
 
-	if action.CallWebhook != nil {
-		present++
-		errs = append(errs, validateWebhookCall(actionPath.Child("callWebhook"), action.CallWebhook)...)
+	if presentIdx == -1 {
+		return field.ErrorList{field.Invalid(actionPath, "<action>", errAtLeastOneAction)}
 	}
 
-	if present == 0 {
-		errs = append(errs, field.Invalid(actionPath, "<action>", "at least one action must be specified"))
-	}
-	return errs
+	return actions[presentIdx].validate()
 }
 
-func validateSetAction(p *field.Path, a *mdaiv1.SetAction, knownVarKeys map[string]struct{}) field.ErrorList {
-	var errs field.ErrorList
-	set := strings.TrimSpace(a.Set)
-	if !hasKey(knownVarKeys, set) {
-		errs = append(errs, field.Invalid(p.Child("set"), set, "not defined in spec.variables"))
+func validateVariableAction(path *field.Path, variableKey string, knownVarKeys map[string]struct{}, childPath string) field.ErrorList {
+	// validation for non-empty value is done at the CRD level
+	if !hasKey(knownVarKeys, variableKey) {
+		return field.ErrorList{
+			field.Invalid(path.Child(childPath), variableKey, "not defined in spec.variables"),
+		}
 	}
+	return nil
+}
+
+func validateMapAction(p *field.Path, a *mdaiv1.MapAction, knownVarKeys map[string]struct{}) field.ErrorList {
+	var errs field.ErrorList
+
+	mapName := a.Map
+	if !hasKey(knownVarKeys, mapName) {
+		errs = append(errs, field.Invalid(p.Child("map"), mapName, "not defined in spec.variables"))
+	}
+
+	// Require value for addToMap; allow it to be omitted for removeFromMap.
+	isAdd := strings.HasSuffix(p.String(), ".addToMap")
+	if isAdd {
+		if a.Value == nil || strings.TrimSpace(ptr.Deref(a.Value, "")) == "" {
+			errs = append(errs, field.Required(p.Child("value"), "required for addToMap"))
+		}
+	}
+
 	return errs
 }
 

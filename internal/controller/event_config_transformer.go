@@ -44,38 +44,39 @@ func transformWhenToTrigger(when *mdaiv1.When) (triggers.Trigger, error) {
 
 func transformThenToCommands(actions []mdaiv1.Action) ([]events.Command, error) {
 	cmds := make([]events.Command, 0, len(actions))
+
+	appendCmd := func(present bool, payload any, typ events.CommandType) error {
+		if !present {
+			return nil
+		}
+		b, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("encode %s: %w", typ, err)
+		}
+		cmds = append(cmds, events.Command{Type: typ, Inputs: b})
+		return nil
+	}
+
 	for i, action := range actions {
 		start := len(cmds)
 
-		if action.AddToSet != nil {
-			bytes, err := json.Marshal(action.AddToSet)
-			if err != nil {
-				return nil, fmt.Errorf("encode variable.set.add: %w", err)
-			}
-			cmds = append(cmds, events.Command{
-				Type:   "variable.set.add",
-				Inputs: bytes,
-			})
+		if err := appendCmd(action.AddToSet != nil, action.AddToSet, events.CmdVarSetAdd); err != nil {
+			return nil, err
 		}
-		if action.RemoveFromSet != nil {
-			bytes, err := json.Marshal(action.RemoveFromSet)
-			if err != nil {
-				return nil, fmt.Errorf("encode variable.set.remove: %w", err)
-			}
-			cmds = append(cmds, events.Command{
-				Type:   "variable.set.remove",
-				Inputs: bytes,
-			})
+		if err := appendCmd(action.RemoveFromSet != nil, action.RemoveFromSet, events.CmdVarSetRemove); err != nil {
+			return nil, err
 		}
-		if action.CallWebhook != nil {
-			bytes, err := json.Marshal(action.CallWebhook)
-			if err != nil {
-				return nil, fmt.Errorf("encode webhook.call: %w", err)
-			}
-			cmds = append(cmds, events.Command{
-				Type:   "webhook.call",
-				Inputs: bytes,
-			})
+		if err := appendCmd(action.SetVariable != nil, action.SetVariable, events.CmdVarScalarUpdate); err != nil {
+			return nil, err
+		}
+		if err := appendCmd(action.AddToMap != nil, action.AddToMap, events.CmdVarMapAdd); err != nil {
+			return nil, err
+		}
+		if err := appendCmd(action.RemoveFromMap != nil, action.RemoveFromMap, events.CmdVarMapRemove); err != nil {
+			return nil, err
+		}
+		if err := appendCmd(action.CallWebhook != nil, action.CallWebhook, events.CmdWebhookCall); err != nil {
+			return nil, err
 		}
 
 		if len(cmds) == start {
