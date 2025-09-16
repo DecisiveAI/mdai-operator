@@ -451,7 +451,7 @@ var _ = Describe("Manager", Ordered, func() {
 				data := getDataFromMap(g, "mdaihub-sample-automation", "mdai")
 				g.Expect(data).To(HaveLen(2))
 				g.Expect(data["HandleAddNoisyServiceToSet"]).
-					To(Equal(`{"name":"HandleAddNoisyServiceToSet","trigger":{"kind":"alert","spec":{"name":"logBytesOutTooHighBySvc"}},"commands":[{"type":"variable.set.add","inputs":{"set":"service_list_1","value":"{{ service_name }}"}},{"type":"variable.scalar.update","inputs":{"scalar":"severity_number","value":"3"}}]}`))
+					To(Equal(`{"name":"HandleAddNoisyServiceToSet","trigger":{"kind":"alert","spec":{"name":"logBytesOutTooHighBySvc"}},"commands":[{"type":"variable.set.add","inputs":{"set":"service_list_1","value":"${trigger:payload.labels.service_name}"}},{"type":"variable.scalar.update","inputs":{"scalar":"severity_number","value":"3"}}]}`))
 				g.Expect(data["anomalous_error_rate"]).
 					To(Equal(`{"name":"anomalous_error_rate","trigger":{"kind":"alert","spec":{"name":"anomalous_error_rate","status":"firing"}},"commands":[{"type":"webhook.call","inputs":{"url":{"valueFrom":{"secretKeyRef":{"name":"slack-webhook-secret","key":"url"}}},"method":"POST","templateRef":"slackAlertTemplate","templateValues":{"labels_val_ref_primary":"mdai_service","link_text":"See alert in Prometheus","link_url":"http://localhost:9090/alerts","message":"Service was \u003e2x expected error rate for five minutes compared to the last hour!"}}}]}`))
 			}
