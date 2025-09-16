@@ -89,10 +89,10 @@ spec:
       then:
         - addToSet:
             set: service_list
-            value: "{{ service_name }}"
+            value: ${trigger:payload.labels.service_name}
         - addToMap:
             map: severity_filters_by_level
-            key: "{{ service_name }}"
+            key: ${trigger:payload.labels.service_name}
             value: high
     - name: HandleRemoveNoisyServiceFromSet
       when:
@@ -101,10 +101,10 @@ spec:
       then:
         - removeFromSet:
             set: service_list
-            value: "{{ service_name }}"
+            value: ${trigger:payload.labels.service_name}
         - removeFromMap:
             map: severity_filters_by_level
-            key: "{{ service_name }}"
+            key: ${trigger:payload.labels.service_name}
     - name: TrackCriticalRiskLevel
       when:
         variableUpdated: riskLevel
@@ -112,7 +112,7 @@ spec:
       then:
         - addToSet:
             set: highRiskStates
-            value: "{{ variable_value }}"
+            value: ${trigger:payload.labels.service_name}
         - setVariable:
             scalar: severity_number
             value: "3"

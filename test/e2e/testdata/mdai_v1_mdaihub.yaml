@@ -118,7 +118,7 @@ spec:
       then:
         - addToSet:
             set: service_list_1
-            value: "{{ service_name }}"
+            value: ${trigger:payload.labels.service_name}
         - setVariable:
             scalar: severity_number
             value: "3"

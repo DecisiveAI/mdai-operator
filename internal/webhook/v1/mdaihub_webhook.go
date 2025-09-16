@@ -190,25 +190,24 @@ func (*MdaiHubCustomValidator) validateAutomations(mdaihub *mdaiv1.MdaiHub) (adm
 		return warnings, nil
 	}
 
-	// TODO create a map with variable names and alert names for faster lookup
 	vars := mdaihub.Spec.Variables
 	varKeys := make(map[string]struct{}, len(vars))
 	for i := range vars {
-		key := strings.TrimSpace(vars[i].Key)
+		key := vars[i].Key
 		if key == "" {
 			continue
 		}
-		varKeys[strings.ToLower(key)] = struct{}{}
+		varKeys[key] = struct{}{}
 	}
 
 	alerts := mdaihub.Spec.PrometheusAlerts
 	alertNames := make(map[string]struct{}, len(alerts))
 	for i := range alerts {
-		key := strings.TrimSpace(alerts[i].Name)
+		key := alerts[i].Name
 		if key == "" {
 			continue
 		}
-		alertNames[strings.ToLower(key)] = struct{}{}
+		alertNames[key] = struct{}{}
 	}
 
 	specPath := field.NewPath("spec")
@@ -255,8 +254,8 @@ func validateWhen(path *field.Path, when mdaiv1.When, knownVarKeys map[string]st
 	return errs
 }
 
-func hasKey(set map[string]struct{}, key string) bool {
-	_, ok := set[strings.ToLower(strings.TrimSpace(key))]
+func hasKey(knownVarKeys map[string]struct{}, key string) bool {
+	_, ok := knownVarKeys[key]
 	return ok
 }
 
@@ -335,7 +334,7 @@ func validateAction(actionPath *field.Path, action mdaiv1.Action, knownVarKeys m
 
 func validateVariableAction(path *field.Path, variableKey string, knownVarKeys map[string]struct{}, childPath string) field.ErrorList {
 	// validation for non-empty value is done at the CRD level
-	if _, ok := knownVarKeys[variableKey]; !ok {
+	if !hasKey(knownVarKeys, variableKey) {
 		return field.ErrorList{
 			field.Invalid(path.Child(childPath), variableKey, "not defined in spec.variables"),
 		}

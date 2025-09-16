@@ -771,5 +771,11 @@ var _ = Describe("MdaiHub Webhook", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(warnings).To(BeNil())
 		})
+
+		It("accepts same case variable names against knownVarKeys", func() {
+			known := map[string]struct{}{"highRiskStates": {}}
+			errs := validateVariableAction(field.NewPath("then").Index(0).Child("addToSet"), "highRiskStates", known, "set")
+			Expect(errs).To(BeEmpty())
+		})
 	})
 })
