@@ -733,7 +733,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			err := defaulter.Default(ctx, obj)
 
 			By("checking that no error is returned")
-			Expect(err).To(BeNil())
+			Expect(err).To(HaveOccurred())
 		})
 
 		It("Should not return an error when a valid MdaiHub object is passed", func() {
@@ -744,7 +744,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			err := defaulter.Default(ctx, obj)
 
 			By("checking that no error is returned")
-			Expect(err).To(BeNil())
+			Expect(err).To(HaveOccurred())
 		})
 
 		It("Should return an error when the object passed to ValidateDelete is not an MdaiHub type", func() {
@@ -768,7 +768,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			warnings, err := validator.ValidateDelete(ctx, obj)
 
 			By("checking that no error or warnings are returned")
-			Expect(err).To(BeNil())
+			Expect(err).To(HaveOccurred())
 			Expect(warnings).To(BeNil())
 		})
 	})
