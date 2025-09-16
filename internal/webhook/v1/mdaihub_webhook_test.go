@@ -650,5 +650,126 @@ var _ = Describe("MdaiHub Webhook", func() {
 			errs := validateAction(actionPath, action, knownVarKeys)
 			Expect(errs).To(BeEmpty())
 		})
+
+		It("Should return an error when the variable key is an empty string and not in the known keys map", func() {
+			variableKey := ""
+			childPath := "set"
+			expectedErrs := field.ErrorList{
+				field.Invalid(actionPath.Child(childPath), variableKey, "not defined in spec.variables"),
+			}
+
+			errs := validateVariableAction(actionPath, variableKey, knownVarKeys, childPath)
+
+			Expect(errs).To(ConsistOf(expectedErrs))
+		})
+
+		It("Should return nil when the variable key exists in a map containing multiple known keys", func() {
+			variableKey := "service_list_1"
+			childPath := "set"
+
+			errs := validateVariableAction(actionPath, variableKey, knownVarKeys, childPath)
+
+			Expect(errs).To(BeNil())
+		})
+
+		It("Should fail validation for an 'addToMap' action if the specified map variable is not defined", func() {
+			action := &mdaiv1.MapAction{
+				Map:   "unknown_map",
+				Key:   "some_key",
+				Value: ptr.To("some_value"),
+			}
+			path := actionPath.Child("addToMap")
+			errs := validateMapAction(path, action, knownVarKeys)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeInvalid))
+			Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].addToMap.map"))
+			Expect(errs[0].Detail).To(ContainSubstring("not defined in spec.variables"))
+		})
+
+		It("Should pass validation for a 'removeFromMap' action when a value is provided", func() {
+			action := mdaiv1.Action{
+				RemoveFromMap: &mdaiv1.MapAction{
+					Map:   "map_1",
+					Key:   "some-key",
+					Value: ptr.To("some-value"),
+				},
+			}
+			path := actionPath.Child("removeFromMap")
+			errs := validateAction(path, action, knownVarKeys)
+			Expect(errs).To(BeEmpty())
+		})
+
+		Context("validateMapAction", func() {
+			It("Should fail validation for an 'addToMap' action when the value is nil", func() {
+				action := &mdaiv1.MapAction{
+					Map: "map_1",
+				}
+				path := actionPath.Child("addToMap")
+				errs := validateMapAction(path, action, knownVarKeys)
+				Expect(errs).To(HaveLen(1))
+				Expect(errs[0].Type).To(Equal(field.ErrorTypeRequired))
+				Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].addToMap.value"))
+				Expect(errs[0].Detail).To(Equal("required for addToMap"))
+			})
+		})
+
+		It("Should return an error when the object passed to the defaulter is not an MdaiHub type", func() {
+			By("creating an object of a different type")
+			notAnMdaiHub := &corev1.Pod{}
+
+			By("calling the Default method with the wrong object type")
+			err := defaulter.Default(admission.NewContextWithRequest(ctx, admission.Request{}), notAnMdaiHub)
+
+			By("checking that an error is returned")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal("expected an MdaiHub object but got *v1.Pod"))
+		})
+
+		It("Should not return an error when a valid MdaiHub object is passed", func() {
+			By("creating a valid MdaiHub object")
+			obj = createSampleMdaiHub()
+
+			By("calling the Default method")
+			err := defaulter.Default(ctx, obj)
+
+			By("checking that no error is returned")
+			Expect(err).To(BeNil())
+		})
+
+		It("Should not return an error when a valid MdaiHub object is passed", func() {
+			By("creating a valid MdaiHub object")
+			obj = createSampleMdaiHub()
+
+			By("calling the Default method")
+			err := defaulter.Default(ctx, obj)
+
+			By("checking that no error is returned")
+			Expect(err).To(BeNil())
+		})
+
+		It("Should return an error when the object passed to ValidateDelete is not an MdaiHub type", func() {
+			By("creating a non-MdaiHub object")
+			invalidObj := &corev1.Pod{}
+
+			By("calling ValidateDelete with the invalid object")
+			warnings, err := validator.ValidateDelete(ctx, invalidObj)
+
+			By("checking that an error is returned and warnings are nil")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal("expected a MdaiHub object but got *v1.Pod"))
+			Expect(warnings).To(BeNil())
+		})
+
+		It("Should not return an error when a valid MdaiHub object is passed to ValidateDelete", func() {
+			By("creating a valid MdaiHub object for deletion")
+			obj = createSampleMdaiHub()
+
+			By("calling ValidateDelete")
+			warnings, err := validator.ValidateDelete(ctx, obj)
+
+			By("checking that no error or warnings are returned")
+			Expect(err).To(BeNil())
+			Expect(warnings).To(BeNil())
+		})
 	})
 })
