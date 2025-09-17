@@ -1,7 +1,7 @@
 apiVersion: hub.mydecisive.ai/v1
 kind: MdaiIngress
 metadata:
-  name: sample
+  name: gateway
   namespace: mdai
 spec:
   cloudType: aws
