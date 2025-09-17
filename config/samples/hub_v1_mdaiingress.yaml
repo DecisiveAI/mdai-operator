@@ -1,10 +1,8 @@
 apiVersion: hub.mydecisive.ai/v1
 kind: MdaiIngress
 metadata:
-  labels:
-    app.kubernetes.io/name: mdai-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: mdaiingress-sample
+  name: gateway
+  namespace: mdai
 spec:
   cloudType: aws
   annotations:
