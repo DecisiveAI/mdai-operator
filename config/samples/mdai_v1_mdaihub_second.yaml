@@ -132,3 +132,51 @@ spec:
               message: Service was >2x expected error rate for five minutes compared to the last hour!
               link_text: See alert in Prometheus
               link_url: http://localhost:9090/alerts
+        # Notify pagerduty
+        - callWebhook:
+            url:
+              value: https://events.pagerduty.com/v2/enqueue
+            method: POST
+            templateRef: jsonTemplate
+            payloadTemplate:
+              valueFrom:
+                configMapKeyRef: { name: webhook-templates-pagerduty, key: pagerduty.json }
+            templateValuesFrom:
+              routing_key:
+                secretKeyRef: { name: pagerduty, key: routing_key }
+            headers:
+              Content-Type: application/json
+            timeout: 10s
+        # GitHub release workflow dispatch
+        - callWebhook:
+            url: { value: https://api.github.com/repos/OWNER/REPO/actions/workflows/deploy.yml/dispatches }
+            method: POST
+            templateRef: jsonTemplate
+            payloadTemplate: # could be used from config map, using `value` for testing purpose
+              value: |
+                {
+                  "ref":      "${template:ref:-main}",
+                  "inputs": { "env": "${template:env:-prod}", "build_id": "${trigger:id}" }
+            templateValues:
+              env: uat # should override default
+            headersFrom:
+              Authorization:
+                secretKeyRef: { name: github-token, key: authorization }   # "Bearer ghp_xxx"
+            headers:
+              Accept: application/vnd.github+json
+              X-GitHub-Api-Version: "2022-11-28"
+              Content-Type: application/json
+        # ServiceNow incident creation
+        - callWebhook:
+            url: { value: https://acme.service-now.com/api/now/table/incident }
+            method: POST
+            templateRef: jsonTemplate
+            payloadTemplate:
+              valueFrom:
+                configMapKeyRef: { name: webhook-templates, key: servicenow-incident.json }
+            headersFrom:
+              Authorization:
+                secretKeyRef: { name: servicenow-oauth, key: authorization }  # "Bearer eyJ..."
+            headers:
+              Accept: application/json
+              Content-Type: application/json

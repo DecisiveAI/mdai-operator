@@ -3,6 +3,8 @@ package v1
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/textproto"
 	"net/url"
 	"reflect"
 	"strings"
@@ -27,6 +29,9 @@ import (
 var mdaihublog = logf.Log.WithName("mdaihub-resource")
 
 var allowedHTTP = sets.NewString("GET", "POST", "PUT", "PATCH", "DELETE")
+
+// hop-by-hop / managed headers we don't allow users to override for safety reason
+var forbiddenHeaders = sets.NewString("Host", "Content-Length", "Transfer-Encoding")
 
 // SetupMdaiHubWebhookWithManager registers the webhook for MdaiHub in the manager.
 func SetupMdaiHubWebhookWithManager(mgr ctrl.Manager) error {
@@ -248,7 +253,7 @@ func validateWhen(path *field.Path, when mdaiv1.When, knownVarKeys map[string]st
 		errs = append(errs, field.Invalid(path.Child("variableUpdated"), *when.VariableUpdated, "not defined in spec.variables"))
 	}
 	if hasAlertName && !hasKey(knownAlertNames, *when.AlertName) {
-		errs = append(errs, field.Invalid(path.Child("alertName"), *when.AlertName, "not defined in spec.alerts"))
+		errs = append(errs, field.Invalid(path.Child("alertName"), *when.AlertName, "not defined in spec.prometheusAlerts"))
 	}
 
 	return errs
@@ -364,18 +369,42 @@ func validateMapAction(p *field.Path, a *mdaiv1.MapAction, knownVarKeys map[stri
 func validateWebhookCall(callPath *field.Path, call *mdaiv1.CallWebhookAction) field.ErrorList {
 	var errs field.ErrorList
 
-	// we are validating only if URL is provided as string
+	// Validate URL only when provided as a literal
 	if call.URL.Value != nil {
 		endpoint := strings.TrimSpace(*call.URL.Value)
 		if endpoint == "" {
 			errs = append(errs, field.Required(callPath.Child("url"), "required"))
 		} else if !isValidURL(endpoint) {
-			errs = append(errs, field.Invalid(callPath.Child("url"), endpoint, "must be an absolute http(s) URL or a template"))
+			errs = append(errs, field.Invalid(callPath.Child("url"), endpoint, "must be an absolute http(s) URL"))
 		}
 	}
 
-	if m := strings.TrimSpace(call.Method); m != "" && !allowedHTTP.Has(m) {
+	if m := call.Method; m != "" && !allowedHTTP.Has(m) {
 		errs = append(errs, field.NotSupported(callPath.Child("method"), m, allowedHTTP.UnsortedList()))
+	}
+
+	// If payloadTemplate is present, it must not be used with slackAlertTemplate and must use POST
+	ref := call.TemplateRef
+	if call.PayloadTemplate != nil {
+		if ref == mdaiv1.TemplateRefSlack {
+			errs = append(errs, field.Forbidden(callPath.Child("payloadTemplate"), "must be empty when templateRef=slackAlertTemplate"))
+		}
+		if call.Method != "" && call.Method != http.MethodPost {
+			errs = append(errs, field.Invalid(callPath.Child("method"), call.Method, "payloadTemplate requires POST"))
+		}
+	}
+
+	// If templateRef=jsonTemplate, require a payloadTemplate
+	if ref == "jsonTemplate" && call.PayloadTemplate == nil {
+		errs = append(errs, field.Required(callPath.Child("payloadTemplate"), "required when templateRef=jsonTemplate"))
+	}
+
+	// forbid managed headers in headers (case-insensitive, canonicalize)
+	for hk := range call.Headers {
+		key := textproto.CanonicalMIMEHeaderKey(hk)
+		if forbiddenHeaders.Has(key) {
+			errs = append(errs, field.Forbidden(callPath.Child("headers").Key(hk), fmt.Sprintf("header %q is managed by the client and cannot be set", key)))
+		}
 	}
 
 	return errs

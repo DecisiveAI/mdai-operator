@@ -118,6 +118,11 @@ func (in *AutomationRule) DeepCopy() *AutomationRule {
 func (in *CallWebhookAction) DeepCopyInto(out *CallWebhookAction) {
 	*out = *in
 	in.URL.DeepCopyInto(&out.URL)
+	if in.PayloadTemplate != nil {
+		in, out := &in.PayloadTemplate, &out.PayloadTemplate
+		*out = new(StringOrFrom)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.TemplateValues != nil {
 		in, out := &in.TemplateValues, &out.TemplateValues
 		*out = make(map[string]string, len(*in))
@@ -125,11 +130,25 @@ func (in *CallWebhookAction) DeepCopyInto(out *CallWebhookAction) {
 			(*out)[key] = val
 		}
 	}
+	if in.TemplateValuesFrom != nil {
+		in, out := &in.TemplateValuesFrom, &out.TemplateValuesFrom
+		*out = make(map[string]ValueFromSource, len(*in))
+		for key, val := range *in {
+			(*out)[key] = *val.DeepCopy()
+		}
+	}
 	if in.Headers != nil {
 		in, out := &in.Headers, &out.Headers
 		*out = make(map[string]string, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val
+		}
+	}
+	if in.HeadersFrom != nil {
+		in, out := &in.HeadersFrom, &out.HeadersFrom
+		*out = make(map[string]ValueFromSource, len(*in))
+		for key, val := range *in {
+			(*out)[key] = *val.DeepCopy()
 		}
 	}
 	if in.Timeout != nil {
