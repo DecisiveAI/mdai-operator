@@ -16,6 +16,11 @@ const (
 	CloudProviderAws CloudProvider = "aws"
 )
 
+type NamespacedName struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+}
+
 // IngressService defines Service properties related to Ingress configuration.
 type IngressService struct {
 	// Type defines the type of the Service.
@@ -28,6 +33,9 @@ type IngressService struct {
 
 // MdaiIngressSpec defines the desired state of MdaiIngress
 type MdaiIngressSpec struct {
+	// Namespaced named of the Otel Collector, current Custom Resource belongs to.
+	OtelCollector NamespacedName `json:"otelCollector"`
+
 	// Supported types are: aws
 	CloudType CloudProvider `json:"cloudType"`
 

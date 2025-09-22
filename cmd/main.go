@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -235,6 +236,18 @@ func main() {
 		},
 	}
 
+	// this indexer is needed for MdaiIngress CRs
+	indexerOtelCol := func(obj client.Object) []string {
+		a := obj.(*mdaiv1.MdaiIngress)
+		otelCol := a.Spec.OtelCollector
+		if otelCol.Name != "" && otelCol.Namespace != "" {
+			log := ctrl.Log.WithName("otelCol-indexer")
+			log.Info("Indexing MdaiIngress", "namespace", otelCol.Namespace, "name", otelCol.Name)
+			return []string{fmt.Sprintf("%s/%s", otelCol.Namespace, otelCol.Name)}
+		}
+		return nil
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
@@ -285,10 +298,21 @@ func main() {
 		gracefullyShutdownWithCode(1)
 	}
 
+	// Register the composite index for MdaiIngress CRs
+	if err = mgr.GetFieldIndexer().IndexField(
+		context.TODO(),
+		&mdaiv1.MdaiIngress{},
+		// non-existent field name, will be used as a lookup key when Watch()-ing
+		"spec.otelCol.compositeKey",
+		indexerOtelCol,
+	); err != nil {
+		setupLog.Error(err, "unable to create indexer", "controller", "MdaiHub")
+		gracefullyShutdownWithCode(1)
+	}
+
 	if err := (&controller.MdaiIngressReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Cache:  mgr.GetCache(),
 		Logger: zapLogger,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MdaiIngress")

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	"github.com/decisiveai/mdai-operator/internal/manifests"
@@ -15,7 +16,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -33,7 +33,6 @@ type MdaiIngressReconciler struct {
 	client.Client
 
 	Scheme *runtime.Scheme
-	Cache  cache.Cache
 	Logger *zap.Logger
 }
 
@@ -47,7 +46,7 @@ func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	log.Info("-- Starting MDAI Ingress reconciliation --", "name", req.Name)
 
 	var instanceMdaiIngress hubv1.MdaiIngress
-	if err := r.Cache.Get(ctx, req.NamespacedName, &instanceMdaiIngress); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, &instanceMdaiIngress); err != nil {
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "unable to fetch MdaiIngress")
 		}
@@ -59,7 +58,7 @@ func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	var instanceOtel v1beta1.OpenTelemetryCollector
-	if err := r.Cache.Get(ctx, req.NamespacedName, &instanceOtel); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, &instanceOtel); err != nil {
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "unable to fetch OpenTelemetryCollector")
 		}
@@ -164,6 +163,7 @@ func (r *MdaiIngressReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			builder.WithPredicates(predicate.Funcs{
 				UpdateFunc: func(e event.UpdateEvent) bool {
 					oldCR, okOld := e.ObjectOld.(*v1beta1.OpenTelemetryCollector)
+					oldCR.GetObjectKind().GroupVersionKind()
 					if !okOld {
 						return false
 					}
@@ -238,15 +238,24 @@ func (r *MdaiIngressReconciler) GetParams(otelMdaiComb hubv1.OtelMdaiIngressComb
 func (r *MdaiIngressReconciler) pairOtelcolMdaiIngressExist(ctx context.Context, name string, namespace string) bool {
 	log := logger.FromContext(ctx)
 
-	namespacedName := types.NamespacedName{Name: name, Namespace: namespace}
-
-	otelcol := v1beta1.OpenTelemetryCollector{}
-	if err := r.Cache.Get(ctx, namespacedName, &otelcol); err != nil {
-		log.Info("Failed to get OpentelemetryCollector", "name", name, "namespace", namespace, "error", err)
+	mdaiIngresses := hubv1.MdaiIngressList{}
+	compositeKey := fmt.Sprintf("%s/%s", namespace, name)
+	if err := r.List(ctx, &mdaiIngresses,
+		client.InNamespace(namespace),
+		client.MatchingFields{"spec.otelCol.compositeKey": compositeKey},
+	); err != nil {
+		log.Info("Failed to list OpentelemetryCollectors", "name", name, "namespace", namespace, "error", err)
 		return false
 	}
-	mdaiIngress := hubv1.MdaiIngress{}
-	if err := r.Cache.Get(ctx, namespacedName, &mdaiIngress); err != nil {
+
+	if len(mdaiIngresses.Items) == 0 {
+		log.Info("No MdaiIngress found", "name", name, "namespace", namespace)
+		return false
+	}
+
+	namespacedName := types.NamespacedName{Name: name, Namespace: namespace}
+	otelCollector := v1beta1.OpenTelemetryCollector{}
+	if err := r.Get(ctx, namespacedName, &otelCollector); err != nil {
 		log.Info("Failed to get MdaiIngress", "name", name, "namespace", namespace, "error", err)
 		return false
 	}

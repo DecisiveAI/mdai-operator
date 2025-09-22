@@ -4,6 +4,9 @@ metadata:
   name: gateway
   namespace: mdai
 spec:
+  otelCollector:
+    name: gateway
+    namespace: mdai
   cloudType: aws
   annotations:
     alb.ingress.kubernetes.io/certificate-arn: 'arn:aws:acm:${AWS_REGION}:${AWS_ACCOUNT}:certificate/${AWS_CERT_ARN}'
