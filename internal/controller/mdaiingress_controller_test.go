@@ -55,6 +55,10 @@ var _ = Describe("MdaiIngress Controller", func() {
 						GrpcService:    &hubv1.IngressService{Type: "NodePort"},
 						NonGrpcService: &hubv1.IngressService{Type: "NodePort"},
 						CloudType:      hubv1.CloudProviderAws,
+						OtelCollector: hubv1.NamespacedName{
+							Namespace: "default",
+							Name:      "otel-collector",
+						},
 					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -98,7 +102,6 @@ var _ = Describe("MdaiIngress Controller", func() {
 			controllerReconciler := &MdaiIngressReconciler{
 				Client: mgr.GetClient(),
 				Scheme: mgr.GetScheme(),
-				Cache:  mgr.GetCache(),
 			}
 
 			go func() {

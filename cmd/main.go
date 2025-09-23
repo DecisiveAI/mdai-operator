@@ -49,6 +49,18 @@ const (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+
+	indexerOtelCol = func(obj client.Object) []string {
+		a, ok := obj.(*mdaiv1.MdaiIngress)
+		if !ok {
+			return nil
+		}
+		otelCol := a.Spec.OtelCollector
+		if otelCol.Name != "" && otelCol.Namespace != "" {
+			return []string{fmt.Sprintf("%s/%s", otelCol.Namespace, otelCol.Name)}
+		}
+		return nil
+	}
 )
 
 func init() { //nolint:gochecknoinits
@@ -236,18 +248,6 @@ func main() {
 		},
 	}
 
-	// this indexer is needed for MdaiIngress CRs
-	indexerOtelCol := func(obj client.Object) []string {
-		a := obj.(*mdaiv1.MdaiIngress)
-		otelCol := a.Spec.OtelCollector
-		if otelCol.Name != "" && otelCol.Namespace != "" {
-			log := ctrl.Log.WithName("otelCol-indexer")
-			log.Info("Indexing MdaiIngress", "namespace", otelCol.Namespace, "name", otelCol.Name)
-			return []string{fmt.Sprintf("%s/%s", otelCol.Namespace, otelCol.Name)}
-		}
-		return nil
-	}
-
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
@@ -302,8 +302,7 @@ func main() {
 	if err = mgr.GetFieldIndexer().IndexField(
 		context.TODO(),
 		&mdaiv1.MdaiIngress{},
-		// non-existent field name, will be used as a lookup key when Watch()-ing
-		"spec.otelCol.compositeKey",
+		controller.MdaiIngressOtelColLookupKey,
 		indexerOtelCol,
 	); err != nil {
 		setupLog.Error(err, "unable to create indexer", "controller", "MdaiHub")

@@ -62,6 +62,9 @@ spec:
   collectorEndpoints:
     otlp: otlp.mdai.io
     jaeger: jaeger.mdai.io
+  otelCollector:
+    name: test
+    namespace: test
 `
 
 	goodConfig := v1beta1.Config{}

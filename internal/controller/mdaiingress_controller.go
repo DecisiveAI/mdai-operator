@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -26,7 +27,10 @@ import (
 	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
 
-const resourceOwnerKey = "metadata.ownerReferences.name"
+const (
+	resourceOwnerKey            = "metadata.ownerReferences.name"
+	MdaiIngressOtelColLookupKey = "spec.otelCol.compositeKey"
+)
 
 // MdaiIngressReconciler reconciles a MdaiIngress object
 type MdaiIngressReconciler struct {
@@ -35,6 +39,8 @@ type MdaiIngressReconciler struct {
 	Scheme *runtime.Scheme
 	Logger *zap.Logger
 }
+
+var ErrIncorrectOtelcolRef = errors.New("incorrect Otelcol reference")
 
 //+kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaiingresses,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaiingresses/status,verbs=get;update;patch
@@ -57,8 +63,16 @@ func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	otelcolName := instanceMdaiIngress.Spec.OtelCollector.Name
+	otelcolNamespace := instanceMdaiIngress.Spec.OtelCollector.Namespace
+	if otelcolName == "" || otelcolNamespace == "" {
+		log.Error(ErrIncorrectOtelcolRef, "No OtelCollector reference in MdaiIngress", "name", req.Name, "namespace", req.Namespace)
+		return ctrl.Result{}, ErrIncorrectOtelcolRef
+	}
+	otelcolNsName := types.NamespacedName{Name: otelcolName, Namespace: otelcolNamespace}
+
 	var instanceOtel v1beta1.OpenTelemetryCollector
-	if err := r.Get(ctx, req.NamespacedName, &instanceOtel); err != nil {
+	if err := r.Get(ctx, otelcolNsName, &instanceOtel); err != nil {
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "unable to fetch OpenTelemetryCollector")
 		}
@@ -133,6 +147,7 @@ func (r *MdaiIngressReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	); err != nil {
 		return err
 	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&hubv1.MdaiIngress{}, builder.WithPredicates(predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
@@ -140,14 +155,14 @@ func (r *MdaiIngressReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				if !ok {
 					return false
 				}
-				return r.pairOtelcolMdaiIngressExist(ctx, cr.Name, cr.Namespace)
+				return r.coupledWithOtelcol(ctx, cr.Name, cr.Namespace)
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				newCr, ok := e.ObjectNew.(*hubv1.MdaiIngress)
 				if !ok {
 					return false
 				}
-				return r.pairOtelcolMdaiIngressExist(ctx, newCr.Name, newCr.Namespace)
+				return r.coupledWithOtelcol(ctx, newCr.Name, newCr.Namespace)
 			},
 			DeleteFunc: func(e event.DeleteEvent) bool { // TODO: implement deletion logic
 				return false
@@ -157,7 +172,6 @@ func (r *MdaiIngressReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			},
 		})).
 		Watches(
-			// TODO: try to narrow down the watches if possible
 			&v1beta1.OpenTelemetryCollector{},
 			handler.EnqueueRequestsFromMapFunc(requeueByCollectorRef),
 			builder.WithPredicates(predicate.Funcs{
@@ -171,14 +185,14 @@ func (r *MdaiIngressReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					if !okNew {
 						return false
 					}
-					return !reflect.DeepEqual(oldCR.Spec.Config, newCR.Spec.Config) && r.pairOtelcolMdaiIngressExist(ctx, newCR.Name, newCR.Namespace)
+					return !reflect.DeepEqual(oldCR.Spec.Config, newCR.Spec.Config) && r.coupledWithMdaiIngress(ctx, newCR.Name, newCR.Namespace)
 				},
 				CreateFunc: func(e event.CreateEvent) bool {
 					cr, ok := e.Object.(*v1beta1.OpenTelemetryCollector)
 					if !ok {
 						return false
 					}
-					return r.pairOtelcolMdaiIngressExist(ctx, cr.Name, cr.Namespace)
+					return r.coupledWithMdaiIngress(ctx, cr.Name, cr.Namespace)
 				},
 				DeleteFunc: func(e event.DeleteEvent) bool { // TODO: implement deletion logic
 					return false
@@ -233,36 +247,6 @@ func (r *MdaiIngressReconciler) GetParams(otelMdaiComb hubv1.OtelMdaiIngressComb
 	return p
 }
 
-// pairOtelcolMdaiIngressExist checks if there is a MdaiIngress with the same name and namespace as the provided OpentelemetryCollector
-// TODO: change mdaiingress -> otelcol mapping logic? Labels?
-func (r *MdaiIngressReconciler) pairOtelcolMdaiIngressExist(ctx context.Context, name string, namespace string) bool {
-	log := logger.FromContext(ctx)
-
-	mdaiIngresses := hubv1.MdaiIngressList{}
-	compositeKey := fmt.Sprintf("%s/%s", namespace, name)
-	if err := r.List(ctx, &mdaiIngresses,
-		client.InNamespace(namespace),
-		client.MatchingFields{"spec.otelCol.compositeKey": compositeKey},
-	); err != nil {
-		log.Info("Failed to list OpentelemetryCollectors", "name", name, "namespace", namespace, "error", err)
-		return false
-	}
-
-	if len(mdaiIngresses.Items) == 0 {
-		log.Info("No MdaiIngress found", "name", name, "namespace", namespace)
-		return false
-	}
-
-	namespacedName := types.NamespacedName{Name: name, Namespace: namespace}
-	otelCollector := v1beta1.OpenTelemetryCollector{}
-	if err := r.Get(ctx, namespacedName, &otelCollector); err != nil {
-		log.Info("Failed to get MdaiIngress", "name", name, "namespace", namespace, "error", err)
-		return false
-	}
-
-	return true
-}
-
 func (r *MdaiIngressReconciler) findMdaiIngressOwnedObjects(ctx context.Context, params manifests.Params) (map[types.UID]client.Object, error) {
 	ownedObjects := map[types.UID]client.Object{}
 	ownedObjectTypes := GetOwnedResourceTypes()
@@ -281,6 +265,65 @@ func (r *MdaiIngressReconciler) findMdaiIngressOwnedObjects(ctx context.Context,
 	}
 
 	return ownedObjects, nil
+}
+
+// coupledWithOtelcol returns true if the Otelcol instance with the referenced name and namespace is found
+func (r *MdaiIngressReconciler) coupledWithOtelcol(ctx context.Context, name string, namespace string) bool {
+	log := logger.FromContext(ctx)
+
+	mdaiIngress := hubv1.MdaiIngress{}
+	mdaiIngressNsName := types.NamespacedName{Name: name, Namespace: namespace}
+	if err := r.Get(ctx, mdaiIngressNsName, &mdaiIngress); err != nil {
+		log.Error(err, "Failed to get MdaiIngress", "name", name, "namespace", namespace)
+		return false
+	}
+	otelcolName := mdaiIngress.Spec.OtelCollector.Name
+	otelcolNamespace := mdaiIngress.Spec.OtelCollector.Namespace
+	if otelcolName == "" || otelcolNamespace == "" {
+		log.Error(errors.New("incorrect Otelcol reference"), "No OtelCollector reference in MdaiIngress", "name", name, "namespace", namespace)
+		return false
+	}
+
+	otelcolNsName := types.NamespacedName{Name: otelcolName, Namespace: otelcolNamespace}
+	otelCollector := v1beta1.OpenTelemetryCollector{}
+	if err := r.Get(ctx, otelcolNsName, &otelCollector); err != nil {
+		log.Error(err, "Failed to get OpentelemetryCollector", "name", otelcolName, "namespace", otelcolNamespace)
+		return false
+	}
+
+	return r.onlyOneMdaiIngressPerOtelcol(ctx, otelcolName, otelcolNamespace)
+}
+
+// coupledWithMdaiIngress returns true if MdaiIngress instance pointing to the
+func (r *MdaiIngressReconciler) coupledWithMdaiIngress(ctx context.Context, name string, namespace string) bool {
+	return r.onlyOneMdaiIngressPerOtelcol(ctx, name, namespace)
+}
+
+// onlyOneMdaiIngressPerOtelcol returns true if only one MdaiIngress instance per Otelcol exists.
+func (r *MdaiIngressReconciler) onlyOneMdaiIngressPerOtelcol(ctx context.Context, name string, namespace string) bool {
+	log := logger.FromContext(ctx)
+
+	mdaiIngresses := hubv1.MdaiIngressList{}
+	compositeKey := fmt.Sprintf("%s/%s", namespace, name)
+	if err := r.List(ctx, &mdaiIngresses,
+		client.InNamespace(namespace),
+		client.MatchingFields{MdaiIngressOtelColLookupKey: compositeKey},
+	); err != nil {
+		log.Error(err, "Failed to list MdaiIngresses", "namespace", namespace)
+		return false
+	}
+
+	if len(mdaiIngresses.Items) > 1 {
+		log.Error(errors.New("multiple MdaiIngress instances"), "Multiple MdaiIngress instances referrencing the same Otelcol", "namespace", namespace, "name", name)
+		return false
+	}
+
+	if len(mdaiIngresses.Items) == 0 {
+		log.Info("No MdaiIngress found", "namespace", namespace)
+		return false
+	}
+
+	return true
 }
 
 // GetOwnedResourceTypes returns all the resource types the controller can own. Even though this method returns an array
