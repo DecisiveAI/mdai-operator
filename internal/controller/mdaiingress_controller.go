@@ -149,58 +149,11 @@ func (r *MdaiIngressReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&hubv1.MdaiIngress{}, builder.WithPredicates(predicate.Funcs{
-			CreateFunc: func(e event.CreateEvent) bool {
-				cr, ok := e.Object.(*hubv1.MdaiIngress)
-				if !ok {
-					return false
-				}
-				return r.coupledWithOtelcol(ctx, cr.Name, cr.Namespace)
-			},
-			UpdateFunc: func(e event.UpdateEvent) bool {
-				newCr, ok := e.ObjectNew.(*hubv1.MdaiIngress)
-				if !ok {
-					return false
-				}
-				return r.coupledWithOtelcol(ctx, newCr.Name, newCr.Namespace)
-			},
-			DeleteFunc: func(e event.DeleteEvent) bool { // TODO: implement deletion logic
-				return false
-			},
-			GenericFunc: func(e event.GenericEvent) bool {
-				return false
-			},
-		})).
+		For(&hubv1.MdaiIngress{}, builder.WithPredicates(r.mdaiIngressPredicates(ctx))).
 		Watches(
 			&v1beta1.OpenTelemetryCollector{},
 			handler.EnqueueRequestsFromMapFunc(requeueByCollectorRef),
-			builder.WithPredicates(predicate.Funcs{
-				UpdateFunc: func(e event.UpdateEvent) bool {
-					oldCR, okOld := e.ObjectOld.(*v1beta1.OpenTelemetryCollector)
-					oldCR.GetObjectKind().GroupVersionKind()
-					if !okOld {
-						return false
-					}
-					newCR, okNew := e.ObjectNew.(*v1beta1.OpenTelemetryCollector)
-					if !okNew {
-						return false
-					}
-					return !reflect.DeepEqual(oldCR.Spec.Config, newCR.Spec.Config) && r.coupledWithMdaiIngress(ctx, newCR.Name, newCR.Namespace)
-				},
-				CreateFunc: func(e event.CreateEvent) bool {
-					cr, ok := e.Object.(*v1beta1.OpenTelemetryCollector)
-					if !ok {
-						return false
-					}
-					return r.coupledWithMdaiIngress(ctx, cr.Name, cr.Namespace)
-				},
-				DeleteFunc: func(e event.DeleteEvent) bool { // TODO: implement deletion logic
-					return false
-				},
-				GenericFunc: func(e event.GenericEvent) bool {
-					return false
-				},
-			}),
+			builder.WithPredicates(r.otelcolPredicates(ctx)),
 		).
 		Complete(r)
 }
@@ -314,7 +267,7 @@ func (r *MdaiIngressReconciler) onlyOneMdaiIngressPerOtelcol(ctx context.Context
 	}
 
 	if len(mdaiIngresses.Items) > 1 {
-		log.Error(errors.New("multiple MdaiIngress instances"), "Multiple MdaiIngress instances referrencing the same Otelcol", "namespace", namespace, "name", name)
+		log.Error(errors.New("multiple MdaiIngress instances"), "Multiple MdaiIngress instances referencing the same Otelcol", "namespace", namespace, "name", name)
 		return false
 	}
 
@@ -335,4 +288,55 @@ func GetOwnedResourceTypes() []client.Object {
 	}
 
 	return ownedResources
+}
+
+func (r *MdaiIngressReconciler) mdaiIngressPredicates(ctx context.Context) predicate.Funcs {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			cr, ok := e.Object.(*hubv1.MdaiIngress)
+			if !ok {
+				return false
+			}
+			return r.coupledWithOtelcol(ctx, cr.Name, cr.Namespace)
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			newCr, ok := e.ObjectNew.(*hubv1.MdaiIngress)
+			if !ok {
+				return false
+			}
+			return r.coupledWithOtelcol(ctx, newCr.Name, newCr.Namespace)
+		},
+		DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+		GenericFunc: func(e event.GenericEvent) bool { return false },
+	}
+}
+
+func (r *MdaiIngressReconciler) otelcolPredicates(ctx context.Context) predicate.Funcs {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldCR, okOld := e.ObjectOld.(*v1beta1.OpenTelemetryCollector)
+			oldCR.GetObjectKind().GroupVersionKind()
+			if !okOld {
+				return false
+			}
+			newCR, okNew := e.ObjectNew.(*v1beta1.OpenTelemetryCollector)
+			if !okNew {
+				return false
+			}
+			return !reflect.DeepEqual(oldCR.Spec.Config, newCR.Spec.Config) && r.coupledWithMdaiIngress(ctx, newCR.Name, newCR.Namespace)
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			cr, ok := e.Object.(*v1beta1.OpenTelemetryCollector)
+			if !ok {
+				return false
+			}
+			return r.coupledWithMdaiIngress(ctx, cr.Name, cr.Namespace)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool { // TODO: implement deletion logic
+			return false
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			return false
+		},
+	}
 }
