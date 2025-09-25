@@ -165,14 +165,31 @@ type CallWebhookAction struct {
 	// +kubebuilder:validation:Enum=POST;PUT;PATCH
 	Method string `json:"method,omitempty"`
 
-	// +kubebuilder:validation:Enum=slackAlertTemplate
-	// TemplateRef uses built-in templates. Custom templates will be supported in the future.
-	TemplateRef string `json:"templateRef,omitempty"`
+	// TemplateRef uses built-in templates or custom ones.
+	// `slackAlertTemplate` uses Slack's built-in alert template.
+	// `jsonTemplate` is default and uses a custom JSON payload template referenced from a ConfigMap/Secret.
+	// +kubebuilder:validation:Enum=slackAlertTemplate;jsonTemplate
+	// +kubebuilder:default=jsonTemplate
+	TemplateRef string `json:"templateRef"`
 
+	// PayloadTemplate A reusable JSON payload template stored inline or referenced from a ConfigMap/Secret.
+	// Used when TemplateRef is "jsonTemplate".
+	// +optional
+	PayloadTemplate *StringOrFrom `json:"payloadTemplate,omitempty"`
+
+	// TemplateValues literal key/value pairs available to the template as ${template:KEY}.
+	// +optional
 	TemplateValues map[string]string `json:"templateValues,omitempty"`
+	// TemplateValuesFrom sourced from Secrets/ConfigMaps (overridden by TemplateValues).
+	// +optional
+	TemplateValuesFrom map[string]ValueFromSource `json:"templateValuesFrom,omitempty"`
 
+	// Headers additional HTTP headers to be included in the request.
 	// +optional
 	Headers map[string]string `json:"headers,omitempty"`
+	// HeadersFrom additional HTTP headers to be included in the request from a Secret or ConfigMap.
+	// +optional
+	HeadersFrom map[string]ValueFromSource `json:"headersFrom,omitempty"`
 
 	// Timeout specifies the maximum time to wait for the response from the webhook before retry.
 	// Default is 0s, means no timeout should be applied.
@@ -309,4 +326,7 @@ const (
 	MetaVariableDataTypePriorityList VariableDataType = "metaPriorityList"
 
 	TransformerTypeJoin TransformerType = "join"
+
+	TemplateRefSlack = "slackAlertTemplate"
+	TemplateRefJSON  = "jsonTemplate"
 )
