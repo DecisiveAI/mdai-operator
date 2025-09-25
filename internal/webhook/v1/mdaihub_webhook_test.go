@@ -777,5 +777,183 @@ var _ = Describe("MdaiHub Webhook", func() {
 			errs := validateVariableAction(field.NewPath("then").Index(0).Child("addToSet"), "highRiskStates", known, "set")
 			Expect(errs).To(BeEmpty())
 		})
+
+		It("disallows unsupported HTTP methods for callWebhook", func() {
+			action := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL: mdaiv1.StringOrFrom{
+						ValueFrom: &mdaiv1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-config"},
+								Key:                  "url",
+							},
+						},
+					},
+					Method: "not_allowed_methods",
+				},
+			}
+			path := actionPath.Child("callWebhook")
+
+			errs := validateWebhookCall(path, action.CallWebhook)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeNotSupported))
+			Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].callWebhook.method"))
+			Expect(errs[0].BadValue).To(Equal("not_allowed_methods"))
+		})
+
+		It("requires POST when payloadTemplate is provided and method is explicitly set", func() {
+			action := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL: mdaiv1.StringOrFrom{
+						ValueFrom: &mdaiv1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-config"},
+								Key:                  "url",
+							},
+						},
+					},
+					Method: "PUT", // anything non-POST should fail when payloadTemplate is present
+					PayloadTemplate: &mdaiv1.StringOrFrom{
+						Value: ptr.To("{{ .metadata.name }}"),
+					},
+				},
+			}
+			path := actionPath.Child("callWebhook")
+
+			errs := validateWebhookCall(path, action.CallWebhook)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeInvalid))
+			Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].callWebhook.method"))
+			Expect(errs[0].BadValue).To(Equal("PUT"))
+			Expect(errs[0].Detail).To(Equal("payloadTemplate requires POST"))
+		})
+
+		It("allows payloadTemplate with POST or with default (empty) method", func() {
+			// Explicit POST
+			actionPost := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL: mdaiv1.StringOrFrom{
+						ValueFrom: &mdaiv1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-config"},
+								Key:                  "url",
+							},
+						},
+					},
+					Method: "POST",
+					PayloadTemplate: &mdaiv1.StringOrFrom{
+						Value: ptr.To(`{"ok":true}`),
+					},
+				},
+			}
+			path := actionPath.Child("callWebhook")
+			Expect(validateWebhookCall(path, actionPost.CallWebhook)).To(BeEmpty())
+
+			// Empty method (validator only enforces POST when method is non-empty)
+			actionEmpty := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL: mdaiv1.StringOrFrom{
+						ValueFrom: &mdaiv1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-config"},
+								Key:                  "url",
+							},
+						},
+					},
+					// Method empty on purpose
+					PayloadTemplate: &mdaiv1.StringOrFrom{
+						Value: ptr.To(`{"ok":true}`),
+					},
+				},
+			}
+			Expect(validateWebhookCall(path, actionEmpty.CallWebhook)).To(BeEmpty())
+		})
+
+		It("forbids payloadTemplate when templateRef=slackAlertTemplate", func() {
+			action := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL: mdaiv1.StringOrFrom{
+						ValueFrom: &mdaiv1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-config"},
+								Key:                  "url",
+							},
+						},
+					},
+					Method:      "POST",
+					TemplateRef: mdaiv1.TemplateRefSlack,
+					PayloadTemplate: &mdaiv1.StringOrFrom{
+						Value: ptr.To("{{ .metadata.name }}"),
+					},
+				},
+			}
+			path := actionPath.Child("callWebhook")
+
+			errs := validateWebhookCall(path, action.CallWebhook)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeForbidden))
+			Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].callWebhook.payloadTemplate"))
+			Expect(errs[0].Detail).To(Equal("must be empty when templateRef=slackAlertTemplate"))
+		})
+
+		It("requires payloadTemplate when templateRef=jsonTemplate", func() {
+			action := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL: mdaiv1.StringOrFrom{
+						ValueFrom: &mdaiv1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-config"},
+								Key:                  "url",
+							},
+						},
+					},
+					Method:      "POST",
+					TemplateRef: "jsonTemplate",
+					// PayloadTemplate nil on purpose
+				},
+			}
+			path := actionPath.Child("callWebhook")
+
+			errs := validateWebhookCall(path, action.CallWebhook)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeRequired))
+			Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].callWebhook.payloadTemplate"))
+			Expect(errs[0].Detail).To(Equal("required when templateRef=jsonTemplate"))
+		})
+
+		It("forbids managed headers regardless of input case (canonicalizes detail)", func() {
+			action := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL: mdaiv1.StringOrFrom{
+						ValueFrom: &mdaiv1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-config"},
+								Key:                  "url",
+							},
+						},
+					},
+					Method: "POST",
+					Headers: map[string]string{
+						"content-length": "123", // lower-case on purpose
+					},
+				},
+			}
+			path := actionPath.Child("callWebhook")
+
+			errs := validateWebhookCall(path, action.CallWebhook)
+			Expect(errs).NotTo(BeEmpty())
+
+			// Find the forbidden header error for the exact map key we set
+			expectedField := path.Child("headers").Key("content-length").String()
+			found := false
+			for _, e := range errs {
+				if e.Type == field.ErrorTypeForbidden && e.Field == expectedField {
+					Expect(e.Detail).To(ContainSubstring(`header "Content-Length" is managed by the client and cannot be set`))
+					found = true
+					break
+				}
+			}
+			Expect(found).To(BeTrue(), "expected forbidden error for Content-Length header")
+		})
 	})
 })
