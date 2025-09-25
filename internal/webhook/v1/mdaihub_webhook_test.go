@@ -364,7 +364,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("spec.rules[0].when.alertName"))
-			Expect(err.Error()).To(ContainSubstring("not defined in spec.alerts"))
+			Expect(err.Error()).To(ContainSubstring("not defined in spec.prometheusAlerts"))
 			Expect(warnings).To(Equal(admission.Warnings{}))
 		})
 
@@ -464,7 +464,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring(`spec.rules[0].then[0].callWebhook.url`))
-			Expect(err.Error()).To(ContainSubstring(`must be an absolute http(s) URL or a template`))
+			Expect(err.Error()).To(ContainSubstring(`must be an absolute http(s) URL`))
 			Expect(warnings).To(Equal(admission.Warnings{}))
 		})
 

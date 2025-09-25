@@ -10,7 +10,7 @@ data:
       "event_action": "trigger",
       "payload": {
         "summary": "${trigger:payload.labels.alertname} on ${trigger:payload.labels.mdai_service}",
-        "source":  "${trigger:payload.labels.instance}",
+        "source":  "${trigger:payload.labels.cluster}",
         "severity":"${template:severity:-error}",
         "custom_details": {
           "hub":  "${trigger:hub_name}",
@@ -24,7 +24,7 @@ data:
     {
       "ref":   "${template:ref:-main}",
       "inputs": {
-        "env":      "${template:env:-prod}",
+        "env":      "${template:env:-dev}",
         "build_id": "${trigger:id}"
       }
     }
