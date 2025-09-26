@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/mdai-operator/internal/controller"
@@ -49,18 +50,6 @@ const (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
-
-	indexerOtelCol = func(obj client.Object) []string {
-		a, ok := obj.(*mdaiv1.MdaiIngress)
-		if !ok {
-			return nil
-		}
-		otelCol := a.Spec.OtelCollector
-		if otelCol.Name != "" && otelCol.Namespace != "" {
-			return []string{fmt.Sprintf("%s/%s", otelCol.Namespace, otelCol.Name)}
-		}
-		return nil
-	}
 )
 
 func init() { //nolint:gochecknoinits
@@ -71,6 +60,7 @@ func init() { //nolint:gochecknoinits
 	// +kubebuilder:scaffold:scheme
 }
 
+// nolint:gocyclo
 func main() {
 	var (
 		metricsAddr                                      string
@@ -298,17 +288,10 @@ func main() {
 		gracefullyShutdownWithCode(1)
 	}
 
-	// Register the composite index for MdaiIngress CRs
-	if err = mgr.GetFieldIndexer().IndexField(
-		context.TODO(),
-		&mdaiv1.MdaiIngress{},
-		controller.MdaiIngressOtelColLookupKey,
-		indexerOtelCol,
-	); err != nil {
-		setupLog.Error(err, "unable to create indexer", "controller", "MdaiHub")
+	if err := setMdaiIngressndexers(mgr); err != nil {
+		setupLog.Error(err, "unable to create indexers", "controller", "MdaiIngress")
 		gracefullyShutdownWithCode(1)
 	}
-
 	if err := (&controller.MdaiIngressReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -331,6 +314,10 @@ func main() {
 		}
 		if err = webhookmdaiv1.SetupMdaiObserverWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiObserver")
+			gracefullyShutdownWithCode(1)
+		}
+		if err := webhookmdaiv1.SetupMdaiIngressWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiIngress")
 			gracefullyShutdownWithCode(1)
 		}
 	}
@@ -398,4 +385,26 @@ func bindFlags(
 
 func otelSdkEnabled() bool {
 	return os.Getenv(otelSdkDisabledEnvVar) != "true"
+}
+
+func setMdaiIngressndexers(mgr manager.Manager) error {
+	// composite index for MdaiIngress
+	indexerOtelCol := func(obj client.Object) []string {
+		a, ok := obj.(*mdaiv1.MdaiIngress)
+		if !ok {
+			return nil
+		}
+		otelCol := a.Spec.OtelCollector
+		if otelCol.Name != "" && otelCol.Namespace != "" {
+			return []string{fmt.Sprintf("%s/%s", otelCol.Namespace, otelCol.Name)}
+		}
+		return nil
+	}
+
+	return mgr.GetFieldIndexer().IndexField(
+		context.TODO(),
+		&mdaiv1.MdaiIngress{},
+		controller.MdaiIngressOtelColLookupKey,
+		indexerOtelCol,
+	)
 }

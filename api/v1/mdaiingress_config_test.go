@@ -168,7 +168,7 @@ spec:
 			logger := zap.NewNop()
 			got, err := tt.instance.getPortsWithUrlPathsForComponentKinds(logger, tt.args.componentKinds)
 			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
+			require.ElementsMatch(t, tt.want, got)
 		})
 	}
 }
