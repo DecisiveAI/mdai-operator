@@ -108,14 +108,18 @@ type Action struct {
 
 	SetVariable *ScalarAction `json:"setVariable,omitempty"`
 
-	// TODO add more actions to update variables here
+	AddToMap      *MapAction `json:"addToMap,omitempty"`
+	RemoveFromMap *MapAction `json:"removeFromMap,omitempty"`
 
 	CallWebhook *CallWebhookAction `json:"callWebhook,omitempty"`
 }
 
 type SetAction struct {
-	// Target set name
+	// Target set variable name
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Required
 	Set string `json:"set"`
 	// Value to add (templated string allowed)
 	// +kubebuilder:validation:MinLength=1
@@ -123,12 +127,31 @@ type SetAction struct {
 }
 
 type ScalarAction struct {
-	// Target set name
+	// Target set variable name
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Required
 	Scalar string `json:"scalar"`
 	// Value to add (templated string allowed)
 	// +kubebuilder:validation:MinLength=1
 	Value string `json:"value"`
+}
+
+type MapAction struct {
+	// Map Target map variable name
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Required
+	Map string `json:"map"`
+
+	// Key to add or remove
+	// +kubebuilder:validation:MinLength=1
+	Key string `json:"key"`
+	// +optional
+	// Value for key. Is not required for remove operations.
+	Value *string `json:"value,omitempty"`
 }
 
 // CallWebhookAction is used to call a webhook with the provided template.
@@ -142,14 +165,31 @@ type CallWebhookAction struct {
 	// +kubebuilder:validation:Enum=POST;PUT;PATCH
 	Method string `json:"method,omitempty"`
 
-	// +kubebuilder:validation:Enum=slackAlertTemplate
-	// TemplateRef uses built-in templates. Custom templates will be supported in the future.
-	TemplateRef string `json:"templateRef,omitempty"`
+	// TemplateRef uses built-in templates or custom ones.
+	// `slackAlertTemplate` uses Slack's built-in alert template.
+	// `jsonTemplate` is default and uses a custom JSON payload template referenced from a ConfigMap/Secret.
+	// +kubebuilder:validation:Enum=slackAlertTemplate;jsonTemplate
+	// +kubebuilder:default=jsonTemplate
+	TemplateRef string `json:"templateRef"`
 
+	// PayloadTemplate A reusable JSON payload template stored inline or referenced from a ConfigMap/Secret.
+	// Used when TemplateRef is "jsonTemplate".
+	// +optional
+	PayloadTemplate *StringOrFrom `json:"payloadTemplate,omitempty"`
+
+	// TemplateValues literal key/value pairs available to the template as ${template:KEY}.
+	// +optional
 	TemplateValues map[string]string `json:"templateValues,omitempty"`
+	// TemplateValuesFrom sourced from Secrets/ConfigMaps (overridden by TemplateValues).
+	// +optional
+	TemplateValuesFrom map[string]ValueFromSource `json:"templateValuesFrom,omitempty"`
 
+	// Headers additional HTTP headers to be included in the request.
 	// +optional
 	Headers map[string]string `json:"headers,omitempty"`
+	// HeadersFrom additional HTTP headers to be included in the request from a Secret or ConfigMap.
+	// +optional
+	HeadersFrom map[string]ValueFromSource `json:"headersFrom,omitempty"`
 
 	// Timeout specifies the maximum time to wait for the response from the webhook before retry.
 	// Default is 0s, means no timeout should be applied.
@@ -263,9 +303,9 @@ type (
 const (
 	VariableSourceTypeBuiltInValkey VariableStorageType = "mdai-valkey"
 
-	// VariableTypeManual Variable type that is managed externally by the user, not attached to any OODA loop
+	// VariableTypeManual Variable type that is managed externally by the user, not attached to any automation rule
 	VariableTypeManual VariableType = "manual"
-	// VariableTypeComputed Variable type that is computed internally by MDAI, attached to an OODA loop
+	// VariableTypeComputed Variable type that is computed internally by MDAI, attached to an automation rule
 	VariableTypeComputed VariableType = "computed"
 	// VariableTypeMeta Variable type that is derived from manual and computed variables
 	VariableTypeMeta VariableType = "meta"
@@ -286,4 +326,7 @@ const (
 	MetaVariableDataTypePriorityList VariableDataType = "metaPriorityList"
 
 	TransformerTypeJoin TransformerType = "join"
+
+	TemplateRefSlack = "slackAlertTemplate"
+	TemplateRefJSON  = "jsonTemplate"
 )

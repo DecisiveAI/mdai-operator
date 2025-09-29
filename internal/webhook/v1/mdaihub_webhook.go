@@ -3,6 +3,8 @@ package v1
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/textproto"
 	"net/url"
 	"reflect"
 	"strings"
@@ -27,6 +29,9 @@ import (
 var mdaihublog = logf.Log.WithName("mdaihub-resource")
 
 var allowedHTTP = sets.NewString("GET", "POST", "PUT", "PATCH", "DELETE")
+
+// hop-by-hop / managed headers we don't allow users to override for safety reason
+var forbiddenHeaders = sets.NewString("Host", "Content-Length", "Transfer-Encoding")
 
 // SetupMdaiHubWebhookWithManager registers the webhook for MdaiHub in the manager.
 func SetupMdaiHubWebhookWithManager(mgr ctrl.Manager) error {
@@ -190,25 +195,24 @@ func (*MdaiHubCustomValidator) validateAutomations(mdaihub *mdaiv1.MdaiHub) (adm
 		return warnings, nil
 	}
 
-	// TODO create a map with variable names and alert names for faster lookup
 	vars := mdaihub.Spec.Variables
 	varKeys := make(map[string]struct{}, len(vars))
 	for i := range vars {
-		key := strings.TrimSpace(vars[i].Key)
+		key := vars[i].Key
 		if key == "" {
 			continue
 		}
-		varKeys[strings.ToLower(key)] = struct{}{}
+		varKeys[key] = struct{}{}
 	}
 
 	alerts := mdaihub.Spec.PrometheusAlerts
 	alertNames := make(map[string]struct{}, len(alerts))
 	for i := range alerts {
-		key := strings.TrimSpace(alerts[i].Name)
+		key := alerts[i].Name
 		if key == "" {
 			continue
 		}
-		alertNames[strings.ToLower(key)] = struct{}{}
+		alertNames[key] = struct{}{}
 	}
 
 	specPath := field.NewPath("spec")
@@ -249,66 +253,158 @@ func validateWhen(path *field.Path, when mdaiv1.When, knownVarKeys map[string]st
 		errs = append(errs, field.Invalid(path.Child("variableUpdated"), *when.VariableUpdated, "not defined in spec.variables"))
 	}
 	if hasAlertName && !hasKey(knownAlertNames, *when.AlertName) {
-		errs = append(errs, field.Invalid(path.Child("alertName"), *when.AlertName, "not defined in spec.alerts"))
+		errs = append(errs, field.Invalid(path.Child("alertName"), *when.AlertName, "not defined in spec.prometheusAlerts"))
 	}
 
 	return errs
 }
 
-func hasKey(set map[string]struct{}, key string) bool {
-	_, ok := set[strings.ToLower(strings.TrimSpace(key))]
+func hasKey(knownVarKeys map[string]struct{}, key string) bool {
+	_, ok := knownVarKeys[key]
 	return ok
 }
 
 func validateAction(actionPath *field.Path, action mdaiv1.Action, knownVarKeys map[string]struct{}) field.ErrorList {
-	var errs field.ErrorList
-	present := 0
+	const (
+		errAtLeastOneAction = "at least one action must be specified"
+		errOnlyOneAction    = "only one action may be specified"
+	)
 
-	if action.AddToSet != nil {
-		present++
-		errs = append(errs, validateSetAction(actionPath.Child("addToSet"), action.AddToSet, knownVarKeys)...)
+	actions := []struct {
+		key      string
+		present  bool
+		validate func() field.ErrorList
+	}{
+		{
+			key:     "addToSet",
+			present: action.AddToSet != nil,
+			validate: func() field.ErrorList {
+				return validateVariableAction(actionPath.Child("addToSet"), action.AddToSet.Set, knownVarKeys, "set")
+			},
+		},
+		{
+			key:     "removeFromSet",
+			present: action.RemoveFromSet != nil,
+			validate: func() field.ErrorList {
+				return validateVariableAction(actionPath.Child("removeFromSet"), action.RemoveFromSet.Set, knownVarKeys, "set")
+			},
+		},
+		{
+			key:     "setVariable",
+			present: action.SetVariable != nil,
+			validate: func() field.ErrorList {
+				return validateVariableAction(actionPath.Child("setVariable"), action.SetVariable.Scalar, knownVarKeys, "scalar")
+			},
+		},
+		{
+			key:     "addToMap",
+			present: action.AddToMap != nil,
+			validate: func() field.ErrorList {
+				return validateMapAction(actionPath.Child("addToMap"), action.AddToMap, knownVarKeys)
+			},
+		},
+		{
+			key:     "removeFromMap",
+			present: action.RemoveFromMap != nil,
+			validate: func() field.ErrorList {
+				return validateMapAction(actionPath.Child("removeFromMap"), action.RemoveFromMap, knownVarKeys)
+			},
+		},
+		{
+			key:     "callWebhook",
+			present: action.CallWebhook != nil,
+			validate: func() field.ErrorList {
+				return validateWebhookCall(actionPath.Child("callWebhook"), action.CallWebhook)
+			},
+		},
 	}
 
-	if action.RemoveFromSet != nil {
-		present++
-		errs = append(errs, validateSetAction(actionPath.Child("removeFromSet"), action.RemoveFromSet, knownVarKeys)...)
+	// find exactly one present; short-circuit on multi
+	presentIdx := -1
+	for i, a := range actions {
+		if a.present {
+			if presentIdx != -1 {
+				return field.ErrorList{field.Invalid(actionPath, "<action>", errOnlyOneAction)}
+			}
+			presentIdx = i
+		}
 	}
 
-	if action.CallWebhook != nil {
-		present++
-		errs = append(errs, validateWebhookCall(actionPath.Child("callWebhook"), action.CallWebhook)...)
+	if presentIdx == -1 {
+		return field.ErrorList{field.Invalid(actionPath, "<action>", errAtLeastOneAction)}
 	}
 
-	if present == 0 {
-		errs = append(errs, field.Invalid(actionPath, "<action>", "at least one action must be specified"))
-	}
-	return errs
+	return actions[presentIdx].validate()
 }
 
-func validateSetAction(p *field.Path, a *mdaiv1.SetAction, knownVarKeys map[string]struct{}) field.ErrorList {
-	var errs field.ErrorList
-	set := strings.TrimSpace(a.Set)
-	if !hasKey(knownVarKeys, set) {
-		errs = append(errs, field.Invalid(p.Child("set"), set, "not defined in spec.variables"))
+func validateVariableAction(path *field.Path, variableKey string, knownVarKeys map[string]struct{}, childPath string) field.ErrorList {
+	// validation for non-empty value is done at the CRD level
+	if !hasKey(knownVarKeys, variableKey) {
+		return field.ErrorList{
+			field.Invalid(path.Child(childPath), variableKey, "not defined in spec.variables"),
+		}
 	}
+	return nil
+}
+
+func validateMapAction(p *field.Path, a *mdaiv1.MapAction, knownVarKeys map[string]struct{}) field.ErrorList {
+	var errs field.ErrorList
+
+	mapName := a.Map
+	if !hasKey(knownVarKeys, mapName) {
+		errs = append(errs, field.Invalid(p.Child("map"), mapName, "not defined in spec.variables"))
+	}
+
+	// Require value for addToMap; allow it to be omitted for removeFromMap.
+	isAdd := strings.HasSuffix(p.String(), ".addToMap")
+	if isAdd {
+		if a.Value == nil || strings.TrimSpace(ptr.Deref(a.Value, "")) == "" {
+			errs = append(errs, field.Required(p.Child("value"), "required for addToMap"))
+		}
+	}
+
 	return errs
 }
 
 func validateWebhookCall(callPath *field.Path, call *mdaiv1.CallWebhookAction) field.ErrorList {
 	var errs field.ErrorList
 
-	// we are validating only if URL is provided as string
+	// Validate URL only when provided as a literal
 	if call.URL.Value != nil {
 		endpoint := strings.TrimSpace(*call.URL.Value)
 		if endpoint == "" {
 			errs = append(errs, field.Required(callPath.Child("url"), "required"))
 		} else if !isValidURL(endpoint) {
-			errs = append(errs, field.Invalid(callPath.Child("url"), endpoint, "must be an absolute http(s) URL or a template"))
+			errs = append(errs, field.Invalid(callPath.Child("url"), endpoint, "must be an absolute http(s) URL"))
 		}
 	}
 
-	if m := strings.TrimSpace(call.Method); m != "" && !allowedHTTP.Has(m) {
+	if m := call.Method; m != "" && !allowedHTTP.Has(m) {
 		errs = append(errs, field.NotSupported(callPath.Child("method"), m, allowedHTTP.UnsortedList()))
+	}
+
+	// If payloadTemplate is present, it must not be used with slackAlertTemplate and must use POST
+	ref := call.TemplateRef
+	if call.PayloadTemplate != nil {
+		if ref == mdaiv1.TemplateRefSlack {
+			errs = append(errs, field.Forbidden(callPath.Child("payloadTemplate"), "must be empty when templateRef=slackAlertTemplate"))
+		}
+		if call.Method != "" && call.Method != http.MethodPost {
+			errs = append(errs, field.Invalid(callPath.Child("method"), call.Method, "payloadTemplate requires POST"))
+		}
+	}
+
+	// If templateRef=jsonTemplate, require a payloadTemplate
+	if ref == "jsonTemplate" && call.PayloadTemplate == nil {
+		errs = append(errs, field.Required(callPath.Child("payloadTemplate"), "required when templateRef=jsonTemplate"))
+	}
+
+	// forbid managed headers in headers (case-insensitive, canonicalize)
+	for hk := range call.Headers {
+		key := textproto.CanonicalMIMEHeaderKey(hk)
+		if forbiddenHeaders.Has(key) {
+			errs = append(errs, field.Forbidden(callPath.Child("headers").Key(hk), fmt.Sprintf("header %q is managed by the client and cannot be set", key)))
+		}
 	}
 
 	return errs

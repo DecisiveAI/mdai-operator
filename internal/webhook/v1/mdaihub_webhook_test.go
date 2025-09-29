@@ -8,6 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -173,10 +174,12 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 
 var _ = Describe("MdaiHub Webhook", func() {
 	var (
-		obj       *mdaiv1.MdaiHub
-		oldObj    *mdaiv1.MdaiHub
-		validator MdaiHubCustomValidator
-		defaulter MdaiHubCustomDefaulter
+		obj          *mdaiv1.MdaiHub
+		oldObj       *mdaiv1.MdaiHub
+		validator    MdaiHubCustomValidator
+		defaulter    MdaiHubCustomDefaulter
+		actionPath   *field.Path
+		knownVarKeys map[string]struct{}
 	)
 
 	BeforeEach(func() {
@@ -188,7 +191,12 @@ var _ = Describe("MdaiHub Webhook", func() {
 		Expect(defaulter).NotTo(BeNil(), "Expected defaulter to be initialized")
 		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")
 		Expect(obj).NotTo(BeNil(), "Expected obj to be initialized")
-		// TODO (user): Add any setup logic common to all tests
+		actionPath = field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+		knownVarKeys = map[string]struct{}{
+			"service_list_1": {},
+			"map_1":          {},
+			"string_1":       {},
+		}
 	})
 
 	AfterEach(func() {
@@ -356,7 +364,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("spec.rules[0].when.alertName"))
-			Expect(err.Error()).To(ContainSubstring("not defined in spec.alerts"))
+			Expect(err.Error()).To(ContainSubstring("not defined in spec.prometheusAlerts"))
 			Expect(warnings).To(Equal(admission.Warnings{}))
 		})
 
@@ -456,7 +464,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring(`spec.rules[0].then[0].callWebhook.url`))
-			Expect(err.Error()).To(ContainSubstring(`must be an absolute http(s) URL or a template`))
+			Expect(err.Error()).To(ContainSubstring(`must be an absolute http(s) URL`))
 			Expect(warnings).To(Equal(admission.Warnings{}))
 		})
 
@@ -526,6 +534,426 @@ var _ = Describe("MdaiHub Webhook", func() {
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(warnings).To(Equal(admission.Warnings{}))
+		})
+
+		It("passes with exactly one action specified (addToSet)", func() {
+			action := mdaiv1.Action{
+				AddToSet: &mdaiv1.SetAction{
+					Set:   "service_list_1",
+					Value: "val1",
+				},
+			}
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(BeEmpty(),
+				"single valid action should not trigger multi/zero-action errors")
+		})
+
+		It("passes with exactly one action specified (removeFromSet)", func() {
+			action := mdaiv1.Action{
+				RemoveFromSet: &mdaiv1.SetAction{
+					Set:   "service_list_1",
+					Value: "valX",
+				},
+			}
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(BeEmpty())
+		})
+
+		It("fails validation if no action is specified", func() {
+			action := mdaiv1.Action{} // all nil
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeInvalid))
+			Expect(errs[0].Field).To(Equal(actionPath.String()))
+			Expect(errs[0].BadValue).To(Equal("<action>"))
+			Expect(errs[0].Detail).To(Equal("at least one action must be specified"))
+		})
+
+		It("should fail validation if an action specifies both addToSet and removeFromSet", func() {
+			action := mdaiv1.Action{
+				AddToSet: &mdaiv1.SetAction{
+					Set:   "service_list_1",
+					Value: "val1",
+				},
+				RemoveFromSet: &mdaiv1.SetAction{
+					Set:   "service_list_1",
+					Value: "val2",
+				},
+			}
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeInvalid))
+			Expect(errs[0].Field).To(Equal(actionPath.String()))
+			Expect(errs[0].BadValue).To(Equal("<action>"))
+			Expect(errs[0].Detail).To(Equal("only one action may be specified"))
+		})
+
+		It("should pass validation when a single 'setVariable' action is specified", func() {
+			knownVarKeys := map[string]struct{}{"int": {}}
+			action := mdaiv1.Action{
+				SetVariable: &mdaiv1.ScalarAction{
+					Scalar: "int",
+					Value:  "123",
+				},
+			}
+			actionPath := field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(BeEmpty())
+		})
+
+		It("should pass validation when a single 'addToMap' action is specified", func() {
+			action := mdaiv1.Action{
+				AddToMap: &mdaiv1.MapAction{
+					Map:   "map",
+					Key:   "new-key",
+					Value: ptr.To("new-value"),
+				},
+			}
+			knownVars := map[string]struct{}{
+				"map": {},
+			}
+			actionPath := field.NewPath("spec").Child("rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVars)
+			Expect(errs).To(BeEmpty())
+		})
+
+		It("should pass validation when a single 'removeFromMap' action is specified", func() {
+			knownVarKeys := map[string]struct{}{"map": {}}
+			action := mdaiv1.Action{
+				RemoveFromMap: &mdaiv1.MapAction{
+					Map: "map",
+					Key: "some-key",
+				},
+			}
+			actionPath := field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(BeEmpty())
+		})
+
+		It("should pass validation when a single 'callWebhook' action is specified", func() {
+			action := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL:    mdaiv1.StringOrFrom{Value: ptr.To("http://example.com/webhook")},
+					Method: "POST",
+				},
+			}
+			knownVarKeys := map[string]struct{}{}
+			actionPath := field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(BeEmpty())
+		})
+
+		It("Should return an error when the variable key is an empty string and not in the known keys map", func() {
+			variableKey := ""
+			childPath := "set"
+			expectedErrs := field.ErrorList{
+				field.Invalid(actionPath.Child(childPath), variableKey, "not defined in spec.variables"),
+			}
+
+			errs := validateVariableAction(actionPath, variableKey, knownVarKeys, childPath)
+
+			Expect(errs).To(ConsistOf(expectedErrs))
+		})
+
+		It("Should return nil when the variable key exists in a map containing multiple known keys", func() {
+			variableKey := "service_list_1"
+			childPath := "set"
+
+			errs := validateVariableAction(actionPath, variableKey, knownVarKeys, childPath)
+
+			Expect(errs).To(BeNil())
+		})
+
+		It("Should fail validation for an 'addToMap' action if the specified map variable is not defined", func() {
+			action := &mdaiv1.MapAction{
+				Map:   "unknown_map",
+				Key:   "some_key",
+				Value: ptr.To("some_value"),
+			}
+			path := actionPath.Child("addToMap")
+			errs := validateMapAction(path, action, knownVarKeys)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeInvalid))
+			Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].addToMap.map"))
+			Expect(errs[0].Detail).To(ContainSubstring("not defined in spec.variables"))
+		})
+
+		It("Should pass validation for a 'removeFromMap' action when a value is provided", func() {
+			action := mdaiv1.Action{
+				RemoveFromMap: &mdaiv1.MapAction{
+					Map:   "map_1",
+					Key:   "some-key",
+					Value: ptr.To("some-value"),
+				},
+			}
+			path := actionPath.Child("removeFromMap")
+			errs := validateAction(path, action, knownVarKeys)
+			Expect(errs).To(BeEmpty())
+		})
+
+		Context("validateMapAction", func() {
+			It("Should fail validation for an 'addToMap' action when the value is nil", func() {
+				action := &mdaiv1.MapAction{
+					Map: "map_1",
+				}
+				path := actionPath.Child("addToMap")
+				errs := validateMapAction(path, action, knownVarKeys)
+				Expect(errs).To(HaveLen(1))
+				Expect(errs[0].Type).To(Equal(field.ErrorTypeRequired))
+				Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].addToMap.value"))
+				Expect(errs[0].Detail).To(Equal("required for addToMap"))
+			})
+		})
+
+		It("Should return an error when the object passed to the defaulter is not an MdaiHub type", func() {
+			By("creating an object of a different type")
+			notAnMdaiHub := &corev1.Pod{}
+
+			By("calling the Default method with the wrong object type")
+			err := defaulter.Default(admission.NewContextWithRequest(ctx, admission.Request{}), notAnMdaiHub)
+
+			By("checking that an error is returned")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal("expected an MdaiHub object but got *v1.Pod"))
+		})
+
+		It("Should not return an error when a valid MdaiHub object is passed", func() {
+			By("creating a valid MdaiHub object")
+			obj = createSampleMdaiHub()
+
+			By("calling the Default method")
+			err := defaulter.Default(ctx, obj)
+
+			By("checking that no error is returned")
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("Should not return an error when a valid MdaiHub object is passed", func() {
+			By("creating a valid MdaiHub object")
+			obj = createSampleMdaiHub()
+
+			By("calling the Default method")
+			err := defaulter.Default(ctx, obj)
+
+			By("checking that no error is returned")
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("Should return an error when the object passed to ValidateDelete is not an MdaiHub type", func() {
+			By("creating a non-MdaiHub object")
+			invalidObj := &corev1.Pod{}
+
+			By("calling ValidateDelete with the invalid object")
+			warnings, err := validator.ValidateDelete(ctx, invalidObj)
+
+			By("checking that an error is returned and warnings are nil")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal("expected a MdaiHub object but got *v1.Pod"))
+			Expect(warnings).To(BeNil())
+		})
+
+		It("Should not return an error when a valid MdaiHub object is passed to ValidateDelete", func() {
+			By("creating a valid MdaiHub object for deletion")
+			obj = createSampleMdaiHub()
+
+			By("calling ValidateDelete")
+			warnings, err := validator.ValidateDelete(ctx, obj)
+
+			By("checking that no error or warnings are returned")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(warnings).To(BeNil())
+		})
+
+		It("accepts same case variable names against knownVarKeys", func() {
+			known := map[string]struct{}{"highRiskStates": {}}
+			errs := validateVariableAction(field.NewPath("then").Index(0).Child("addToSet"), "highRiskStates", known, "set")
+			Expect(errs).To(BeEmpty())
+		})
+
+		It("disallows unsupported HTTP methods for callWebhook", func() {
+			action := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL: mdaiv1.StringOrFrom{
+						ValueFrom: &mdaiv1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-config"},
+								Key:                  "url",
+							},
+						},
+					},
+					Method: "not_allowed_methods",
+				},
+			}
+			path := actionPath.Child("callWebhook")
+
+			errs := validateWebhookCall(path, action.CallWebhook)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeNotSupported))
+			Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].callWebhook.method"))
+			Expect(errs[0].BadValue).To(Equal("not_allowed_methods"))
+		})
+
+		It("requires POST when payloadTemplate is provided and method is explicitly set", func() {
+			action := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL: mdaiv1.StringOrFrom{
+						ValueFrom: &mdaiv1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-config"},
+								Key:                  "url",
+							},
+						},
+					},
+					Method: "PUT", // anything non-POST should fail when payloadTemplate is present
+					PayloadTemplate: &mdaiv1.StringOrFrom{
+						Value: ptr.To("{{ .metadata.name }}"),
+					},
+				},
+			}
+			path := actionPath.Child("callWebhook")
+
+			errs := validateWebhookCall(path, action.CallWebhook)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeInvalid))
+			Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].callWebhook.method"))
+			Expect(errs[0].BadValue).To(Equal("PUT"))
+			Expect(errs[0].Detail).To(Equal("payloadTemplate requires POST"))
+		})
+
+		It("allows payloadTemplate with POST or with default (empty) method", func() {
+			// Explicit POST
+			actionPost := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL: mdaiv1.StringOrFrom{
+						ValueFrom: &mdaiv1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-config"},
+								Key:                  "url",
+							},
+						},
+					},
+					Method: "POST",
+					PayloadTemplate: &mdaiv1.StringOrFrom{
+						Value: ptr.To(`{"ok":true}`),
+					},
+				},
+			}
+			path := actionPath.Child("callWebhook")
+			Expect(validateWebhookCall(path, actionPost.CallWebhook)).To(BeEmpty())
+
+			// Empty method (validator only enforces POST when method is non-empty)
+			actionEmpty := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL: mdaiv1.StringOrFrom{
+						ValueFrom: &mdaiv1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-config"},
+								Key:                  "url",
+							},
+						},
+					},
+					// Method empty on purpose
+					PayloadTemplate: &mdaiv1.StringOrFrom{
+						Value: ptr.To(`{"ok":true}`),
+					},
+				},
+			}
+			Expect(validateWebhookCall(path, actionEmpty.CallWebhook)).To(BeEmpty())
+		})
+
+		It("forbids payloadTemplate when templateRef=slackAlertTemplate", func() {
+			action := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL: mdaiv1.StringOrFrom{
+						ValueFrom: &mdaiv1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-config"},
+								Key:                  "url",
+							},
+						},
+					},
+					Method:      "POST",
+					TemplateRef: mdaiv1.TemplateRefSlack,
+					PayloadTemplate: &mdaiv1.StringOrFrom{
+						Value: ptr.To("{{ .metadata.name }}"),
+					},
+				},
+			}
+			path := actionPath.Child("callWebhook")
+
+			errs := validateWebhookCall(path, action.CallWebhook)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeForbidden))
+			Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].callWebhook.payloadTemplate"))
+			Expect(errs[0].Detail).To(Equal("must be empty when templateRef=slackAlertTemplate"))
+		})
+
+		It("requires payloadTemplate when templateRef=jsonTemplate", func() {
+			action := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL: mdaiv1.StringOrFrom{
+						ValueFrom: &mdaiv1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-config"},
+								Key:                  "url",
+							},
+						},
+					},
+					Method:      "POST",
+					TemplateRef: "jsonTemplate",
+					// PayloadTemplate nil on purpose
+				},
+			}
+			path := actionPath.Child("callWebhook")
+
+			errs := validateWebhookCall(path, action.CallWebhook)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeRequired))
+			Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].callWebhook.payloadTemplate"))
+			Expect(errs[0].Detail).To(Equal("required when templateRef=jsonTemplate"))
+		})
+
+		It("forbids managed headers regardless of input case (canonicalizes detail)", func() {
+			action := mdaiv1.Action{
+				CallWebhook: &mdaiv1.CallWebhookAction{
+					URL: mdaiv1.StringOrFrom{
+						ValueFrom: &mdaiv1.ValueFromSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "webhook-config"},
+								Key:                  "url",
+							},
+						},
+					},
+					Method: "POST",
+					Headers: map[string]string{
+						"content-length": "123", // lower-case on purpose
+					},
+				},
+			}
+			path := actionPath.Child("callWebhook")
+
+			errs := validateWebhookCall(path, action.CallWebhook)
+			Expect(errs).NotTo(BeEmpty())
+
+			// Find the forbidden header error for the exact map key we set
+			expectedField := path.Child("headers").Key("content-length").String()
+			found := false
+			for _, e := range errs {
+				if e.Type == field.ErrorTypeForbidden && e.Field == expectedField {
+					Expect(e.Detail).To(ContainSubstring(`header "Content-Length" is managed by the client and cannot be set`))
+					found = true
+					break
+				}
+			}
+			Expect(found).To(BeTrue(), "expected forbidden error for Content-Length header")
 		})
 	})
 })

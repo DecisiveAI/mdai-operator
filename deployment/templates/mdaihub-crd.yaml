@@ -95,12 +95,34 @@ spec:
                         is triggered.
                       items:
                         properties:
+                          addToMap:
+                            properties:
+                              key:
+                                description: Key to add or remove
+                                minLength: 1
+                                type: string
+                              map:
+                                description: Map Target map variable name
+                                maxLength: 63
+                                minLength: 1
+                                pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
+                                type: string
+                              value:
+                                description: Value for key. Is not required for remove
+                                  operations.
+                                type: string
+                            required:
+                            - key
+                            - map
+                            type: object
                           addToSet:
                             description: Payloads (one required depending on Type)
                             properties:
                               set:
-                                description: Target set name
+                                description: Target set variable name
+                                maxLength: 63
                                 minLength: 1
+                                pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                                 type: string
                               value:
                                 description: Value to add (templated string allowed)
@@ -117,6 +139,68 @@ spec:
                               headers:
                                 additionalProperties:
                                   type: string
+                                description: Headers additional HTTP headers to be included
+                                  in the request.
+                                type: object
+                              headersFrom:
+                                additionalProperties:
+                                  description: ValueFromSource refers to a key in a
+                                    Secret or ConfigMap.
+                                  properties:
+                                    configMapKeyRef:
+                                      description: Selects a key from a ConfigMap.
+                                      properties:
+                                        key:
+                                          description: The key to select.
+                                          type: string
+                                        name:
+                                          default: ""
+                                          description: |-
+                                            Name of the referent.
+                                            This field is effectively required, but due to backwards compatibility is
+                                            allowed to be empty. Instances of this type with an empty value here are
+                                            almost certainly wrong.
+                                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                          type: string
+                                        optional:
+                                          description: Specify whether the ConfigMap
+                                            or its key must be defined
+                                          type: boolean
+                                      required:
+                                      - key
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                    secretKeyRef:
+                                      description: SecretKeySelector selects a key of
+                                        a Secret.
+                                      properties:
+                                        key:
+                                          description: The key of the secret to select
+                                            from.  Must be a valid secret key.
+                                          type: string
+                                        name:
+                                          default: ""
+                                          description: |-
+                                            Name of the referent.
+                                            This field is effectively required, but due to backwards compatibility is
+                                            allowed to be empty. Instances of this type with an empty value here are
+                                            almost certainly wrong.
+                                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                          type: string
+                                        optional:
+                                          description: Specify whether the Secret or
+                                            its key must be defined
+                                          type: boolean
+                                      required:
+                                      - key
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                  type: object
+                                  x-kubernetes-validations:
+                                  - message: set exactly one of secretKeyRef or configMapKeyRef
+                                    rule: (has(self.secretKeyRef)?1:0)+(has(self.configMapKeyRef)?1:0)==1
+                                description: HeadersFrom additional HTTP headers to
+                                  be included in the request from a Secret or ConfigMap.
                                 type: object
                               method:
                                 default: POST
@@ -127,15 +211,148 @@ spec:
                                 - PUT
                                 - PATCH
                                 type: string
+                              payloadTemplate:
+                                description: |-
+                                  PayloadTemplate A reusable JSON payload template stored inline or referenced from a ConfigMap/Secret.
+                                  Used when TemplateRef is "jsonTemplate".
+                                properties:
+                                  value:
+                                    type: string
+                                  valueFrom:
+                                    description: ValueFromSource refers to a key in
+                                      a Secret or ConfigMap.
+                                    properties:
+                                      configMapKeyRef:
+                                        description: Selects a key from a ConfigMap.
+                                        properties:
+                                          key:
+                                            description: The key to select.
+                                            type: string
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                          optional:
+                                            description: Specify whether the ConfigMap
+                                              or its key must be defined
+                                            type: boolean
+                                        required:
+                                        - key
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                      secretKeyRef:
+                                        description: SecretKeySelector selects a key
+                                          of a Secret.
+                                        properties:
+                                          key:
+                                            description: The key of the secret to select
+                                              from.  Must be a valid secret key.
+                                            type: string
+                                          name:
+                                            default: ""
+                                            description: |-
+                                              Name of the referent.
+                                              This field is effectively required, but due to backwards compatibility is
+                                              allowed to be empty. Instances of this type with an empty value here are
+                                              almost certainly wrong.
+                                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                            type: string
+                                          optional:
+                                            description: Specify whether the Secret
+                                              or its key must be defined
+                                            type: boolean
+                                        required:
+                                        - key
+                                        type: object
+                                        x-kubernetes-map-type: atomic
+                                    type: object
+                                    x-kubernetes-validations:
+                                    - message: set exactly one of secretKeyRef or configMapKeyRef
+                                      rule: (has(self.secretKeyRef)?1:0)+(has(self.configMapKeyRef)?1:0)==1
+                                type: object
+                                x-kubernetes-validations:
+                                - message: set exactly one of value or valueFrom
+                                  rule: (has(self.value)?1:0)+(has(self.valueFrom)?1:0)==1
                               templateRef:
-                                description: TemplateRef uses built-in templates. Custom
-                                  templates will be supported in the future.
+                                default: jsonTemplate
+                                description: |-
+                                  TemplateRef uses built-in templates or custom ones.
+                                  `slackAlertTemplate` uses Slack's built-in alert template.
+                                  `jsonTemplate` is default and uses a custom JSON payload template referenced from a ConfigMap/Secret.
                                 enum:
                                 - slackAlertTemplate
+                                - jsonTemplate
                                 type: string
                               templateValues:
                                 additionalProperties:
                                   type: string
+                                description: TemplateValues literal key/value pairs
+                                  available to the template as ${template:KEY}.
+                                type: object
+                              templateValuesFrom:
+                                additionalProperties:
+                                  description: ValueFromSource refers to a key in a
+                                    Secret or ConfigMap.
+                                  properties:
+                                    configMapKeyRef:
+                                      description: Selects a key from a ConfigMap.
+                                      properties:
+                                        key:
+                                          description: The key to select.
+                                          type: string
+                                        name:
+                                          default: ""
+                                          description: |-
+                                            Name of the referent.
+                                            This field is effectively required, but due to backwards compatibility is
+                                            allowed to be empty. Instances of this type with an empty value here are
+                                            almost certainly wrong.
+                                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                          type: string
+                                        optional:
+                                          description: Specify whether the ConfigMap
+                                            or its key must be defined
+                                          type: boolean
+                                      required:
+                                      - key
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                    secretKeyRef:
+                                      description: SecretKeySelector selects a key of
+                                        a Secret.
+                                      properties:
+                                        key:
+                                          description: The key of the secret to select
+                                            from.  Must be a valid secret key.
+                                          type: string
+                                        name:
+                                          default: ""
+                                          description: |-
+                                            Name of the referent.
+                                            This field is effectively required, but due to backwards compatibility is
+                                            allowed to be empty. Instances of this type with an empty value here are
+                                            almost certainly wrong.
+                                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                          type: string
+                                        optional:
+                                          description: Specify whether the Secret or
+                                            its key must be defined
+                                          type: boolean
+                                      required:
+                                      - key
+                                      type: object
+                                      x-kubernetes-map-type: atomic
+                                  type: object
+                                  x-kubernetes-validations:
+                                  - message: set exactly one of secretKeyRef or configMapKeyRef
+                                    rule: (has(self.secretKeyRef)?1:0)+(has(self.configMapKeyRef)?1:0)==1
+                                description: TemplateValuesFrom sourced from Secrets/ConfigMaps
+                                  (overridden by TemplateValues).
                                 type: object
                               timeout:
                                 description: |-
@@ -209,13 +426,36 @@ spec:
                                 - message: set exactly one of value or valueFrom
                                   rule: (has(self.value)?1:0)+(has(self.valueFrom)?1:0)==1
                             required:
+                            - templateRef
                             - url
+                            type: object
+                          removeFromMap:
+                            properties:
+                              key:
+                                description: Key to add or remove
+                                minLength: 1
+                                type: string
+                              map:
+                                description: Map Target map variable name
+                                maxLength: 63
+                                minLength: 1
+                                pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
+                                type: string
+                              value:
+                                description: Value for key. Is not required for remove
+                                  operations.
+                                type: string
+                            required:
+                            - key
+                            - map
                             type: object
                           removeFromSet:
                             properties:
                               set:
-                                description: Target set name
+                                description: Target set variable name
+                                maxLength: 63
                                 minLength: 1
+                                pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                                 type: string
                               value:
                                 description: Value to add (templated string allowed)
@@ -228,8 +468,10 @@ spec:
                           setVariable:
                             properties:
                               scalar:
-                                description: Target set name
+                                description: Target set variable name
+                                maxLength: 63
                                 minLength: 1
+                                pattern: ^[a-zA-Z_][a-zA-Z0-9_]*$
                                 type: string
                               value:
                                 description: Value to add (templated string allowed)

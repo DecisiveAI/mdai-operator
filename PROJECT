@@ -53,6 +53,15 @@ resources:
   controller: true
   domain: mydecisive.ai
   group: hub
+  kind: MdaiIngress
+  path: github.com/decisiveai/mdai-operator/api/v1
+  version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: mydecisive.ai
+  group: hub
   kind: MdaiReplay
   path: github.com/decisiveai/mdai-operator/api/v1
   version: v1
