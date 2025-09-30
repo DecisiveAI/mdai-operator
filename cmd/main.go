@@ -5,10 +5,12 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
-	"fmt"
 	"os"
 	"path/filepath"
 
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"github.com/decisiveai/mdai-operator/internal/controller"
+	webhookmdaiv1 "github.com/decisiveai/mdai-operator/internal/webhook/v1"
 	"github.com/go-logr/zapr"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -20,11 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	"github.com/decisiveai/mdai-operator/internal/controller"
-	webhookmdaiv1 "github.com/decisiveai/mdai-operator/internal/webhook/v1"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -288,7 +285,7 @@ func main() {
 		gracefullyShutdownWithCode(1)
 	}
 
-	if err := setMdaiIngressndexers(mgr); err != nil {
+	if err := controller.SetMdaiIngressIndexers(mgr); err != nil {
 		setupLog.Error(err, "unable to create indexers", "controller", "MdaiIngress")
 		gracefullyShutdownWithCode(1)
 	}
@@ -385,26 +382,4 @@ func bindFlags(
 
 func otelSdkEnabled() bool {
 	return os.Getenv(otelSdkDisabledEnvVar) != "true"
-}
-
-func setMdaiIngressndexers(mgr manager.Manager) error {
-	// composite index for MdaiIngress
-	indexerOtelCol := func(obj client.Object) []string {
-		a, ok := obj.(*mdaiv1.MdaiIngress)
-		if !ok {
-			return nil
-		}
-		otelCol := a.Spec.OtelCollector
-		if otelCol.Name != "" && otelCol.Namespace != "" {
-			return []string{fmt.Sprintf("%s/%s", otelCol.Namespace, otelCol.Name)}
-		}
-		return nil
-	}
-
-	return mgr.GetFieldIndexer().IndexField(
-		context.TODO(),
-		&mdaiv1.MdaiIngress{},
-		controller.MdaiIngressOtelColLookupKey,
-		indexerOtelCol,
-	)
 }

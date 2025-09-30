@@ -20,7 +20,7 @@ import (
 
 // nolint:unused
 // log is for logging in this package.
-var mdaiingresslog = logf.Log.WithName("mdaiingress-resource")
+var mdaiIngresslog = logf.Log.WithName("mdaiingress-resource")
 
 // SetupMdaiIngressWebhookWithManager registers the webhook for MdaiIngress in the manager.
 func SetupMdaiIngressWebhookWithManager(mgr ctrl.Manager) error {
@@ -45,27 +45,27 @@ var _ webhook.CustomDefaulter = &MdaiIngressCustomDefaulter{}
 //
 //revive:disable:unused-receiver
 func (d *MdaiIngressCustomDefaulter) Default(_ context.Context, obj runtime.Object) error {
-	mdaiingress, ok := obj.(*mdaiv1.MdaiIngress)
+	mdaiIngress, ok := obj.(*mdaiv1.MdaiIngress)
 
 	if !ok {
 		return fmt.Errorf("expected an MdaiIngress object but got %T", obj)
 	}
-	mdaiingresslog.Info("Defaulting for MdaiIngress", "name", mdaiingress.GetName())
+	mdaiIngresslog.Info("Defaulting for MdaiIngress", "name", mdaiIngress.GetName())
 
-	if mdaiingress.Spec.CloudType == "" {
-		mdaiingress.Spec.CloudType = mdaiv1.CloudProviderAws
+	if mdaiIngress.Spec.CloudType == "" {
+		mdaiIngress.Spec.CloudType = mdaiv1.CloudProviderAws
 	}
 
-	if mdaiingress.Spec.GrpcService == nil {
-		mdaiingress.Spec.GrpcService = &mdaiv1.IngressService{Type: corev1.ServiceTypeNodePort}
-	} else if mdaiingress.Spec.GrpcService.Type == "" {
-		mdaiingress.Spec.GrpcService.Type = corev1.ServiceTypeNodePort
+	if mdaiIngress.Spec.GrpcService == nil {
+		mdaiIngress.Spec.GrpcService = &mdaiv1.IngressService{Type: corev1.ServiceTypeNodePort}
+	} else if mdaiIngress.Spec.GrpcService.Type == "" {
+		mdaiIngress.Spec.GrpcService.Type = corev1.ServiceTypeNodePort
 	}
 
-	if mdaiingress.Spec.NonGrpcService == nil {
-		mdaiingress.Spec.NonGrpcService = &mdaiv1.IngressService{Type: corev1.ServiceTypeLoadBalancer}
-	} else if mdaiingress.Spec.NonGrpcService.Type == "" {
-		mdaiingress.Spec.NonGrpcService.Type = corev1.ServiceTypeLoadBalancer
+	if mdaiIngress.Spec.NonGrpcService == nil {
+		mdaiIngress.Spec.NonGrpcService = &mdaiv1.IngressService{Type: corev1.ServiceTypeLoadBalancer}
+	} else if mdaiIngress.Spec.NonGrpcService.Type == "" {
+		mdaiIngress.Spec.NonGrpcService.Type = corev1.ServiceTypeLoadBalancer
 	}
 
 	return nil
@@ -124,10 +124,9 @@ func (v *MdaiIngressCustomValidator) Validate(ctx context.Context, mdaiIngress *
 	otelKey := fmt.Sprintf("%s/%s", mdaiIngress.Spec.OtelCollector.Namespace, mdaiIngress.Spec.OtelCollector.Name)
 
 	var list mdaiv1.MdaiIngressList
-	err := v.client.List(ctx, &list,
+	if err := v.client.List(ctx, &list,
 		client.MatchingFields{controller.MdaiIngressOtelColLookupKey: otelKey},
-	)
-	if err != nil {
+	); err != nil {
 		return warnings, apierrors.NewInternalError(err)
 	}
 

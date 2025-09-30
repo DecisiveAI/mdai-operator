@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -41,6 +42,18 @@ type MdaiIngressReconciler struct {
 }
 
 var ErrIncorrectOtelcolRef = errors.New("incorrect Otelcol reference")
+
+var IndexerOtelCol = func(obj client.Object) []string {
+	a, ok := obj.(*hubv1.MdaiIngress)
+	if !ok {
+		return nil
+	}
+	otelCol := a.Spec.OtelCollector
+	if otelCol.Name != "" && otelCol.Namespace != "" {
+		return []string{fmt.Sprintf("%s/%s", otelCol.Namespace, otelCol.Name)}
+	}
+	return nil
+}
 
 //+kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaiingresses,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaiingresses/status,verbs=get;update;patch
@@ -216,7 +229,7 @@ func (r *MdaiIngressReconciler) findMdaiIngressOwnedObjects(ctx context.Context,
 	return ownedObjects, nil
 }
 
-// coupledWithOtelcol returns true if the Otelcol instance with the referenced name and namespace is found
+// otelColExists returns true if the Otelcol instance with the referenced name and namespace is found
 func (r *MdaiIngressReconciler) otelColExists(ctx context.Context, name string, namespace string) bool {
 	log := logger.FromContext(ctx)
 
@@ -316,4 +329,13 @@ func (r *MdaiIngressReconciler) otelcolPredicates(ctx context.Context) predicate
 			return false
 		},
 	}
+}
+
+func SetMdaiIngressIndexers(mgr manager.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(
+		context.TODO(),
+		&hubv1.MdaiIngress{},
+		MdaiIngressOtelColLookupKey,
+		IndexerOtelCol,
+	)
 }

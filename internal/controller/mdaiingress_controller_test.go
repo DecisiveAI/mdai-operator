@@ -3,7 +3,6 @@ package controller
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -27,24 +26,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
-
-var indexerOtelCol = func(obj client.Object) []string {
-	a, ok := obj.(*hubv1.MdaiIngress)
-	if !ok {
-		return nil
-	}
-	otelCol := a.Spec.OtelCollector
-	if otelCol.Name != "" && otelCol.Namespace != "" {
-		return []string{fmt.Sprintf("%s/%s", otelCol.Namespace, otelCol.Name)}
-	}
-	return nil
-}
 
 var _ = Describe("MdaiIngress Controller", func() {
 	Context("When reconciling a resource", func() {
@@ -123,7 +109,7 @@ var _ = Describe("MdaiIngress Controller", func() {
 			})
 			Expect(errMgr).NotTo(HaveOccurred())
 
-			err := setMdaiIngressndexers(mgr)
+			err := SetMdaiIngressIndexers(mgr)
 			Expect(err).NotTo(HaveOccurred())
 
 			err = mgr.GetFieldIndexer().IndexField(
@@ -184,7 +170,7 @@ var _ = Describe("MdaiIngress Controller", func() {
 })
 
 func fakeClient(scheme *runtime.Scheme, objs ...client.Object) client.WithWatch {
-	builder := fake.NewClientBuilder().WithScheme(scheme).WithIndex(&hubv1.MdaiIngress{}, "spec.otelCol.compositeKey", indexerOtelCol)
+	builder := fake.NewClientBuilder().WithScheme(scheme).WithIndex(&hubv1.MdaiIngress{}, "spec.otelCol.compositeKey", IndexerOtelCol)
 
 	for _, obj := range objs {
 		builder = builder.WithObjects(obj).WithStatusSubresource(obj)
@@ -199,7 +185,7 @@ func TestOnlyOneMdaiIngressPerOtelcol_SingleRef(t *testing.T) {
 	var buf bytes.Buffer
 	zapLog := makeBufferLogger(&buf)
 	logger := zapr.NewLogger(zapLog)
-	ctx := log.IntoContext(context.TODO(), logger)
+	ctx := log.IntoContext(t.Context(), logger)
 
 	otelcol := otelv1beta1.OpenTelemetryCollector{
 		ObjectMeta: metav1.ObjectMeta{
@@ -224,10 +210,10 @@ func TestOnlyOneMdaiIngressPerOtelcol_SingleRef(t *testing.T) {
 		},
 	}
 
-	fakeClient := fakeClient(scheme, &otelcol, mdaiIngress1)
+	fClient := fakeClient(scheme, &otelcol, mdaiIngress1)
 
 	r := &MdaiIngressReconciler{
-		Client: fakeClient,
+		Client: fClient,
 		Scheme: scheme,
 	}
 
@@ -243,7 +229,7 @@ func TestCoupledWithOtelcol(t *testing.T) {
 	var buf bytes.Buffer
 	zapLog := makeBufferLogger(&buf)
 	logger := zapr.NewLogger(zapLog)
-	ctx := log.IntoContext(context.TODO(), logger)
+	ctx := log.IntoContext(t.Context(), logger)
 
 	otelcol1 := otelv1beta1.OpenTelemetryCollector{
 		ObjectMeta: metav1.ObjectMeta{
@@ -298,26 +284,4 @@ func makeBufferLogger(buf *bytes.Buffer) *zap.Logger {
 		zapcore.DebugLevel, // capture Info and Debug logs
 	)
 	return zap.New(core)
-}
-
-func setMdaiIngressndexers(mgr manager.Manager) error {
-	// composite index for MdaiIngress
-	indexerOtelCol := func(obj client.Object) []string {
-		a, ok := obj.(*hubv1.MdaiIngress)
-		if !ok {
-			return nil
-		}
-		otelCol := a.Spec.OtelCollector
-		if otelCol.Name != "" && otelCol.Namespace != "" {
-			return []string{fmt.Sprintf("%s/%s", otelCol.Namespace, otelCol.Name)}
-		}
-		return nil
-	}
-
-	return mgr.GetFieldIndexer().IndexField(
-		context.TODO(),
-		&hubv1.MdaiIngress{},
-		MdaiIngressOtelColLookupKey,
-		indexerOtelCol,
-	)
 }
