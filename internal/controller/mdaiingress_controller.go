@@ -322,8 +322,12 @@ func (r *MdaiIngressReconciler) otelcolPredicates(ctx context.Context) predicate
 			}
 			return r.coupledWithMdaiIngress(ctx, cr.Name, cr.Namespace)
 		},
-		DeleteFunc: func(e event.DeleteEvent) bool { // TODO: implement deletion logic
-			return false
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			cr, ok := e.Object.(*v1beta1.OpenTelemetryCollector)
+			if !ok {
+				return false
+			}
+			return r.coupledWithMdaiIngress(ctx, cr.Name, cr.Namespace)
 		},
 		GenericFunc: func(e event.GenericEvent) bool {
 			return false
