@@ -40,7 +40,8 @@ when:
 ```
 This rule will be triggered whenever a new item is added to the ACTIVE_USERS set.
 ## `then` - Actions
-The then block is an array of actions to be executed sequentially when the `when` condition is met. These actions are used to modify computed variables or call external webhooks.  
+The then block is an array of actions to be executed sequentially when the `when` condition is met. These actions are used to modify computed variables or call external webhooks.   
+On failure of any action in the sequence, all following actions are skipped.
 ### Modifying Variables
 These actions update the values of computed variables stored in Valkey.
 #### setVariable
