@@ -75,12 +75,8 @@ func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err := r.Get(ctx, otelcolNsName, &instanceOtel); err != nil {
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "unable to fetch OpenTelemetryCollector")
+			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
-
-		// we'll ignore not-found errors, since they can't be fixed by an immediate
-		// requeue (we'll need to wait for a new notification), and we can get them
-		// on deleted requests.
-		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	otelMdaiComb := hubv1.NewOtelIngressConfig(instanceOtel, instanceMdaiIngress)
@@ -221,39 +217,21 @@ func (r *MdaiIngressReconciler) findMdaiIngressOwnedObjects(ctx context.Context,
 }
 
 // coupledWithOtelcol returns true if the Otelcol instance with the referenced name and namespace is found
-func (r *MdaiIngressReconciler) coupledWithOtelcol(ctx context.Context, name string, namespace string) bool {
+func (r *MdaiIngressReconciler) otelColExists(ctx context.Context, name string, namespace string) bool {
 	log := logger.FromContext(ctx)
 
-	mdaiIngress := hubv1.MdaiIngress{}
-	mdaiIngressNsName := types.NamespacedName{Name: name, Namespace: namespace}
-	if err := r.Get(ctx, mdaiIngressNsName, &mdaiIngress); err != nil {
-		log.Error(err, "Failed to get MdaiIngress", "name", name, "namespace", namespace)
-		return false
-	}
-	otelcolName := mdaiIngress.Spec.OtelCollector.Name
-	otelcolNamespace := mdaiIngress.Spec.OtelCollector.Namespace
-	if otelcolName == "" || otelcolNamespace == "" {
-		log.Error(errors.New("incorrect Otelcol reference"), "No OtelCollector reference in MdaiIngress", "name", name, "namespace", namespace)
-		return false
-	}
-
-	otelcolNsName := types.NamespacedName{Name: otelcolName, Namespace: otelcolNamespace}
+	otelcolNsName := types.NamespacedName{Name: name, Namespace: namespace}
 	otelCollector := v1beta1.OpenTelemetryCollector{}
 	if err := r.Get(ctx, otelcolNsName, &otelCollector); err != nil {
-		log.Error(err, "Failed to get OpentelemetryCollector", "name", otelcolName, "namespace", otelcolNamespace)
+		log.Error(err, "Failed to get OpentelemetryCollector", "name", name, "namespace", namespace)
 		return false
 	}
 
-	return r.onlyOneMdaiIngressPerOtelcol(ctx, otelcolName, otelcolNamespace)
+	return true
 }
 
-// coupledWithMdaiIngress returns true if MdaiIngress instance pointing to the
+// coupledWithMdaiIngress returns true if MdaiIngress instance pointing to an existing Otelcol instance
 func (r *MdaiIngressReconciler) coupledWithMdaiIngress(ctx context.Context, name string, namespace string) bool {
-	return r.onlyOneMdaiIngressPerOtelcol(ctx, name, namespace)
-}
-
-// onlyOneMdaiIngressPerOtelcol returns true if only one MdaiIngress instance per Otelcol exists.
-func (r *MdaiIngressReconciler) onlyOneMdaiIngressPerOtelcol(ctx context.Context, name string, namespace string) bool {
 	log := logger.FromContext(ctx)
 
 	mdaiIngresses := hubv1.MdaiIngressList{}
@@ -263,11 +241,6 @@ func (r *MdaiIngressReconciler) onlyOneMdaiIngressPerOtelcol(ctx context.Context
 		client.MatchingFields{MdaiIngressOtelColLookupKey: compositeKey},
 	); err != nil {
 		log.Error(err, "Failed to list MdaiIngresses", "namespace", namespace)
-		return false
-	}
-
-	if len(mdaiIngresses.Items) > 1 {
-		log.Error(errors.New("multiple MdaiIngress instances"), "Multiple MdaiIngress instances referencing the same Otelcol", "namespace", namespace, "name", name)
 		return false
 	}
 
@@ -297,14 +270,18 @@ func (r *MdaiIngressReconciler) mdaiIngressPredicates(ctx context.Context) predi
 			if !ok {
 				return false
 			}
-			return r.coupledWithOtelcol(ctx, cr.Name, cr.Namespace)
+			return r.otelColExists(ctx, cr.Spec.OtelCollector.Name, cr.Spec.OtelCollector.Namespace)
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			newCr, ok := e.ObjectNew.(*hubv1.MdaiIngress)
 			if !ok {
 				return false
 			}
-			return r.coupledWithOtelcol(ctx, newCr.Name, newCr.Namespace)
+			oldCr, ok := e.ObjectOld.(*hubv1.MdaiIngress)
+			if !ok {
+				return false
+			}
+			return r.otelColExists(ctx, newCr.Spec.OtelCollector.Name, newCr.Spec.OtelCollector.Namespace) || r.otelColExists(ctx, oldCr.Spec.OtelCollector.Name, oldCr.Spec.OtelCollector.Namespace)
 		},
 		DeleteFunc:  func(e event.DeleteEvent) bool { return false },
 		GenericFunc: func(e event.GenericEvent) bool { return false },

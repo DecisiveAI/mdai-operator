@@ -6,14 +6,19 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/go-logr/zapr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+
+	"github.com/go-logr/zapr"
 	otelv1beta1 "github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -22,10 +27,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
@@ -59,6 +63,7 @@ var _ = Describe("MdaiIngress Controller", func() {
 				GrpcService:    &hubv1.IngressService{Type: "NodePort"},
 				NonGrpcService: &hubv1.IngressService{Type: "NodePort"},
 				CloudType:      hubv1.CloudProviderAws,
+				OtelCollector:  hubv1.NamespacedName{Namespace: "some", Name: "other"},
 			},
 		}
 
@@ -77,10 +82,7 @@ var _ = Describe("MdaiIngress Controller", func() {
 						GrpcService:    &hubv1.IngressService{Type: "NodePort"},
 						NonGrpcService: &hubv1.IngressService{Type: "NodePort"},
 						CloudType:      hubv1.CloudProviderAws,
-						OtelCollector: hubv1.NamespacedName{
-							Namespace: "default",
-							Name:      "otel-collector",
-						},
+						OtelCollector:  hubv1.NamespacedName{Namespace: "some", Name: "other"},
 					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -121,9 +123,48 @@ var _ = Describe("MdaiIngress Controller", func() {
 			})
 			Expect(errMgr).NotTo(HaveOccurred())
 
+			err := setMdaiIngressndexers(mgr)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = mgr.GetFieldIndexer().IndexField(
+				ctx,
+				&corev1.Service{},
+				resourceOwnerKey,
+				func(rawObj client.Object) []string {
+					service, ok := rawObj.(*corev1.Service)
+					if !ok {
+						return nil
+					}
+					owners := service.GetOwnerReferences()
+					if len(owners) == 0 {
+						return nil
+					}
+					return []string{owners[0].Name}
+				})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = mgr.GetFieldIndexer().IndexField(
+				ctx,
+				&networkingv1.Ingress{},
+				resourceOwnerKey,
+				func(rawObj client.Object) []string {
+					service, ok := rawObj.(*corev1.Service)
+					if !ok {
+						return nil
+					}
+					owners := service.GetOwnerReferences()
+					if len(owners) == 0 {
+						return nil
+					}
+					return []string{owners[0].Name}
+				})
+			Expect(err).NotTo(HaveOccurred())
+
+			logger := zap.NewNop()
 			controllerReconciler := &MdaiIngressReconciler{
 				Client: mgr.GetClient(),
 				Scheme: mgr.GetScheme(),
+				Logger: logger,
 			}
 
 			go func() {
@@ -190,70 +231,10 @@ func TestOnlyOneMdaiIngressPerOtelcol_SingleRef(t *testing.T) {
 		Scheme: scheme,
 	}
 
-	ok := r.onlyOneMdaiIngressPerOtelcol(ctx, "gateway", "default")
+	ok := r.otelColExists(ctx, "gateway", "default")
 	require.True(t, ok)
 
 	_ = zapLog.Sync()
-}
-
-func TestOnlyOneMdaiIngressPerOtelcol_MultipleRefs(t *testing.T) {
-	scheme := createTestScheme()
-
-	var buf bytes.Buffer
-	zapLog := makeBufferLogger(&buf)
-	logger := zapr.NewLogger(zapLog)
-	ctx := log.IntoContext(context.TODO(), logger)
-
-	otelcol := otelv1beta1.OpenTelemetryCollector{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "gateway",
-			Namespace: "default",
-		},
-		Spec: otelv1beta1.OpenTelemetryCollectorSpec{
-			Config: otelv1beta1.Config{},
-		},
-	}
-
-	mdaiIngress1 := &hubv1.MdaiIngress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "mdai-ingress1",
-			Namespace: "default",
-		},
-		Spec: hubv1.MdaiIngressSpec{
-			OtelCollector: hubv1.NamespacedName{
-				Namespace: "default",
-				Name:      "gateway",
-			},
-		},
-	}
-
-	mdaiIngress2 := &hubv1.MdaiIngress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "mdai-ingress2",
-			Namespace: "default",
-		},
-		Spec: hubv1.MdaiIngressSpec{
-			OtelCollector: hubv1.NamespacedName{
-				Namespace: "default",
-				Name:      "gateway",
-			},
-		},
-	}
-
-	fakeClient := fakeClient(scheme, &otelcol, mdaiIngress1, mdaiIngress2)
-
-	r := &MdaiIngressReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
-	}
-
-	ok := r.onlyOneMdaiIngressPerOtelcol(ctx, "gateway", "default")
-	require.False(t, ok)
-
-	_ = zapLog.Sync()
-
-	logs := buf.String()
-	require.Contains(t, logs, "Multiple MdaiIngress instances referencing the same Otelcol")
 }
 
 func TestCoupledWithOtelcol(t *testing.T) {
@@ -264,9 +245,9 @@ func TestCoupledWithOtelcol(t *testing.T) {
 	logger := zapr.NewLogger(zapLog)
 	ctx := log.IntoContext(context.TODO(), logger)
 
-	otelcol := otelv1beta1.OpenTelemetryCollector{
+	otelcol1 := otelv1beta1.OpenTelemetryCollector{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "gateway",
+			Name:      "gateway1",
 			Namespace: "default",
 		},
 		Spec: otelv1beta1.OpenTelemetryCollectorSpec{
@@ -274,7 +255,17 @@ func TestCoupledWithOtelcol(t *testing.T) {
 		},
 	}
 
-	mdaiIngress1 := &hubv1.MdaiIngress{
+	otelcol2 := otelv1beta1.OpenTelemetryCollector{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gateway2",
+			Namespace: "default",
+		},
+		Spec: otelv1beta1.OpenTelemetryCollectorSpec{
+			Config: otelv1beta1.Config{},
+		},
+	}
+
+	mdaiIngress := &hubv1.MdaiIngress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "mdai-ingress1",
 			Namespace: "default",
@@ -282,36 +273,20 @@ func TestCoupledWithOtelcol(t *testing.T) {
 		Spec: hubv1.MdaiIngressSpec{
 			OtelCollector: hubv1.NamespacedName{
 				Namespace: "default",
-				Name:      "gateway",
+				Name:      "gateway1",
 			},
 		},
 	}
 
-	mdaiIngress2 := &hubv1.MdaiIngress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "mdai-ingress2",
-			Namespace: "default",
-		},
-		Spec: hubv1.MdaiIngressSpec{
-			OtelCollector: hubv1.NamespacedName{
-				Namespace: "default",
-				Name:      "non-existent",
-			},
-		},
-	}
-
-	fakeClient := fakeClient(scheme, &otelcol, mdaiIngress1, mdaiIngress2)
+	fakeClient := fakeClient(scheme, &otelcol1, &otelcol2, mdaiIngress)
 
 	r := &MdaiIngressReconciler{
 		Client: fakeClient,
 		Scheme: scheme,
 	}
 
-	ok := r.coupledWithOtelcol(ctx, "mdai-ingress1", "default")
+	ok := r.otelColExists(ctx, "gateway1", "default")
 	require.True(t, ok)
-
-	ok = r.coupledWithOtelcol(ctx, "mdai-ingress2", "default")
-	require.False(t, ok)
 }
 
 func makeBufferLogger(buf *bytes.Buffer) *zap.Logger {
@@ -323,4 +298,26 @@ func makeBufferLogger(buf *bytes.Buffer) *zap.Logger {
 		zapcore.DebugLevel, // capture Info and Debug logs
 	)
 	return zap.New(core)
+}
+
+func setMdaiIngressndexers(mgr manager.Manager) error {
+	// composite index for MdaiIngress
+	indexerOtelCol := func(obj client.Object) []string {
+		a, ok := obj.(*hubv1.MdaiIngress)
+		if !ok {
+			return nil
+		}
+		otelCol := a.Spec.OtelCollector
+		if otelCol.Name != "" && otelCol.Namespace != "" {
+			return []string{fmt.Sprintf("%s/%s", otelCol.Namespace, otelCol.Name)}
+		}
+		return nil
+	}
+
+	return mgr.GetFieldIndexer().IndexField(
+		context.TODO(),
+		&hubv1.MdaiIngress{},
+		MdaiIngressOtelColLookupKey,
+		indexerOtelCol,
+	)
 }
