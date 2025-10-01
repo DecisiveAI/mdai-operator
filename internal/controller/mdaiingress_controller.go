@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/decisiveai/mdai-operator/internal/manifests"
 	"github.com/decisiveai/mdai-operator/internal/manifests/collector"
@@ -161,6 +162,7 @@ func (r *MdaiIngressReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&v1beta1.OpenTelemetryCollector{},
 			handler.EnqueueRequestsFromMapFunc(r.requeueByCollectorRef),
+			builder.WithPredicates(r.otelcolPredicates()),
 		).
 		Complete(r)
 }
@@ -307,10 +309,39 @@ func (r *MdaiIngressReconciler) mdaiIngressPredicates(ctx context.Context) predi
 			if !ok {
 				return false
 			}
+			if reflect.DeepEqual(oldCr.Spec, newCr.Spec) {
+				return false
+			}
 			return r.otelColExists(ctx, newCr.Spec.OtelCollector.Name, newCr.Spec.OtelCollector.Namespace) || r.otelColExists(ctx, oldCr.Spec.OtelCollector.Name, oldCr.Spec.OtelCollector.Namespace)
 		},
 		DeleteFunc:  func(e event.DeleteEvent) bool { return false },
 		GenericFunc: func(e event.GenericEvent) bool { return false },
+	}
+}
+
+// nolint:revive
+func (r *MdaiIngressReconciler) otelcolPredicates() predicate.Funcs {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldCR, ok := e.ObjectOld.(*v1beta1.OpenTelemetryCollector)
+			if !ok {
+				return false
+			}
+			newCR, ok := e.ObjectNew.(*v1beta1.OpenTelemetryCollector)
+			if !ok {
+				return false
+			}
+			return !reflect.DeepEqual(oldCR.Spec.Config, newCR.Spec.Config)
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			return true
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return true
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			return false
+		},
 	}
 }
 
