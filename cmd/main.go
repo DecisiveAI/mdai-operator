@@ -285,7 +285,7 @@ func main() {
 		gracefullyShutdownWithCode(1)
 	}
 
-	if err := controller.SetMdaiIngressIndexers(mgr); err != nil {
+	if err := controller.SetMdaiIngressIndexers(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create indexers", "controller", "MdaiIngress")
 		gracefullyShutdownWithCode(1)
 	}

@@ -1,7 +1,7 @@
 apiVersion: hub.mydecisive.ai/v1
 kind: MdaiIngress
 metadata:
-  name: gateway
+  name: for-gateway
   namespace: mdai
 spec:
   otelCollector:

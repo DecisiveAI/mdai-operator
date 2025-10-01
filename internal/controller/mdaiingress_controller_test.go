@@ -109,7 +109,7 @@ var _ = Describe("MdaiIngress Controller", func() {
 			})
 			Expect(errMgr).NotTo(HaveOccurred())
 
-			err := SetMdaiIngressIndexers(mgr)
+			err := SetMdaiIngressIndexers(ctx, mgr)
 			Expect(err).NotTo(HaveOccurred())
 
 			err = mgr.GetFieldIndexer().IndexField(
