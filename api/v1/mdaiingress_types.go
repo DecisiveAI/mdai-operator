@@ -17,8 +17,10 @@ const (
 )
 
 type NamespacedName struct {
+	// +kubebuilder:validation:MinLength=1
 	Namespace string `json:"namespace"`
-	Name      string `json:"name"`
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
 }
 
 // IngressService defines Service properties related to Ingress configuration.

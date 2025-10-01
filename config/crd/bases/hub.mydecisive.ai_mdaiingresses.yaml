@@ -111,8 +111,10 @@ spec:
                   Resource belongs to.
                 properties:
                   name:
+                    minLength: 1
                     type: string
                   namespace:
+                    minLength: 1
                     type: string
                 required:
                 - name
