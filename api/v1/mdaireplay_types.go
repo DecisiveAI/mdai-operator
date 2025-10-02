@@ -27,6 +27,7 @@ type MdaiReplayS3Configuration struct {
 	S3Region    string                `json:"s3Region" yaml:"s3_region"`
 	S3Bucket    string                `json:"s3Bucket" yaml:"s3_bucket"`
 	FilePrefix  string                `json:"filePrefix" yaml:"file_prefix"`
+	S3Path      string                `json:"s3Path" yaml:"s3_path"`
 	S3Partition MdaiReplayS3Partition `json:"s3Partition" yaml:"s3_partition"`
 }
 
@@ -46,13 +47,19 @@ type MdaiReplayDestinationConfiguration struct {
 	OtlpHttp *MdaiReplayOtlpHttpDestinationConfiguration `json:"otlpHttp,omitempty" yaml:"otlp_http,omitempty"`
 }
 
+type MdaiReplayResourceConfiguration struct {
+	Image string `json:"image" yaml:"image"`
+}
+
 // MdaiReplaySpec defines the desired state of MdaiReplay.
 type MdaiReplaySpec struct {
+	HubName       string                             `json:"hub_name" yaml:"hub_name"`
 	StartTime     *metav1.Time                       `json:"startTime,omitempty" yaml:"start_time,omitempty"`
 	EndTime       *metav1.Time                       `json:"endTime,omitempty" yaml:"end_time,omitempty"`
 	TelemetryType MdaiReplayTelemetryType            `json:"telemetryType,omitempty" yaml:"telemetry_type,omitempty"`
 	Source        MdaiReplaySourceConfiguration      `json:"source,omitempty" yaml:"source,omitempty"`
 	Destination   MdaiReplayDestinationConfiguration `json:"destination,omitempty" yaml:"destination,omitempty"`
+	Resource      MdaiReplayResourceConfiguration    `json:"resource,omitempty" yaml:"resource,omitempty"`
 }
 
 type MdaiReplayStatusType string

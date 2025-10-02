@@ -52,7 +52,7 @@ func (r *MdaiReplayReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	_, err := r.ReconcileHandler(ctx, *NewReplayAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme))
+	_, err := r.ReconcileHandler(ctx, *NewMdaiReplayAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme))
 	if err != nil {
 		return ctrl.Result{}, err
 	}
