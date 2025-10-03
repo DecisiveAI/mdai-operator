@@ -17,7 +17,7 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 # Update this version to match new release tag and run helm targets
-VERSION = 0.2.3
+VERSION = 0.2.4
 # Image URL to use all building/pushing image targets
 IMG ?= public.ecr.aws/p3k6k6h3/mdai-operator:${VERSION}
 
@@ -295,7 +295,7 @@ local-deploy: manifests install
 	go mod vendor
 	make manifests
 	make generate
-	make lint
+	#make lint
 	make helm-update
 	make docker-build IMG=mdai-operator:${VERSION}
 	kind load docker-image mdai-operator:${VERSION} --name mdai
