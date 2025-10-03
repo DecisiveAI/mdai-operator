@@ -77,9 +77,8 @@ var _ = Describe("MdaiIngress Webhook", func() {
 					Namespace: "ns",
 				},
 				Spec: mdaiv1.MdaiIngressSpec{
-					OtelCollector: mdaiv1.NamespacedName{
-						Name:      "otel",
-						Namespace: "ns",
+					OtelCollector: mdaiv1.OtelColRef{
+						Name: "otel",
 					},
 				},
 			}
@@ -90,9 +89,8 @@ var _ = Describe("MdaiIngress Webhook", func() {
 					Namespace: "ns",
 				},
 				Spec: mdaiv1.MdaiIngressSpec{
-					OtelCollector: mdaiv1.NamespacedName{
-						Name:      "otel",
-						Namespace: "ns",
+					OtelCollector: mdaiv1.OtelColRef{
+						Name: "otel",
 					},
 				},
 			}
@@ -104,10 +102,10 @@ var _ = Describe("MdaiIngress Webhook", func() {
 			cl := builder.WithIndex(&mdaiv1.MdaiIngress{}, controller.MdaiIngressOtelColLookupKey, func(obj client.Object) []string {
 				ing, ok := obj.(*mdaiv1.MdaiIngress)
 				Expect(ok).To(BeTrue())
-				if ing.Spec.OtelCollector.Name == "" || ing.Spec.OtelCollector.Namespace == "" {
+				if ing.Spec.OtelCollector.Name == "" {
 					return nil
 				}
-				return []string{fmt.Sprintf("%s/%s", ing.Spec.OtelCollector.Namespace, ing.Spec.OtelCollector.Name)}
+				return []string{fmt.Sprintf("%s", ing.Spec.OtelCollector.Name)}
 			}).
 				Build()
 
@@ -115,7 +113,7 @@ var _ = Describe("MdaiIngress Webhook", func() {
 
 			_, err := validator.Validate(ctx, ingress2)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("OtelCol reference ns/otel is already used by MdaiIngress ns/a"))
+			Expect(err.Error()).To(ContainSubstring("OtelCol reference is already used by MdaiIngress ns/a"))
 		})
 	})
 })

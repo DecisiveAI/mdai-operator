@@ -121,11 +121,10 @@ func (v *MdaiIngressCustomValidator) Validate(ctx context.Context, mdaiIngress *
 		return warnings, errors.New("webhook client not initialized")
 	}
 
-	otelKey := fmt.Sprintf("%s/%s", mdaiIngress.Spec.OtelCollector.Namespace, mdaiIngress.Spec.OtelCollector.Name)
-
 	var list mdaiv1.MdaiIngressList
 	if err := v.client.List(ctx, &list,
-		client.MatchingFields{controller.MdaiIngressOtelColLookupKey: otelKey},
+		client.InNamespace(mdaiIngress.Namespace),
+		client.MatchingFields{controller.MdaiIngressOtelColLookupKey: mdaiIngress.Spec.OtelCollector.Name},
 	); err != nil {
 		return warnings, apierrors.NewInternalError(err)
 	}
@@ -134,8 +133,8 @@ func (v *MdaiIngressCustomValidator) Validate(ctx context.Context, mdaiIngress *
 		if other.Name == mdaiIngress.Name && other.Namespace == mdaiIngress.Namespace {
 			continue
 		}
-		return warnings, fmt.Errorf("OtelCol reference %s is already used by MdaiIngress %s/%s",
-			otelKey, other.Namespace, other.Name)
+		return warnings, fmt.Errorf("OtelCol reference is already used by MdaiIngress %s/%s",
+			other.Namespace, other.Name)
 	}
 
 	return warnings, nil

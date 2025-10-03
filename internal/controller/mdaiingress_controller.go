@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"errors"
-	"fmt"
 	"reflect"
 
 	"github.com/decisiveai/mdai-operator/internal/manifests"
@@ -30,7 +29,7 @@ import (
 
 const (
 	resourceOwnerKey            = "metadata.ownerReferences.name"
-	MdaiIngressOtelColLookupKey = "spec.otelCol.compositeKey"
+	MdaiIngressOtelColLookupKey = "spec.otelCol.lookupKey"
 )
 
 // MdaiIngressReconciler reconciles a MdaiIngress object
@@ -49,8 +48,8 @@ var IndexerOtelCol = func(obj client.Object) []string {
 		return nil
 	}
 	otelCol := a.Spec.OtelCollector
-	if otelCol.Name != "" && otelCol.Namespace != "" {
-		return []string{fmt.Sprintf("%s/%s", otelCol.Namespace, otelCol.Name)}
+	if otelCol.Name != "" {
+		return []string{otelCol.Name}
 	}
 	return nil
 }
@@ -78,12 +77,11 @@ func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	otelcolName := instanceMdaiIngress.Spec.OtelCollector.Name
-	otelcolNamespace := instanceMdaiIngress.Spec.OtelCollector.Namespace
-	if otelcolName == "" || otelcolNamespace == "" {
+	if otelcolName == "" {
 		log.Error(ErrIncorrectOtelcolRef, "No OtelCollector reference in MdaiIngress", "name", req.Name, "namespace", req.Namespace)
 		return ctrl.Result{}, ErrIncorrectOtelcolRef
 	}
-	otelcolNsName := types.NamespacedName{Name: otelcolName, Namespace: otelcolNamespace}
+	otelcolNsName := types.NamespacedName{Name: otelcolName, Namespace: req.Namespace}
 
 	var instanceOtel v1beta1.OpenTelemetryCollector
 	if err := r.Get(ctx, otelcolNsName, &instanceOtel); err != nil {
@@ -187,7 +185,7 @@ func (r *MdaiIngressReconciler) requeueByCollectorRef(ctx context.Context, obj c
 		return []ctrl.Request{}
 	}
 
-	mdaiIngressNsname, found := r.findMdaiIngress(ctx, cr.Name, cr.Namespace)
+	mdaiIngressName, found := r.findMdaiIngress(ctx, cr.Name, cr.Namespace)
 	if !found {
 		return []ctrl.Request{}
 	}
@@ -197,8 +195,8 @@ func (r *MdaiIngressReconciler) requeueByCollectorRef(ctx context.Context, obj c
 	return []ctrl.Request{
 		{
 			NamespacedName: types.NamespacedName{
-				Name:      mdaiIngressNsname.Name,
-				Namespace: mdaiIngressNsname.Namespace,
+				Name:      mdaiIngressName,
+				Namespace: cr.Namespace,
 			},
 		},
 	}
@@ -224,7 +222,7 @@ func (r *MdaiIngressReconciler) findMdaiIngressOwnedObjects(ctx context.Context,
 	ownedObjects := map[types.UID]client.Object{}
 	ownedObjectTypes := GetOwnedResourceTypes()
 	listOpts := []client.ListOption{
-		client.InNamespace(params.OtelMdaiIngressComb.Otelcol.Namespace),
+		client.InNamespace(params.OtelMdaiIngressComb.MdaiIngress.Namespace),
 		client.MatchingFields{resourceOwnerKey: params.OtelMdaiIngressComb.MdaiIngress.Name},
 	}
 	for _, objectType := range ownedObjectTypes {
@@ -255,28 +253,24 @@ func (r *MdaiIngressReconciler) otelColExists(ctx context.Context, name string, 
 }
 
 // findMdaiIngress returns the NamespacedName of the MdaiIngress instance with the given name and namespace.
-func (r *MdaiIngressReconciler) findMdaiIngress(ctx context.Context, name string, namespace string) (hubv1.NamespacedName, bool) {
+func (r *MdaiIngressReconciler) findMdaiIngress(ctx context.Context, name string, namespace string) (string, bool) {
 	log := logger.FromContext(ctx)
 
 	mdaiIngresses := hubv1.MdaiIngressList{}
-	compositeKey := fmt.Sprintf("%s/%s", namespace, name)
 	if err := r.List(ctx, &mdaiIngresses,
 		client.InNamespace(namespace),
-		client.MatchingFields{MdaiIngressOtelColLookupKey: compositeKey},
+		client.MatchingFields{MdaiIngressOtelColLookupKey: name},
 	); err != nil {
 		log.Error(err, "Failed to list MdaiIngresses", "namespace", namespace)
-		return hubv1.NamespacedName{}, false
+		return "", false
 	}
 
 	if len(mdaiIngresses.Items) == 0 {
 		log.Info("No MdaiIngress found", "namespace", namespace)
-		return hubv1.NamespacedName{}, false
+		return "", false
 	}
 
-	result := hubv1.NamespacedName{
-		Namespace: mdaiIngresses.Items[0].Namespace,
-		Name:      mdaiIngresses.Items[0].Name,
-	}
+	result := mdaiIngresses.Items[0].Name
 
 	return result, true
 }
@@ -299,7 +293,7 @@ func (r *MdaiIngressReconciler) mdaiIngressPredicates(ctx context.Context) predi
 			if !ok {
 				return false
 			}
-			return r.otelColExists(ctx, cr.Spec.OtelCollector.Name, cr.Spec.OtelCollector.Namespace)
+			return r.otelColExists(ctx, cr.Spec.OtelCollector.Name, cr.Namespace)
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			newCr, ok := e.ObjectNew.(*hubv1.MdaiIngress)
@@ -313,7 +307,7 @@ func (r *MdaiIngressReconciler) mdaiIngressPredicates(ctx context.Context) predi
 			if reflect.DeepEqual(oldCr.Spec, newCr.Spec) {
 				return false
 			}
-			return r.otelColExists(ctx, newCr.Spec.OtelCollector.Name, newCr.Spec.OtelCollector.Namespace) || r.otelColExists(ctx, oldCr.Spec.OtelCollector.Name, oldCr.Spec.OtelCollector.Namespace)
+			return r.otelColExists(ctx, newCr.Spec.OtelCollector.Name, newCr.Namespace) || r.otelColExists(ctx, oldCr.Spec.OtelCollector.Name, oldCr.Namespace)
 		},
 		DeleteFunc:  func(e event.DeleteEvent) bool { return false },
 		GenericFunc: func(e event.GenericEvent) bool { return false },

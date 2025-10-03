@@ -16,9 +16,8 @@ const (
 	CloudProviderAws CloudProvider = "aws"
 )
 
-type NamespacedName struct {
-	// +kubebuilder:validation:MinLength=1
-	Namespace string `json:"namespace"`
+// OtelColRef represents reference to Otel Collector Custom Resource
+type OtelColRef struct {
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 }
@@ -35,8 +34,8 @@ type IngressService struct {
 
 // MdaiIngressSpec defines the desired state of MdaiIngress
 type MdaiIngressSpec struct {
-	// Namespaced named of the Otel Collector, current Custom Resource belongs to.
-	OtelCollector NamespacedName `json:"otelCollector"`
+	// Name of the Otel Collector, current Custom Resource belongs to.
+	OtelCollector OtelColRef `json:"otelCollector"`
 
 	// Supported types are: aws
 	CloudType CloudProvider `json:"cloudType"`
