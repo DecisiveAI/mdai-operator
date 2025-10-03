@@ -133,6 +133,7 @@ func (c MdaiReplayAdapter) ensureStatusSetToDone(ctx context.Context) (Operation
 }
 
 func (c MdaiReplayAdapter) ensureSynchronized(ctx context.Context) (OperationResult, error) {
+	c.logger.Info("🐙 Synchronizing MdaiReplay 💬")
 	hash, err := c.createOrUpdateReplayerConfigMap(ctx)
 	if err != nil {
 		return RequeueWithError(err)
@@ -174,6 +175,7 @@ func (c MdaiReplayAdapter) ensureSynchronized(ctx context.Context) (OperationRes
 	//	return RequeueWithError(err)
 	//}
 
+	c.logger.Info("🐙 MdaiReplay sync finished ✅")
 	return ContinueProcessing()
 }
 
@@ -187,7 +189,7 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerConfigMap(ctx context.Context) 
 	collectorYAML, err := c.getReplayCollectorConfigYAML(c.replayCR.Name, c.replayCR.Spec.HubName)
 
 	if err != nil {
-		return "", fmt.Errorf("failed to build replay configuration: %w", err)
+		return "", fmt.Errorf("‼️failed to build replay configuration: %w", err)
 	}
 
 	desiredConfigMap := &corev1.ConfigMap{
@@ -207,7 +209,7 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerConfigMap(ctx context.Context) 
 	}
 
 	if err := controllerutil.SetControllerReference(c.replayCR, desiredConfigMap, c.scheme); err != nil {
-		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", configMapName)
+		c.logger.Error(err, "‼️Failed to set owner reference on ConfigMap", "configmap", configMapName)
 		return "", err
 	}
 
@@ -216,11 +218,11 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerConfigMap(ctx context.Context) 
 		return nil
 	})
 	if err != nil {
-		c.logger.Error(err, "Failed to create or update ConfigMap", "configmap", configMapName)
+		c.logger.Error(err, "‼️Failed to create or update ConfigMap", "configmap", configMapName)
 		return "", err
 	}
 
-	c.logger.Info("ConfigMap created or updated successfully", "configmap", configMapName, "operation", operationResult)
+	c.logger.Info("‼️ConfigMap created or updated successfully", "configmap", configMapName, "operation", operationResult)
 	return getConfigMapSHA(*desiredConfigMap)
 }
 
@@ -290,7 +292,7 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerDeployment(ctx context.Context,
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, deployment, func() error {
 		if err := controllerutil.SetControllerReference(c.replayCR, deployment, c.scheme); err != nil {
-			c.logger.Error(err, "Failed to set owner reference on Deployment", "deployment", deployment.Name)
+			c.logger.Error(err, "‼️Failed to set owner reference on Deployment", "deployment", deployment.Name)
 			return err
 		}
 
@@ -390,7 +392,7 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerDeployment(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	c.logger.Info("Deployment created or updated successfully", "deployment", deployment.Name, "operationResult", operationResult)
+	c.logger.Info("✅ Deployment created or updated successfully", "deployment", deployment.Name, "operationResult", operationResult)
 
 	return nil
 }
@@ -438,10 +440,10 @@ func (c MdaiReplayAdapter) createOrUpdatReplayerService(ctx context.Context) err
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create or update %s: %w", name, err)
+		return fmt.Errorf("‼️failed to create or update %s: %w", name, err)
 	}
 
-	c.logger.Info("Successfully created or updated "+name, "service", name, "namespace", c.replayCR.Namespace, "operation", operationResult)
+	c.logger.Info("✅ Successfully created or updated "+name, "service", name, "namespace", c.replayCR.Namespace, "operation", operationResult)
 	return nil
 }
 
@@ -455,14 +457,14 @@ func (c MdaiReplayAdapter) finalize(ctx context.Context) (ObjectState, error) {
 		return ObjectModified, nil
 	}
 
-	c.logger.Info("Performing Finalizer Operations for MdaiReplay before delete CR")
+	c.logger.Info("💬Performing Finalizer Operations for MdaiReplay before delete CR")
 
 	if err := c.client.Get(ctx, types.NamespacedName{Name: c.replayCR.Name, Namespace: c.replayCR.Namespace}, c.replayCR); err != nil {
 		if apierrors.IsNotFound(err) {
-			c.logger.Info("MdaiReplay has been deleted, no need to finalize")
+			c.logger.Info("✅MdaiReplay has been deleted, no need to finalize")
 			return ObjectModified, nil
 		}
-		c.logger.Error(err, "Failed to re-fetch MdaiReplay")
+		c.logger.Error(err, "‼️Failed to re-fetch MdaiReplay")
 		return ObjectUnchanged, err
 	}
 
