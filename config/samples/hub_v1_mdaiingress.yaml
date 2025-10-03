@@ -1,9 +1,11 @@
 apiVersion: hub.mydecisive.ai/v1
 kind: MdaiIngress
 metadata:
-  name: gateway
+  name: for-gateway
   namespace: mdai
 spec:
+  otelCollector:
+    name: gateway
   cloudType: aws
   annotations:
     alb.ingress.kubernetes.io/certificate-arn: 'arn:aws:acm:${AWS_REGION}:${AWS_ACCOUNT}:certificate/${AWS_CERT_ARN}'

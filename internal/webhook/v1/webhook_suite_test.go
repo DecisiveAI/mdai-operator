@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -22,6 +21,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -94,6 +95,9 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = SetupMdaiObserverWebhookWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = SetupMdaiIngressWebhookWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:webhook
