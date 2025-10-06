@@ -50,9 +50,10 @@ spec:
                     type: object
                 type: object
               endTime:
-                format: date-time
                 type: string
-              hub_name:
+              hubName:
+                type: string
+              opampEndpoint:
                 type: string
               resource:
                 properties:
@@ -89,12 +90,12 @@ spec:
                     type: object
                 type: object
               startTime:
-                format: date-time
                 type: string
               telemetryType:
                 type: string
             required:
-            - hub_name
+            - hubName
+            - opampEndpoint
             type: object
           status:
             description: MdaiReplayStatus defines the observed state of MdaiReplay.

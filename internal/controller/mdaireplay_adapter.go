@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
@@ -32,7 +31,7 @@ const (
 	replayCollectorHubComponent = "mdai-replay"
 )
 
-//go:embed config/observer_base_collector_config.yaml
+//go:embed config/replay_collector_base_config.yaml
 var baseReplayCollectorYaml string
 
 var _ Adapter = (*MdaiReplayAdapter)(nil)
@@ -230,7 +229,7 @@ func (c MdaiReplayAdapter) getReplayCollectorConfigYAML(replayId string, hubName
 	replayCRSpec := c.replayCR.Spec
 	var config builder.ConfigBlock
 
-	if err := yaml.Unmarshal([]byte(baseObserverCollectorYAML), &config); err != nil {
+	if err := yaml.Unmarshal([]byte(baseReplayCollectorYaml), &config); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base collector config")
 		return "", fmt.Errorf(`unmarshal base collector config: %w`, err)
 	}
@@ -249,17 +248,19 @@ func (c MdaiReplayAdapter) getReplayCollectorConfigYAML(replayId string, hubName
 
 	// Add otlphttp exporter if otlphttp destination is set
 	otlpEndpoint := replayCRSpec.Destination.OtlpHttp.Endpoint
-	if otlpEndpoint == "" {
-		config.MustMap("exporters").Set("otlphttp", map[string]any{
+	if otlpEndpoint != "" {
+		exporters := config.MustMap("exporters")
+		exporters.Set("otlphttp", map[string]any{
 			"endpoint": otlpEndpoint,
 		})
+		config.Set("exporters", exporters)
 		logsReplayPipeline := config.MustMap("service").MustMap("pipelines").MustMap("logs/replay")
 		logsReplayExporters := append(logsReplayPipeline.MustSlice("exporters"), "otlphttp")
 		logsReplayPipeline.Set("exporters", logsReplayExporters)
 	}
 
 	// Add S3 receiver thangz
-	s3ReceiverConfig := config.MustMap("receivers").MustMap("awws3")
+	s3ReceiverConfig := config.MustMap("receivers").MustMap("awss3")
 	s3DownloaderConfig := s3ReceiverConfig.MustMap("s3downloader")
 	s3ReceiverConfig.Set("starttime", replayCRSpec.StartTime)
 	s3ReceiverConfig.Set("endtime", replayCRSpec.EndTime)
@@ -272,10 +273,13 @@ func (c MdaiReplayAdapter) getReplayCollectorConfigYAML(replayId string, hubName
 	// Set up OpAMP Agent config
 	opampExtension := config.MustMap("extensions").MustMap("opamp")
 	agentDescription := opampExtension.MustMap("agent_description")
-	agentDescription.Set(replayNameKey, replayId)
-	agentDescription.Set("hub_name", hubName)
+	replayerAttributes := agentDescription.MustMap("non_identifying_attributes")
+	replayerAttributes.Set(replayNameKey, replayId)
+	replayerAttributes.Set("hub_name", hubName)
+	agentDescription.Set("non_identifying_attributes", replayerAttributes)
 	opampServer := opampExtension.MustMap("server")
-	opampServer.MustMap("http").Set("endpoint", "TODO MDAI-GATEWAY SERVICE HERE")
+	opampServer.MustMap("http").Set("endpoint", replayCRSpec.OpAMPEndpoint)
+	opampExtension.Set("server", opampServer)
 
 	return config.YAML()
 }
@@ -296,86 +300,42 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerDeployment(ctx context.Context,
 			return err
 		}
 
-		if deployment.Labels == nil {
-			deployment.Labels = map[string]string{
-				"app":                 name,
-				HubComponentLabel:     replayCollectorHubComponent,
-				hubNameLabel:          c.replayCR.Spec.HubName,
-				LabelManagedByMdaiKey: LabelManagedByMdaiValue,
-			}
-		}
-
-		deployment.Spec.Replicas = int32Ptr(1)
-		//if observerResource.Replicas != nil {
-		//	deployment.Spec.Replicas = observerResource.Replicas
-		//}
-		//if deployment.Spec.Selector == nil {
-		//	deployment.Spec.Selector = &metav1.LabelSelector{}
-		//}
-		//if deployment.Spec.Selector.MatchLabels == nil {
-		//	deployment.Spec.Selector.MatchLabels = make(map[string]string)
-		//}
-		//deployment.Spec.Selector.MatchLabels["app"] = name
-		//
-		//if deployment.Spec.Template.Labels == nil {
-		//	deployment.Spec.Template.Labels = make(map[string]string)
-		//}
-		//deployment.Spec.Template.Labels["app"] = name
-		//deployment.Spec.Template.Labels["app.kubernetes.io/component"] = name
-		//
-		//if deployment.Spec.Template.Annotations == nil {
-		//	deployment.Spec.Template.Annotations = make(map[string]string)
-		//}
-		//deployment.Spec.Template.Annotations["prometheus.io/path"] = "/metrics"
-		//deployment.Spec.Template.Annotations["prometheus.io/port"] = "8899"
-		//deployment.Spec.Template.Annotations["prometheus.io/scrape"] = "true"
-		//// FIXME: replace this annotation with mdai_observer_resource in other hub components (prometheus scraping config)
-		//deployment.Spec.Template.Annotations["mdai_component_type"] = "mdai-observer"
-		deployment.Spec.Template.Annotations["replay-collector-config/sha256"] = configHash
-
-		containerSpec := corev1.Container{
-			Name:  name,
-			Image: replayerDefaultImage,
-			Ports: []corev1.ContainerPort{
-				{ContainerPort: otelMetricsPort, Name: "otelcol-metrics"},
-			},
-			VolumeMounts: []corev1.VolumeMount{
-				{
-					Name:      "config-volume",
-					MountPath: "/conf/collector.yaml",
-					SubPath:   "collector.yaml",
-				},
-			},
-			Command: []string{
-				"/otelcontribcol",
-				"--config=/conf/collector.yaml",
-			},
-			SecurityContext: &corev1.SecurityContext{
-				SeccompProfile: &corev1.SeccompProfile{
-					Type: corev1.SeccompProfileTypeRuntimeDefault,
-				},
-				AllowPrivilegeEscalation: ptr.To(false),
-				Capabilities: &corev1.Capabilities{
-					Drop: []corev1.Capability{"ALL"},
-				},
-				RunAsNonRoot: ptr.To(true),
-			},
-		}
-
+		image := replayerDefaultImage
 		if c.replayCR.Spec.Resource.Image != "" {
-			containerSpec.Image = c.replayCR.Spec.Resource.Image
+			image = c.replayCR.Spec.Resource.Image
 		}
-		//
-		//if observerResource.Resources != nil {
-		//	containerSpec.Resources = *observerResource.Resources
-		//}
+		container := builder.Container(name, image).
+			WithCommand("/otelcol-contrib", "--config=/conf/collector.yaml").
+			WithPorts(
+				corev1.ContainerPort{ContainerPort: promHTTPPort, Name: "prom-http"},
+			).
+			WithVolumeMounts(corev1.VolumeMount{
+				Name:      "config-volume",
+				MountPath: "/conf/collector.yaml",
+				SubPath:   "collector.yaml",
+			}).
+			WithEnvFrom(corev1.EnvFromSource{
+				ConfigMapRef: &corev1.ConfigMapEnvSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: c.getReplayerResourceName("collector-config"),
+					},
+				},
+			}).
+			WithAWSSecret(c.replayCR.Spec.Source.AWSConfig.AWSAccessKeySecret).
+			Build()
 
-		deployment.Spec.Template.Spec.Containers = []corev1.Container{
-			containerSpec,
-		}
-
-		deployment.Spec.Template.Spec.Volumes = []corev1.Volume{
-			{
+		builder.Deployment(deployment).
+			WithLabel("app", name).
+			WithLabel(hubNameLabel, c.replayCR.Name).
+			WithLabel(LabelManagedByMdaiKey, LabelManagedByMdaiValue).
+			WithLabel(HubComponentLabel, replayCollectorHubComponent).
+			WithSelectorLabel("app", name).
+			WithTemplateLabel("app", name).
+			WithTemplateLabel("app.kubernetes.io/component", name).
+			WithTemplateAnnotation("replay-collector-config/sha256", configHash).
+			WithReplicas(1).
+			WithContainers(container).
+			WithVolumes(corev1.Volume{
 				Name: "config-volume",
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -384,8 +344,7 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerDeployment(ctx context.Context,
 						},
 					},
 				},
-			},
-		}
+			})
 
 		return nil
 	})

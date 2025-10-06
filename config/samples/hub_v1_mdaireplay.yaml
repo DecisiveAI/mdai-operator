@@ -6,4 +6,20 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: mdaireplay-sample
 spec:
-  # TODO(user): Add fields here
+  hub_name: mdaihub-sample
+  startTime: ""
+  endTime: ""
+  telemetry_type: "logs"
+  source:
+    aws:
+      awsAccessKeySecret: aws-credentials
+    s3:
+      s3_region: ""
+      s3_bucket: ""
+      file_prefix: ""
+      s3_path: ""
+      s3_partition: ""
+  destination:
+    otlp_http:
+        endpoint: ""
+

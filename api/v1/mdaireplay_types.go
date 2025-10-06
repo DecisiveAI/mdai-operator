@@ -20,15 +20,15 @@ const (
 )
 
 type MdaiReplayAwsConfig struct {
-	AWSAccessKeySecret *string `json:"awsAccessKeySecret,omitempty" yaml:"aws_access_key_secret,omitempty"`
+	AWSAccessKeySecret *string `json:"awsAccessKeySecret,omitempty" yaml:"awsAccessKeySecret,omitempty"`
 }
 
 type MdaiReplayS3Configuration struct {
-	S3Region    string                `json:"s3Region" yaml:"s3_region"`
-	S3Bucket    string                `json:"s3Bucket" yaml:"s3_bucket"`
-	FilePrefix  string                `json:"filePrefix" yaml:"file_prefix"`
-	S3Path      string                `json:"s3Path" yaml:"s3_path"`
-	S3Partition MdaiReplayS3Partition `json:"s3Partition" yaml:"s3_partition"`
+	S3Region    string                `json:"s3Region" yaml:"s3Region"`
+	S3Bucket    string                `json:"s3Bucket" yaml:"s3Bucket"`
+	FilePrefix  string                `json:"filePrefix" yaml:"filePrefix"`
+	S3Path      string                `json:"s3Path" yaml:"s3Path"`
+	S3Partition MdaiReplayS3Partition `json:"s3Partition" yaml:"s3Partition"`
 }
 
 type MdaiReplaySourceConfiguration struct {
@@ -44,7 +44,7 @@ type MdaiReplayOtlpHttpDestinationConfiguration struct {
 
 type MdaiReplayDestinationConfiguration struct {
 	// +optional
-	OtlpHttp *MdaiReplayOtlpHttpDestinationConfiguration `json:"otlpHttp,omitempty" yaml:"otlp_http,omitempty"`
+	OtlpHttp *MdaiReplayOtlpHttpDestinationConfiguration `json:"otlpHttp,omitempty" yaml:"otlpHttp,omitempty"`
 }
 
 type MdaiReplayResourceConfiguration struct {
@@ -53,10 +53,11 @@ type MdaiReplayResourceConfiguration struct {
 
 // MdaiReplaySpec defines the desired state of MdaiReplay.
 type MdaiReplaySpec struct {
-	HubName       string                             `json:"hub_name" yaml:"hub_name"`
-	StartTime     *metav1.Time                       `json:"startTime,omitempty" yaml:"start_time,omitempty"`
-	EndTime       *metav1.Time                       `json:"endTime,omitempty" yaml:"end_time,omitempty"`
-	TelemetryType MdaiReplayTelemetryType            `json:"telemetryType,omitempty" yaml:"telemetry_type,omitempty"`
+	OpAMPEndpoint string                             `json:"opampEndpoint" yaml:"opampEndpoint"`
+	HubName       string                             `json:"hubName" yaml:"hubName"`
+	StartTime     string                             `json:"startTime,omitempty" yaml:"startTime,omitempty"`
+	EndTime       string                             `json:"endTime,omitempty" yaml:"endTime,omitempty"`
+	TelemetryType MdaiReplayTelemetryType            `json:"telemetryType,omitempty" yaml:"telemetryType,omitempty"`
 	Source        MdaiReplaySourceConfiguration      `json:"source,omitempty" yaml:"source,omitempty"`
 	Destination   MdaiReplayDestinationConfiguration `json:"destination,omitempty" yaml:"destination,omitempty"`
 	Resource      MdaiReplayResourceConfiguration    `json:"resource,omitempty" yaml:"resource,omitempty"`
