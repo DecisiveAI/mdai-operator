@@ -62,12 +62,8 @@ func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err := r.Cache.Get(ctx, req.NamespacedName, &instanceOtel); err != nil {
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "unable to fetch OpenTelemetryCollector")
+			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
-
-		// we'll ignore not-found errors, since they can't be fixed by an immediate
-		// requeue (we'll need to wait for a new notification), and we can get them
-		// on deleted requests.
-		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	otelMdaiComb := hubv1.NewOtelIngressConfig(instanceOtel, instanceMdaiIngress)
@@ -181,7 +177,7 @@ func (r *MdaiIngressReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					return r.pairOtelcolMdaiIngressExist(ctx, cr.Name, cr.Namespace)
 				},
 				DeleteFunc: func(e event.DeleteEvent) bool { // TODO: implement deletion logic
-					return false
+					return true
 				},
 				GenericFunc: func(e event.GenericEvent) bool {
 					return false
