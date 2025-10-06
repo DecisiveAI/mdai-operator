@@ -6,12 +6,16 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	otelv1beta1 "github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
+	"go.uber.org/zap"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -88,6 +92,7 @@ var _ = Describe("MdaiIngress Controller", func() {
 			metricsServerOptions := metricsserver.Options{
 				BindAddress: "0",
 			}
+			logger := zap.NewNop()
 			mgr, errMgr := ctrl.NewManager(cfg, ctrl.Options{
 				Scheme:  scheme,
 				Cache:   cacheOptions,
@@ -95,10 +100,45 @@ var _ = Describe("MdaiIngress Controller", func() {
 			})
 			Expect(errMgr).NotTo(HaveOccurred())
 
+			err := mgr.GetFieldIndexer().IndexField(
+				ctx,
+				&corev1.Service{},
+				resourceOwnerKey,
+				func(rawObj client.Object) []string {
+					service, ok := rawObj.(*corev1.Service)
+					if !ok {
+						return nil
+					}
+					owners := service.GetOwnerReferences()
+					if len(owners) == 0 {
+						return nil
+					}
+					return []string{owners[0].Name}
+				})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = mgr.GetFieldIndexer().IndexField(
+				ctx,
+				&networkingv1.Ingress{},
+				resourceOwnerKey,
+				func(rawObj client.Object) []string {
+					service, ok := rawObj.(*corev1.Service)
+					if !ok {
+						return nil
+					}
+					owners := service.GetOwnerReferences()
+					if len(owners) == 0 {
+						return nil
+					}
+					return []string{owners[0].Name}
+				})
+			Expect(err).NotTo(HaveOccurred())
+
 			controllerReconciler := &MdaiIngressReconciler{
 				Client: mgr.GetClient(),
 				Scheme: mgr.GetScheme(),
 				Cache:  mgr.GetCache(),
+				Logger: logger,
 			}
 
 			go func() {

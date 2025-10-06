@@ -25,7 +25,7 @@ func GrpcService(params manifests.Params) (*corev1.Service, error) {
 
 	// TODO: rework labels & annotations
 	name := naming.GrpcService(params.OtelMdaiIngressComb.Otelcol.Name)
-	labels := manifestutils.Labels(params.OtelMdaiIngressComb.Otelcol.ObjectMeta, name, params.OtelMdaiIngressComb.Otelcol.Spec.Image, ComponentOpenTelemetryCollector, []string{})
+	labels := manifestutils.Labels(params.OtelMdaiIngressComb.Otelcol.ObjectMeta, name, params.OtelMdaiIngressComb.Otelcol.Spec.Image, []string{})
 
 	var annotations = make(map[string]string)
 	otelcolAnnotations := maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
@@ -94,7 +94,7 @@ func NonGrpcService(params manifests.Params) (*corev1.Service, error) {
 	}
 
 	name := naming.NonGrpcService(params.OtelMdaiIngressComb.Otelcol.Name)
-	labels := manifestutils.Labels(params.OtelMdaiIngressComb.Otelcol.ObjectMeta, name, params.OtelMdaiIngressComb.Otelcol.Spec.Image, ComponentOpenTelemetryCollector, []string{})
+	labels := manifestutils.Labels(params.OtelMdaiIngressComb.Otelcol.ObjectMeta, name, params.OtelMdaiIngressComb.Otelcol.Spec.Image, []string{})
 
 	var annotations = make(map[string]string)
 	otelcolAnnotations := maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
