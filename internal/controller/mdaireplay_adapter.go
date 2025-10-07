@@ -274,7 +274,7 @@ func (c MdaiReplayAdapter) getReplayCollectorConfigYAML(replayId string, hubName
 	opampExtension := config.MustMap("extensions").MustMap("opamp")
 	agentDescription := opampExtension.MustMap("agent_description")
 	replayerAttributes := agentDescription.MustMap("non_identifying_attributes")
-	replayerAttributes.Set(replayNameKey, replayId)
+	replayerAttributes.Set("replay_id", replayId)
 	replayerAttributes.Set("hub_name", hubName)
 	agentDescription.Set("non_identifying_attributes", replayerAttributes)
 	opampServer := opampExtension.MustMap("server")
