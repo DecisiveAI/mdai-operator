@@ -24,20 +24,18 @@ func IsFilteredSet(sourceSet string, filterSet []string) bool {
 }
 
 // Labels return the common labels to all objects that are part of a managed CR.
-func Labels(instance metav1.ObjectMeta, name string, image string, component string, filterLabels []string) map[string]string {
+func Labels(instance metav1.ObjectMeta, name string, image string, filterLabels []string) map[string]string {
 	var versionLabel string
 	// new map every time, so that we don't touch the instance's label
 	base := map[string]string{}
+	base["app.kubernetes.io/managed-by"] = "mdai-operator"
+
 	if instance.Labels != nil {
 		for k, v := range instance.Labels {
 			if !IsFilteredSet(k, filterLabels) {
 				base[k] = v
 			}
 		}
-	}
-
-	for k, v := range SelectorLabels(instance, component) {
-		base[k] = v
 	}
 
 	version := strings.Split(image, ":")
@@ -67,7 +65,7 @@ func Labels(instance metav1.ObjectMeta, name string, image string, component str
 // expected to be modified for the lifetime of the object.
 func SelectorLabels(instance metav1.ObjectMeta, component string) map[string]string {
 	return map[string]string{
-		"app.kubernetes.io/managed-by": "mdai-operator",
+		"app.kubernetes.io/managed-by": "opentelemetry-operator",
 		"app.kubernetes.io/instance":   naming.Truncate("%s.%s", 63, instance.Namespace, instance.Name),
 		"app.kubernetes.io/component":  component,
 	}

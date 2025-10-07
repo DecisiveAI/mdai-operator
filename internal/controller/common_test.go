@@ -27,19 +27,15 @@ var (
 	selectorLabels = map[string]string{
 		"app.kubernetes.io/component":  "opentelemetry-collector",
 		"app.kubernetes.io/instance":   "test.test",
-		"app.kubernetes.io/managed-by": "mdai-operator",
+		"app.kubernetes.io/managed-by": "opentelemetry-operator",
 	}
 	grpcServiceLabels = map[string]string{
-		"app.kubernetes.io/component":  "opentelemetry-collector",
 		"app.kubernetes.io/managed-by": "mdai-operator",
-		"app.kubernetes.io/instance":   "test.test",
 		"app.kubernetes.io/version":    "latest",
 		"app.kubernetes.io/name":       "test-collector-grpc",
 	}
 	nonGrpcServiceLabels = map[string]string{
-		"app.kubernetes.io/component":  "opentelemetry-collector",
 		"app.kubernetes.io/managed-by": "mdai-operator",
-		"app.kubernetes.io/instance":   "test.test",
 		"app.kubernetes.io/version":    "latest",
 		"app.kubernetes.io/name":       "test-collector-non-grpc",
 	}
@@ -75,6 +71,8 @@ metadata:
   namespace: test
 spec:
   cloudType: aws
+  otelCollector:
+    name: test
   annotations:
     ingress.annotation: ingress_annotation_value
   grpcService:

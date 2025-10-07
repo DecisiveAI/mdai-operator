@@ -49,7 +49,7 @@ var _ = Describe("MdaiIngress Controller", func() {
 				GrpcService:    &hubv1.IngressService{Type: "NodePort"},
 				NonGrpcService: &hubv1.IngressService{Type: "NodePort"},
 				CloudType:      hubv1.CloudProviderAws,
-				OtelCollector:  hubv1.NamespacedName{Namespace: "some", Name: "other"},
+				OtelCollector:  hubv1.OtelColRef{Name: "other"},
 			},
 		}
 
@@ -68,7 +68,7 @@ var _ = Describe("MdaiIngress Controller", func() {
 						GrpcService:    &hubv1.IngressService{Type: "NodePort"},
 						NonGrpcService: &hubv1.IngressService{Type: "NodePort"},
 						CloudType:      hubv1.CloudProviderAws,
-						OtelCollector:  hubv1.NamespacedName{Namespace: "some", Name: "other"},
+						OtelCollector:  hubv1.OtelColRef{Name: "other"},
 					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -203,9 +203,8 @@ func TestOnlyOneMdaiIngressPerOtelcol_SingleRef(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: hubv1.MdaiIngressSpec{
-			OtelCollector: hubv1.NamespacedName{
-				Namespace: "default",
-				Name:      "gateway",
+			OtelCollector: hubv1.OtelColRef{
+				Name: "gateway",
 			},
 		},
 	}
@@ -257,9 +256,8 @@ func TestCoupledWithOtelcol(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: hubv1.MdaiIngressSpec{
-			OtelCollector: hubv1.NamespacedName{
-				Namespace: "default",
-				Name:      "gateway1",
+			OtelCollector: hubv1.OtelColRef{
+				Name: "gateway1",
 			},
 		},
 	}

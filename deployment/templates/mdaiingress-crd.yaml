@@ -108,18 +108,14 @@ spec:
                 - type
                 type: object
               otelCollector:
-                description: Namespaced named of the Otel Collector, current Custom
-                  Resource belongs to.
+                description: Name of the Otel Collector, current Custom Resource belongs
+                  to.
                 properties:
                   name:
                     minLength: 1
                     type: string
-                  namespace:
-                    minLength: 1
-                    type: string
                 required:
                 - name
-                - namespace
                 type: object
             required:
             - cloudType

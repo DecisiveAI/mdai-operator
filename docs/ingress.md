@@ -33,15 +33,17 @@ To achieve that do not add `spec.ingress` field in the Otelcol CR spec.
 Create Custom Resource `MdaiIngress` using [this sample](../config/samples/hub_v1_mdaiingress.yaml).
 
 `spec.otelCollector` sets a reference to the OpenTelemetry Collector instance, you want to configure an ingress for
-Make sure your `MdaiIngress` instance point to your Opentelemetry Collector instance:
+Make sure your `MdaiIngress` instance created in the same namespace as your OpenTelemetry Collector, and a reference `spec.otelCollector` points to teh Otelcol name. 
 
 ```yaml
 apiVersion: hub.mydecisive.ai/v1
 kind: MdaiIngress
+metadata:
+  name: ingreaa-for-gateway-collector # can be any
+  namespace: mdai # <<< otelcol namespace
 spec:
   otelCollector:
     name: gateway  # <<< otelcol name
-    namespace: mdai  # <<< otelcol namespace
 ```
 
 ```yaml

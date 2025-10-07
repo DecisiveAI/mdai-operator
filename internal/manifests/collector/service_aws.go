@@ -15,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// mydecisive.
 func GrpcService(params manifests.Params) (*corev1.Service, error) {
 	// we need this service for aws only
 	if params.OtelMdaiIngressComb.Otelcol.Spec.Ingress.Type != "" ||
@@ -25,7 +24,7 @@ func GrpcService(params manifests.Params) (*corev1.Service, error) {
 
 	// TODO: rework labels & annotations
 	name := naming.GrpcService(params.OtelMdaiIngressComb.Otelcol.Name)
-	labels := manifestutils.Labels(params.OtelMdaiIngressComb.Otelcol.ObjectMeta, name, params.OtelMdaiIngressComb.Otelcol.Spec.Image, ComponentOpenTelemetryCollector, []string{})
+	labels := manifestutils.Labels(params.OtelMdaiIngressComb.Otelcol.ObjectMeta, name, params.OtelMdaiIngressComb.Otelcol.Spec.Image, []string{})
 
 	var annotations = make(map[string]string)
 	otelcolAnnotations := maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)
@@ -94,7 +93,7 @@ func NonGrpcService(params manifests.Params) (*corev1.Service, error) {
 	}
 
 	name := naming.NonGrpcService(params.OtelMdaiIngressComb.Otelcol.Name)
-	labels := manifestutils.Labels(params.OtelMdaiIngressComb.Otelcol.ObjectMeta, name, params.OtelMdaiIngressComb.Otelcol.Spec.Image, ComponentOpenTelemetryCollector, []string{})
+	labels := manifestutils.Labels(params.OtelMdaiIngressComb.Otelcol.ObjectMeta, name, params.OtelMdaiIngressComb.Otelcol.Spec.Image, []string{})
 
 	var annotations = make(map[string]string)
 	otelcolAnnotations := maps.Clone(params.OtelMdaiIngressComb.Otelcol.Annotations)

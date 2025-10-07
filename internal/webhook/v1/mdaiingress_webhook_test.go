@@ -2,7 +2,6 @@ package v1
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/decisiveai/mdai-operator/internal/controller"
 	. "github.com/onsi/ginkgo/v2"
@@ -105,7 +104,7 @@ var _ = Describe("MdaiIngress Webhook", func() {
 				if ing.Spec.OtelCollector.Name == "" {
 					return nil
 				}
-				return []string{fmt.Sprintf("%s", ing.Spec.OtelCollector.Name)}
+				return []string{ing.Spec.OtelCollector.Name}
 			}).
 				Build()
 
