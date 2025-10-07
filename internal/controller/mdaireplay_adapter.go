@@ -8,6 +8,7 @@ import (
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/mdai-operator/internal/builder"
 	"github.com/go-logr/logr"
+	"github.com/prometheus/common/expfmt"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -17,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
+	"net/http"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
@@ -146,33 +148,9 @@ func (c MdaiReplayAdapter) ensureSynchronized(ctx context.Context) (OperationRes
 		return RequeueWithError(err)
 	}
 
-	if err := c.createOrUpdatReplayerService(ctx); err != nil {
+	if err := c.createOrUpdateReplayerService(ctx); err != nil {
 		return RequeueWithError(err)
 	}
-	//replays := c.replayCR.Spec.replays
-	//replayResource := c.replayCR.Spec.replayResource
-	//
-	//if len(replays) == 0 {
-	//	c.logger.Info("No replays found in the CR, skipping replay synchronization")
-	//	return ContinueProcessing()
-	//}
-	//
-	//hash, err := c.createOrUpdatereplayResourceConfigMap(ctx, replayResource, replays)
-	//if err != nil {
-	//	return RequeueWithError(err)
-	//}
-	//
-	//if err := c.createOrUpdatereplayResourceDeployment(ctx, c.replayCR.Namespace, hash, replayResource); err != nil {
-	//	if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
-	//		c.logger.Info("re-queuing due to resource conflict")
-	//		return Requeue()
-	//	}
-	//	return RequeueWithError(err)
-	//}
-	//
-	//if err := c.createOrUpdatereplayResourceService(ctx, c.replayCR.Namespace); err != nil {
-	//	return RequeueWithError(err)
-	//}
 
 	c.logger.Info("🐙 MdaiReplay sync finished ✅")
 	return ContinueProcessing()
@@ -307,7 +285,7 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerDeployment(ctx context.Context,
 		container := builder.Container(name, image).
 			WithCommand("/otelcol-contrib", "--config=/conf/collector.yaml").
 			WithPorts(
-				corev1.ContainerPort{ContainerPort: promHTTPPort, Name: "prom-http"},
+				corev1.ContainerPort{ContainerPort: otelMetricsPort, Name: "otelcol-metrics"},
 			).
 			WithVolumeMounts(corev1.VolumeMount{
 				Name:      "config-volume",
@@ -356,7 +334,7 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerDeployment(ctx context.Context,
 	return nil
 }
 
-func (c MdaiReplayAdapter) createOrUpdatReplayerService(ctx context.Context) error {
+func (c MdaiReplayAdapter) createOrUpdateReplayerService(ctx context.Context) error {
 	name := c.getReplayerResourceName("service")
 	appLabel := c.getReplayerResourceName("collector")
 
@@ -373,29 +351,21 @@ func (c MdaiReplayAdapter) createOrUpdatReplayerService(ctx context.Context) err
 	}
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, service, func() error {
-		if service.Labels == nil {
-			service.Labels = map[string]string{
-				"app":                 appLabel,
-				hubNameLabel:          c.replayCR.Name,
-				HubComponentLabel:     mdaiObserverHubComponent,
-				LabelManagedByMdaiKey: LabelManagedByMdaiValue,
-			}
-		}
-
-		service.Spec = corev1.ServiceSpec{
-			Selector: map[string]string{
-				"app": appLabel,
-			},
-			Ports: []corev1.ServicePort{
-				{
-					Name:       "otelcol-metrics",
-					Protocol:   corev1.ProtocolTCP,
+		builder.Service(service).
+			WithLabel("app", appLabel).
+			WithLabel(hubNameLabel, c.replayCR.Name).
+			WithLabel(HubComponentLabel, replayCollectorHubComponent).
+			WithLabel(LabelManagedByMdaiKey, LabelManagedByMdaiValue).
+			WithSelectorLabel("app", appLabel).
+			WithPorts(
+				corev1.ServicePort{
 					Port:       otelMetricsPort,
+					Name:       "otelcol-metrics",
 					TargetPort: intstr.FromString("otelcol-metrics"),
+					Protocol:   corev1.ProtocolTCP,
 				},
-			},
-			Type: corev1.ServiceTypeClusterIP,
-		}
+			).
+			WithType(corev1.ServiceTypeClusterIP)
 		return nil
 	})
 	if err != nil {
@@ -418,6 +388,19 @@ func (c MdaiReplayAdapter) finalize(ctx context.Context) (ObjectState, error) {
 
 	c.logger.Info("💬Performing Finalizer Operations for MdaiReplay before delete CR")
 
+	serviceName := c.getReplayerResourceName("service")
+	metricsUrl := fmt.Sprintf("http://%s.%s.svc.cluster.local:8888/metrics", serviceName, c.replayCR.Namespace)
+	sendingQueueSize, err := getMetricValue(metricsUrl, "otelcol_exporter_queue_size")
+	if err != nil {
+		c.logger.Error(err, "failed to get otelcol_exporter_queue_size for replay, cannot finalize", "replayName", c.replayCR.Name)
+		return ObjectUnchanged, err
+	}
+	if sendingQueueSize > 0 {
+		c.logger.Info("replay sending queue is not empty, cannot finalize, will retry on next reconcile", "replayName", c.replayCR.Name, "queueSize", sendingQueueSize)
+		return ObjectUnchanged, nil
+	}
+	c.logger.Info("replay sending queue is empty, continuing to finalize", "replayName", c.replayCR.Name)
+
 	if err := c.client.Get(ctx, types.NamespacedName{Name: c.replayCR.Name, Namespace: c.replayCR.Namespace}, c.replayCR); err != nil {
 		if apierrors.IsNotFound(err) {
 			c.logger.Info("✅MdaiReplay has been deleted, no need to finalize")
@@ -427,33 +410,22 @@ func (c MdaiReplayAdapter) finalize(ctx context.Context) (ObjectState, error) {
 		return ObjectUnchanged, err
 	}
 
-	// TODO FINALIZER STUFFFFFFF
-	// TODO FINALIZER STUFFFFFFF
-	// TODO FINALIZER STUFFFFFFF
-	// TODO FINALIZER STUFFFFFFF
-	// TODO FINALIZER STUFFFFFFF
-	// TODO FINALIZER STUFFFFFFF
-	// TODO FINALIZER STUFFFFFFF
-	// TODO FINALIZER STUFFFFFFF
-	// TODO FINALIZER STUFFFFFFF
-	// TODO FINALIZER STUFFFFFFF
+	if meta.SetStatusCondition(&c.replayCR.Status.Conditions, metav1.Condition{
+		Type:    typeDegradedHub,
+		Status:  metav1.ConditionTrue,
+		Reason:  "Finalizing",
+		Message: fmt.Sprintf("Finalizer operations for custom resource %s name were successfully accomplished", c.replayCR.Name),
+	}) {
+		if err := c.client.Status().Update(ctx, c.replayCR); err != nil {
+			if apierrors.IsNotFound(err) {
+				c.logger.Info("MdaiReplay has been deleted, no need to finalize")
+				return ObjectModified, nil
+			}
+			c.logger.Error(err, "Failed to update MdaiReplay status")
 
-	//if meta.SetStatusCondition(&c.replayCR.Status.Conditions, metav1.Condition{
-	//	Type:    typeDegradedHub,
-	//	Status:  metav1.ConditionTrue,
-	//	Reason:  "Finalizing",
-	//	Message: fmt.Sprintf("Finalizer operations for custom resource %s name were successfully accomplished", c.replayCR.Name),
-	//}) {
-	//	if err := c.client.Status().Update(ctx, c.replayCR); err != nil {
-	//		if apierrors.IsNotFound(err) {
-	//			c.logger.Info("MdaiReplay has been deleted, no need to finalize")
-	//			return ObjectModified, nil
-	//		}
-	//		c.logger.Error(err, "Failed to update MdaiReplay status")
-	//
-	//		return ObjectUnchanged, err
-	//	}
-	//}
+			return ObjectUnchanged, err
+		}
+	}
 
 	c.logger.Info("Removing Finalizer for MdaiReplay after successfully perform the operations")
 	if err := c.ensureFinalizerDeleted(ctx); err != nil {
@@ -475,4 +447,34 @@ func (c MdaiReplayAdapter) deleteFinalizer(ctx context.Context, object client.Ob
 		return c.client.Update(ctx, object)
 	}
 	return nil
+}
+
+func getMetricValue(scrapeURL, metricName string) (float64, error) {
+	resp, err := http.Get(scrapeURL)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	var parser expfmt.TextParser
+	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
+	if err != nil {
+		return 0, err
+	}
+
+	metricFamily, exists := metricFamilies[metricName]
+	if !exists {
+		return 0, fmt.Errorf("metric %s not found", metricName)
+	}
+
+	for _, metric := range metricFamily.GetMetric() {
+		if metric.Gauge != nil {
+			return metric.Gauge.GetValue(), nil
+		}
+		if metric.Counter != nil {
+			return metric.Counter.GetValue(), nil
+		}
+	}
+
+	return 0, fmt.Errorf("no value found for metric %s", metricName)
 }

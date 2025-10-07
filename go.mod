@@ -17,6 +17,7 @@ require (
 	github.com/onsi/gomega v1.37.0
 	github.com/open-telemetry/opentelemetry-operator v0.131.0
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.81.0
+	github.com/prometheus/common v0.65.0
 	github.com/prometheus/prometheus v0.301.0
 	github.com/samber/lo v1.51.0
 	github.com/stretchr/testify v1.11.1
@@ -80,7 +81,6 @@ require (
 	github.com/prometheus/alertmanager v0.28.1 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.65.0 // indirect
 	github.com/prometheus/otlptranslator v0.0.0-20250717125610-8549f4ab4f8f // indirect
 	github.com/prometheus/procfs v0.17.0 // indirect
 	github.com/shurcooL/httpfs v0.0.0-20230704072500-f1e31cf0ba5c // indirect
