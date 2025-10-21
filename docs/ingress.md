@@ -39,8 +39,8 @@ Make sure your `MdaiIngress` instance created in the same namespace as your Open
 apiVersion: hub.mydecisive.ai/v1
 kind: MdaiIngress
 metadata:
-  name: ingreaa-for-gateway-collector # can be any
-  namespace: mdai # <<< otelcol namespace
+  name: ingress-for-gateway-collector # can be any
+  namespace: mdai # <<< same as otelcol namespace
 spec:
   otelCollector:
     name: gateway  # <<< otelcol name

@@ -277,9 +277,9 @@ func makeBufferLogger(buf *bytes.Buffer) *zap.Logger {
 	writer := zapcore.AddSync(buf)
 	encoderCfg := zap.NewDevelopmentEncoderConfig()
 	core := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(encoderCfg), // or JSONEncoder if you prefer
+		zapcore.NewConsoleEncoder(encoderCfg),
 		writer,
-		zapcore.DebugLevel, // capture Info and Debug logs
+		zapcore.DebugLevel,
 	)
 	return zap.New(core)
 }
