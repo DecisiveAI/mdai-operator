@@ -252,7 +252,7 @@ func (r *MdaiIngressReconciler) otelColExists(ctx context.Context, name string, 
 	return true
 }
 
-// findMdaiIngress returns the NamespacedName of the MdaiIngress instance with the given name and namespace.
+// findMdaiIngress returns a Name of the MdaiIngress instance with the given name and namespace.
 func (r *MdaiIngressReconciler) findMdaiIngress(ctx context.Context, name string, namespace string) (string, bool) {
 	log := logger.FromContext(ctx)
 
