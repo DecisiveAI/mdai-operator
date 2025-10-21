@@ -177,18 +177,18 @@ var _ = Describe("MdaiIngress Controller", func() {
 			Spec: otelv1beta1.OpenTelemetryCollectorSpec{
 				Config: otelv1beta1.Config{
 					Receivers: otelv1beta1.AnyConfig{
-						Object: map[string]interface{}{
-							"otlp": map[string]interface{}{
-								"protocols": map[string]interface{}{
-									"http": map[string]interface{}{},
-									"grpc": map[string]interface{}{},
+						Object: map[string]any{
+							"otlp": map[string]any{
+								"protocols": map[string]any{
+									"http": map[string]any{},
+									"grpc": map[string]any{},
 								},
 							},
 						},
 					},
 					Exporters: otelv1beta1.AnyConfig{
-						Object: map[string]interface{}{
-							"logging": map[string]interface{}{
+						Object: map[string]any{
+							"logging": map[string]any{
 								"loglevel": "debug",
 							},
 						},
@@ -301,7 +301,6 @@ var _ = Describe("MdaiIngress Controller", func() {
 		name, ok := controllerReconciler.findMdaiIngress(ctx, "gateway", "default")
 		Expect(ok).To(BeTrue())
 		Expect(name).To(Equal("mdai-ingress"))
-
 	})
 })
 
