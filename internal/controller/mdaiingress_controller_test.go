@@ -166,6 +166,7 @@ var _ = Describe("MdaiIngress Controller", func() {
 			Expect(errReconcile).NotTo(HaveOccurred())
 		})
 	})
+
 	It("should find a MdaiIngress instance", func() {
 		By("calling findMdaiIngressInstance method")
 
@@ -301,6 +302,150 @@ var _ = Describe("MdaiIngress Controller", func() {
 		name, ok := controllerReconciler.findMdaiIngress(ctx, "gateway", "default")
 		Expect(ok).To(BeTrue())
 		Expect(name).To(Equal("mdai-ingress"))
+	})
+
+	It("should requeue MdaiIngress by Otelcol reference", func() {
+		By("calling requeueByCollectorRef method")
+
+		otelcol := &otelv1beta1.OpenTelemetryCollector{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gateway-2",
+				Namespace: "default",
+			},
+			Spec: otelv1beta1.OpenTelemetryCollectorSpec{
+				Config: otelv1beta1.Config{
+					Receivers: otelv1beta1.AnyConfig{
+						Object: map[string]any{
+							"otlp": map[string]any{
+								"protocols": map[string]any{
+									"http": map[string]any{},
+									"grpc": map[string]any{},
+								},
+							},
+						},
+					},
+					Exporters: otelv1beta1.AnyConfig{
+						Object: map[string]any{
+							"logging": map[string]any{
+								"loglevel": "debug",
+							},
+						},
+					},
+					Service: otelv1beta1.Service{
+						Pipelines: map[string]*otelv1beta1.Pipeline{
+							"metrics": {
+								Exporters: []string{"otlp"},
+								Receivers: []string{"logging"},
+							},
+						},
+					},
+				},
+				UpgradeStrategy: "none",
+			},
+		}
+
+		mdaiIngress := &hubv1.MdaiIngress{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "mdai-ingress-2",
+				Namespace: "default",
+			},
+			Spec: hubv1.MdaiIngressSpec{
+				OtelCollector: hubv1.OtelColRef{
+					Name: "gateway-2",
+				},
+				CloudType:      hubv1.CloudProviderAws,
+				GrpcService:    &hubv1.IngressService{Type: "NodePort"},
+				NonGrpcService: &hubv1.IngressService{Type: "LoadBalancer"},
+			},
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		scheme := runtime.NewScheme()
+		_ = clientgoscheme.AddToScheme(scheme)
+		_ = otelv1beta1.AddToScheme(scheme)
+		_ = hubv1.AddToScheme(scheme)
+
+		cacheOptions := cache.Options{}
+
+		metricsServerOptions := metricsserver.Options{
+			BindAddress: "0",
+		}
+		mgr, errMgr := ctrl.NewManager(cfg, ctrl.Options{
+			Scheme:  scheme,
+			Cache:   cacheOptions,
+			Metrics: metricsServerOptions,
+		})
+		Expect(errMgr).NotTo(HaveOccurred())
+
+		err := SetMdaiIngressIndexers(ctx, mgr)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = mgr.GetFieldIndexer().IndexField(
+			ctx,
+			&corev1.Service{},
+			resourceOwnerKey,
+			func(rawObj client.Object) []string {
+				service, ok := rawObj.(*corev1.Service)
+				if !ok {
+					return nil
+				}
+				owners := service.GetOwnerReferences()
+				if len(owners) == 0 {
+					return nil
+				}
+				return []string{owners[0].Name}
+			})
+		Expect(err).NotTo(HaveOccurred())
+
+		err = mgr.GetFieldIndexer().IndexField(
+			ctx,
+			&networkingv1.Ingress{},
+			resourceOwnerKey,
+			func(rawObj client.Object) []string {
+				service, ok := rawObj.(*corev1.Service)
+				if !ok {
+					return nil
+				}
+				owners := service.GetOwnerReferences()
+				if len(owners) == 0 {
+					return nil
+				}
+				return []string{owners[0].Name}
+			})
+		Expect(err).NotTo(HaveOccurred())
+
+		logger := zap.NewNop()
+		controllerReconciler := &MdaiIngressReconciler{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			Logger: logger,
+		}
+
+		go func() {
+			errMgrStart := mgr.Start(ctx)
+			Expect(errMgrStart).NotTo(HaveOccurred())
+		}()
+
+		ok := mgr.GetCache().WaitForCacheSync(ctx)
+		Expect(ok).To(BeTrue())
+
+		err = mgr.GetClient().Create(ctx, mdaiIngress)
+		Expect(err).NotTo(HaveOccurred())
+		err = mgr.GetClient().Create(ctx, otelcol)
+		Expect(err).NotTo(HaveOccurred())
+
+		requestReceived := controllerReconciler.requeueByCollectorRef(ctx, otelcol)
+		requestExpected := []reconcile.Request{
+			{
+				NamespacedName: types.NamespacedName{
+					Name:      "mdai-ingress-2",
+					Namespace: "default",
+				},
+			},
+		}
+		Expect(requestExpected).To(Equal(requestReceived))
 	})
 })
 
