@@ -15,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// mydecisive.
 func GrpcService(params manifests.Params) (*corev1.Service, error) {
 	// we need this service for aws only
 	if params.OtelMdaiIngressComb.Otelcol.Spec.Ingress.Type != "" ||

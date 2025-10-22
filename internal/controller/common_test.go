@@ -71,6 +71,8 @@ metadata:
   namespace: test
 spec:
   cloudType: aws
+  otelCollector:
+    name: test
   annotations:
     ingress.annotation: ingress_annotation_value
   grpcService:
