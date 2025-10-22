@@ -69,6 +69,39 @@ var _ = Describe("MdaiIngress Webhook", func() {
 			Expect(obj.Spec.NonGrpcService.Type).To(Equal(corev1.ServiceTypeLoadBalancer))
 		})
 
+		It("Should successfully validate upon Creation", func() {
+			ingress := &mdaiv1.MdaiIngress{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "a",
+					Namespace: "ns",
+				},
+				Spec: mdaiv1.MdaiIngressSpec{
+					OtelCollector: mdaiv1.OtelColRef{
+						Name: "otel",
+					},
+				},
+			}
+
+			builder := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(ingress)
+
+			cl := builder.WithIndex(&mdaiv1.MdaiIngress{}, controller.MdaiIngressOtelColLookupKey, func(obj client.Object) []string {
+				ing, ok := obj.(*mdaiv1.MdaiIngress)
+				Expect(ok).To(BeTrue())
+				if ing.Spec.OtelCollector.Name == "" {
+					return nil
+				}
+				return []string{ing.Spec.OtelCollector.Name}
+			}).
+				Build()
+
+			validator = &MdaiIngressCustomValidator{client: cl}
+
+			_, err := validator.ValidateCreate(ctx, ingress)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
 		It("returns error when OtelCol reference is duplicated by another MdaiIngress", func() {
 			ingress1 := &mdaiv1.MdaiIngress{
 				ObjectMeta: metav1.ObjectMeta{
