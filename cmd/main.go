@@ -12,7 +12,7 @@ import (
 	"github.com/decisiveai/mdai-operator/internal/controller"
 	webhookmdaiv1 "github.com/decisiveai/mdai-operator/internal/webhook/v1"
 	"github.com/go-logr/zapr"
-	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
+	opentelemetryv1beta1 "github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -52,7 +52,7 @@ var (
 func init() { //nolint:gochecknoinits
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(mdaiv1.AddToScheme(scheme))
-	utilruntime.Must(v1beta1.AddToScheme(scheme))
+	utilruntime.Must(opentelemetryv1beta1.AddToScheme(scheme))
 	utilruntime.Must(prometheusv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }

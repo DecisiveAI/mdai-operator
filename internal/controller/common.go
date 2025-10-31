@@ -40,6 +40,12 @@ const (
 	promHTTPPort        = 8899
 	otelMetricsPort     = 8888
 	observerMetricsPort = 8899
+
+	otlpGRPCName        = "otlp-grpc"
+	otlpHTTPName        = "otlp-http"
+	promHTTPName        = "prom-http"
+	otelMetricsName     = "otel-metrics"
+	observerMetricsName = "observe-metrics"
 )
 
 type ObjectState bool

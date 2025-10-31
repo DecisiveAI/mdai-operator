@@ -11,7 +11,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 )
@@ -88,11 +87,11 @@ func (c ObserverAdapter) createOrUpdateObserverResourceService(ctx context.Conte
 	return nil
 }
 
-func (c ObserverAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Context, observerResource mdaiv1.ObserverResource, observers []mdaiv1.Observer) (string, error) {
+func (c ObserverAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Context, observerSpec mdaiv1.MdaiObserverSpec, observers []mdaiv1.Observer) (string, error) {
 	namespace := c.observerCR.Namespace
 	configMapName := c.getScopedObserverResourceName("config")
 
-	collectorYAML, err := c.getObserverCollectorConfig(observers, observerResource)
+	collectorYAML, err := c.getObserverCollectorConfig(observers, observerSpec)
 	if err != nil {
 		return "", fmt.Errorf("failed to build observer configuration: %w", err)
 	}
@@ -130,7 +129,7 @@ func (c ObserverAdapter) createOrUpdateObserverResourceConfigMap(ctx context.Con
 	return getConfigMapSHA(*desiredConfigMap)
 }
 
-func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context, namespace string, hash string, observerResource mdaiv1.ObserverResource) error {
+func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Context, namespace string, hash string, observerSpec mdaiv1.MdaiObserverSpec) error {
 	name := c.getScopedObserverResourceName("")
 
 	deployment := &appsv1.Deployment{
@@ -155,10 +154,7 @@ func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Co
 			}
 		}
 
-		deployment.Spec.Replicas = int32Ptr(1)
-		if observerResource.Replicas != nil {
-			deployment.Spec.Replicas = observerResource.Replicas
-		}
+		deployment.Spec.Replicas = &observerSpec.Replicas
 		if deployment.Spec.Selector == nil {
 			deployment.Spec.Selector = &metav1.LabelSelector{}
 		}
@@ -187,10 +183,10 @@ func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Co
 			Name:  name,
 			Image: observerDefaultImage,
 			Ports: []corev1.ContainerPort{
-				{ContainerPort: otelMetricsPort, Name: "otelcol-metrics"},
-				{ContainerPort: observerMetricsPort, Name: "observe-metrics"},
-				{ContainerPort: otlpGRPCPort, Name: "otlp-grpc"},
-				{ContainerPort: otlpHTTPPort, Name: "otlp-http"},
+				{ContainerPort: otelMetricsPort, Name: otelMetricsName},
+				{ContainerPort: observerMetricsPort, Name: observerMetricsName},
+				{ContainerPort: otlpGRPCPort, Name: otlpGRPCName},
+				{ContainerPort: otlpHTTPPort, Name: otlpHTTPName},
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
@@ -204,24 +200,12 @@ func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Co
 				"/mdai-observer-collector",
 				"--config=/conf/collector.yaml",
 			},
-			SecurityContext: &corev1.SecurityContext{
-				SeccompProfile: &corev1.SeccompProfile{
-					Type: corev1.SeccompProfileTypeRuntimeDefault,
-				},
-				AllowPrivilegeEscalation: ptr.To(false),
-				Capabilities: &corev1.Capabilities{
-					Drop: []corev1.Capability{"ALL"},
-				},
-				RunAsNonRoot: ptr.To(true),
-			},
+			SecurityContext: DefaultSecurityContext,
 		}
 
-		if observerResource.Image != nil && *observerResource.Image != "" {
-			containerSpec.Image = *observerResource.Image
-		}
-
-		if observerResource.Resources != nil {
-			containerSpec.Resources = *observerResource.Resources
+		containerSpec.Image = observerSpec.Image
+		if observerSpec.Resources != nil {
+			containerSpec.Resources = *observerSpec.Resources
 		}
 
 		deployment.Spec.Template.Spec.Containers = []corev1.Container{
@@ -241,6 +225,8 @@ func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Co
 			},
 		}
 
+		deployment.Spec.Template.Spec.Tolerations = observerSpec.Tolerations
+
 		return nil
 	})
 	if err != nil {
@@ -251,13 +237,13 @@ func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Co
 	return nil
 }
 
-func (c ObserverAdapter) getObserverCollectorConfig(observers []mdaiv1.Observer, observerResource mdaiv1.ObserverResource) (string, error) {
+func (c ObserverAdapter) getObserverCollectorConfig(observers []mdaiv1.Observer, observerSpec mdaiv1.MdaiObserverSpec) (string, error) {
 	var config builder.ConfigBlock
 	if err := yaml.Unmarshal([]byte(baseObserverCollectorYAML), &config); err != nil {
 		c.logger.Error(err, "Failed to unmarshal base collector config")
 		return "", fmt.Errorf(`unmarshal base collector config: %w`, err)
 	}
-	grpcReceiverMaxMsgSize := observerResource.GrpcReceiverMaxMsgSize
+	grpcReceiverMaxMsgSize := observerSpec.GrpcReceiverMaxMsgSize
 	if grpcReceiverMaxMsgSize != nil {
 		config.
 			MustMap("receivers").
@@ -327,7 +313,7 @@ func (c ObserverAdapter) getObserverCollectorConfig(observers []mdaiv1.Observer,
 			},
 		)
 
-	if ownLogsOtlpEndpoint := observerResource.OwnLogsOtlpEndpoint; ownLogsOtlpEndpoint != nil && *ownLogsOtlpEndpoint != "" {
+	if ownLogsOtlpEndpoint := observerSpec.OwnLogsOtlpEndpoint; ownLogsOtlpEndpoint != nil && *ownLogsOtlpEndpoint != "" {
 		telemetry.Set("logs", map[string]any{
 			"processors": []any{
 				map[string]any{

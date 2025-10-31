@@ -1,6 +1,7 @@
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -76,9 +77,18 @@ type LogsConfig struct {
 // MdaiCollectorSpec defines the desired state of MdaiCollector.
 type MdaiCollectorSpec struct {
 	// +optional
-	AWSConfig *AWSConfig `json:"aws,omitempty" yaml:"aws,omitempty"`
+	AWSConfig *AWSConfig `json:"aws,omitempty"`
 	// +optional
-	Logs *LogsConfig `json:"logs,omitempty" yaml:"logs,omitempty"`
+	Logs *LogsConfig `json:"logs,omitempty"`
+	// +kubebuilder:default="public.ecr.aws/decisiveai/mdai-collector:0.1.6"
+	// +optional
+	Image string `json:"image,omitempty"`
+	// +kubebuilder:default=1
+	// +optional
+	Replicas int32 `json:"replicas,omitempty"`
+	// +kubebuilder:default={}
+	// +optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 }
 
 // MdaiCollectorStatus defines the observed state of MdaiCollector.
