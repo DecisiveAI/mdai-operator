@@ -388,19 +388,21 @@ func (c MdaiReplayAdapter) finalize(ctx context.Context) (ObjectState, error) {
 
 	c.logger.Info("💬Performing Finalizer Operations for MdaiReplay before delete CR")
 
-	serviceName := c.getReplayerResourceName("service")
-	metricsUrl := fmt.Sprintf("http://%s.%s.svc.cluster.local:8888/metrics", serviceName, c.replayCR.Namespace)
-	sendingQueueSize, err := getMetricValue(metricsUrl, "otelcol_exporter_queue_size")
-	if err != nil {
-		c.logger.Error(err, "failed to get otelcol_exporter_queue_size for replay, cannot finalize", "replayName", c.replayCR.Name)
-		return ObjectUnchanged, err
+	if !c.replayCR.Spec.IgnoreSendingQueue {
+		serviceName := c.getReplayerResourceName("service")
+		metricsUrl := fmt.Sprintf("http://%s.%s.svc.cluster.local:8888/metrics", serviceName, c.replayCR.Namespace)
+		sendingQueueSize, err := getMetricValue(metricsUrl, "otelcol_exporter_queue_size")
+		if err != nil {
+			c.logger.Error(err, "failed to get otelcol_exporter_queue_size for replay, cannot finalize", "replayName", c.replayCR.Name)
+			return ObjectUnchanged, err
+		}
+		if sendingQueueSize > 0 {
+			c.logger.Info("replay sending queue is not empty, cannot finalize, will retry on next reconcile", "replayName", c.replayCR.Name, "queueSize", sendingQueueSize)
+			return ObjectUnchanged, nil
+		}
+		c.logger.Info("replay sending queue is empty, continuing to finalize", "replayName", c.replayCR.Name)
 	}
-	if sendingQueueSize > 0 {
-		c.logger.Info("replay sending queue is not empty, cannot finalize, will retry on next reconcile", "replayName", c.replayCR.Name, "queueSize", sendingQueueSize)
-		return ObjectUnchanged, nil
-	}
-	c.logger.Info("replay sending queue is empty, continuing to finalize", "replayName", c.replayCR.Name)
-
+	
 	if err := c.client.Get(ctx, types.NamespacedName{Name: c.replayCR.Name, Namespace: c.replayCR.Namespace}, c.replayCR); err != nil {
 		if apierrors.IsNotFound(err) {
 			c.logger.Info("✅MdaiReplay has been deleted, no need to finalize")

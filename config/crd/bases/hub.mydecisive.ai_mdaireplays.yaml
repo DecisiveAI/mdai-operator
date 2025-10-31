@@ -53,6 +53,10 @@ spec:
                 type: string
               hubName:
                 type: string
+              ignoreSendingQueue:
+                description: 'IgnoreSendingQueue: Bypass checking the OTEL sending
+                  queue metric when finalizing the replay resource'
+                type: boolean
               opampEndpoint:
                 type: string
               resource:
