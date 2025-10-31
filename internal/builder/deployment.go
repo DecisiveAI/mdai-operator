@@ -70,3 +70,26 @@ func (b *DeploymentBuilder) WithVolumes(volumes ...corev1.Volume) *DeploymentBui
 	b.deploy.Spec.Template.Spec.Volumes = volumes
 	return b
 }
+
+func (b *DeploymentBuilder) WithTolerations(tolerations ...corev1.Toleration) *DeploymentBuilder {
+	var valid []corev1.Toleration
+	for _, t := range tolerations {
+		if t.Key == "" && t.Operator == "" {
+			continue
+		}
+
+		if t.Key == "" && t.Operator != corev1.TolerationOpExists {
+			t.Operator = corev1.TolerationOpExists
+		}
+
+		valid = append(valid, t)
+	}
+
+	if len(valid) > 0 {
+		b.deploy.Spec.Template.Spec.Tolerations = valid
+	} else {
+		b.deploy.Spec.Template.Spec.Tolerations = nil
+	}
+
+	return b
+}

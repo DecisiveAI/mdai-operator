@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/valkey-io/valkey-go"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
 )
 
@@ -529,6 +530,31 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 			Eventually(verifyObserverPods, "1m", "5s").Should(Succeed())
 
+			By("verifying tolerations are populated properly", func() {
+				verifyTolerations := func(g Gomega) {
+					cmd := exec.Command(
+						"kubectl", "get", "deployment", "mdaihub-sample-mdai-observer",
+						"-n", namespace,
+						"-o", "jsonpath={.spec.template.spec.tolerations}",
+					)
+
+					out, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to get tolerations from observer")
+
+					var tolerations []corev1.Toleration
+					g.Expect(json.Unmarshal([]byte(out), &tolerations)).To(Succeed(), "failed to parse tolerations JSON")
+
+					g.Expect(tolerations).To(ContainElement(corev1.Toleration{
+						Key:      "dedicated",
+						Operator: corev1.TolerationOpEqual,
+						Value:    "gpu",
+						Effect:   corev1.TaintEffectNoSchedule,
+					}))
+				}
+
+				Eventually(verifyTolerations, "1m", "5s").Should(Succeed())
+			})
+
 			verifyObserverLogs := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l",
 					"app=mdaihub-sample-observer-collector", "-o", "jsonpath={.items[*].metadata.name}")
@@ -590,6 +616,31 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(strings.Contains(out, "Running")).To(BeTrue())
 			}
 			Eventually(verifyMdaiCollectorPods, "1m", "5s").Should(Succeed())
+
+			By("verifying tolerations are populated properly", func() {
+				verifyTolerations := func(g Gomega) {
+					cmd := exec.Command(
+						"kubectl", "get", "deployment", "internal-mdai-collector",
+						"-n", namespace,
+						"-o", "jsonpath={.spec.template.spec.tolerations}",
+					)
+
+					out, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred(), "failed to get tolerations from deployment")
+
+					var tolerations []corev1.Toleration
+					g.Expect(json.Unmarshal([]byte(out), &tolerations)).To(Succeed(), "failed to parse tolerations JSON")
+
+					g.Expect(tolerations).To(ContainElement(corev1.Toleration{
+						Key:      "dedicated",
+						Operator: corev1.TolerationOpEqual,
+						Value:    "gpu",
+						Effect:   corev1.TaintEffectNoSchedule,
+					}))
+				}
+
+				Eventually(verifyTolerations, "1m", "5s").Should(Succeed())
+			})
 
 			verifyMdaiCollectorLogs := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l",

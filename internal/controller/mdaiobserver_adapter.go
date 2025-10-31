@@ -157,7 +157,7 @@ func (c ObserverAdapter) deleteFinalizer(ctx context.Context, object client.Obje
 
 func (c ObserverAdapter) ensureSynchronized(ctx context.Context) (OperationResult, error) {
 	observers := c.observerCR.Spec.Observers
-	observerResource := c.observerCR.Spec.ObserverResource
+	observerResource := c.observerCR.Spec
 
 	if len(observers) == 0 {
 		c.logger.Info("No observers found in the CR, skipping observer synchronization")
