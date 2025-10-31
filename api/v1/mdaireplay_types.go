@@ -4,9 +4,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 type MdaiReplayTelemetryType string
 type MdaiReplayS3Partition string
 
@@ -53,14 +50,17 @@ type MdaiReplayResourceConfiguration struct {
 
 // MdaiReplaySpec defines the desired state of MdaiReplay.
 type MdaiReplaySpec struct {
-	OpAMPEndpoint string                             `json:"opampEndpoint" yaml:"opampEndpoint"`
-	HubName       string                             `json:"hubName" yaml:"hubName"`
-	StartTime     string                             `json:"startTime,omitempty" yaml:"startTime,omitempty"`
-	EndTime       string                             `json:"endTime,omitempty" yaml:"endTime,omitempty"`
-	TelemetryType MdaiReplayTelemetryType            `json:"telemetryType,omitempty" yaml:"telemetryType,omitempty"`
-	Source        MdaiReplaySourceConfiguration      `json:"source,omitempty" yaml:"source,omitempty"`
-	Destination   MdaiReplayDestinationConfiguration `json:"destination,omitempty" yaml:"destination,omitempty"`
-	Resource      MdaiReplayResourceConfiguration    `json:"resource,omitempty" yaml:"resource,omitempty"`
+	OpAMPEndpoint string `json:"opampEndpoint" yaml:"opampEndpoint"`
+	HubName       string `json:"hubName" yaml:"hubName"`
+	StartTime     string `json:"startTime,omitempty" yaml:"startTime,omitempty"`
+	EndTime       string `json:"endTime,omitempty" yaml:"endTime,omitempty"`
+	// IgnoreSendingQueue: Bypass checking the OTEL sending queue metric when finalizing the replay resource
+	// +optional
+	IgnoreSendingQueue bool                               `json:"ignoreSendingQueue" yaml:"ignoreSendingQueue" default:"false"`
+	TelemetryType      MdaiReplayTelemetryType            `json:"telemetryType,omitempty" yaml:"telemetryType,omitempty"`
+	Source             MdaiReplaySourceConfiguration      `json:"source,omitempty" yaml:"source,omitempty"`
+	Destination        MdaiReplayDestinationConfiguration `json:"destination,omitempty" yaml:"destination,omitempty"`
+	Resource           MdaiReplayResourceConfiguration    `json:"resource,omitempty" yaml:"resource,omitempty"`
 }
 
 type MdaiReplayStatusType string
