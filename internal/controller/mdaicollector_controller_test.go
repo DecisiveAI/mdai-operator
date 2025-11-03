@@ -103,7 +103,7 @@ var _ = Describe("MdaiCollector Controller", func() {
 	})
 
 	It("should create a Deployment with expected tolerations", func() {
-		By("creating an MdaiCollector CR")
+		By("creating an MdaiCollector CR with tolerations")
 		cr := &hubv1.MdaiCollector{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-collector",
@@ -133,5 +133,27 @@ var _ = Describe("MdaiCollector Controller", func() {
 			Value:    "gpu",
 			Effect:   corev1.TaintEffectNoSchedule,
 		}))
+
+		By("creating an MdaiCollector CR with no tolerations")
+		cr = &hubv1.MdaiCollector{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-collector-no-tolerations",
+				Namespace: namespace,
+			},
+			Spec: hubv1.MdaiCollectorSpec{},
+		}
+		Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+
+		By("verifying that a Deployment was created")
+		deploy = &appsv1.Deployment{}
+		Eventually(func(g Gomega) bool {
+			err := k8sClient.Get(ctx, types.NamespacedName{
+				Name:      "test-collector-no-tolerations-mdai-collector",
+				Namespace: namespace,
+			}, deploy)
+			return err == nil
+		}).Should(BeTrue())
+
+		Expect(deploy.Spec.Template.Spec.Tolerations).To(BeEmpty())
 	})
 })
