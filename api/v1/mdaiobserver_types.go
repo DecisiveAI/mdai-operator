@@ -32,10 +32,7 @@ type ObserverFilter struct {
 
 // TODO: Add metrics and trace filters
 
-// MdaiObserverSpec defines the desired state of MdaiObserver.
-type MdaiObserverSpec struct {
-	// +optional
-	Observers []Observer `json:"observers,omitempty"`
+type ObserverResource struct {
 	// +kubebuilder:default="public.ecr.aws/decisiveai/observer-collector:0.1.6"
 	// +optional
 	Image string `json:"image,omitempty"`
@@ -52,6 +49,14 @@ type MdaiObserverSpec struct {
 	// +kubebuilder:default={}
 	// +optional
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+}
+
+// MdaiObserverSpec defines the desired state of MdaiObserver.
+type MdaiObserverSpec struct {
+	// +optional
+	Observers []Observer `json:"observers,omitempty"`
+	// +optional
+	ObserverResource ObserverResource `json:"observerResource,omitempty"`
 }
 
 // MdaiObserverStatus defines the observed state of MdaiObserver.

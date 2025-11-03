@@ -80,7 +80,7 @@ func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiob
 	observers := mdaiobserver.Spec.Observers
 	observerSpec := mdaiobserver.Spec
 
-	if observerSpec.Resources == nil {
+	if observerSpec.ObserverResource.Resources == nil {
 		newWarnings = append(newWarnings, "ObserverResource "+mdaiobserver.Name+" does not define resource requests/limits")
 	}
 

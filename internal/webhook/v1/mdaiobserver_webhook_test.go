@@ -36,7 +36,7 @@ var _ = Describe("MdaiObserver Webhook", func() {
 		It("Should deny creation if a required field is missing", func() {
 			By("simulating an invalid creation scenario")
 			obj = createObserver()
-			obj.Spec.Resources = nil
+			obj.Spec.ObserverResource.Resources = nil
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(warnings).To(Equal(admission.Warnings{
 				"ObserverResource test-observer does not define resource requests/limits",
@@ -99,16 +99,18 @@ func createObserver() *mdaiv1.MdaiObserver {
 					},
 				},
 			},
-			Image:    "watcher-image:9.9.9",
-			Replicas: int32(3),
-			Resources: &corev1.ResourceRequirements{
-				Limits: corev1.ResourceList{
-					"Cpu":    resource.MustParse("500m"),
-					"Memory": resource.MustParse("1Gi"),
-				},
-				Requests: corev1.ResourceList{
-					"Cpu":    resource.MustParse("200m"),
-					"Memory": resource.MustParse("256Mi"),
+			ObserverResource: mdaiv1.ObserverResource{
+				Image:    "watcher-image:9.9.9",
+				Replicas: int32(3),
+				Resources: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						"Cpu":    resource.MustParse("500m"),
+						"Memory": resource.MustParse("1Gi"),
+					},
+					Requests: corev1.ResourceList{
+						"Cpu":    resource.MustParse("200m"),
+						"Memory": resource.MustParse("256Mi"),
+					},
 				},
 			},
 		},

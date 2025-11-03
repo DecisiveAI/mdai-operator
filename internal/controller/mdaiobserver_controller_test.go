@@ -91,14 +91,14 @@ func TestBuildCollectorConfig(t *testing.T) {
 		},
 	}
 	cr.Spec.Observers = observers
-	observerSpec := hubv1.MdaiObserverSpec{}
+	observerResource := hubv1.ObserverResource{}
 
 	scheme := createTestScheme()
 	fakeClient := observerFakeClient(scheme, cr)
 	recorder := record.NewFakeRecorder(10)
 
 	adapter := NewObserverAdapter(cr, logr.Discard(), fakeClient, recorder, scheme)
-	config, err := adapter.getObserverCollectorConfig(observers, observerSpec)
+	config, err := adapter.getObserverCollectorConfig(observers, observerResource)
 	if err != nil {
 		t.Fatalf("getObserverCollectorConfig returned error: %v", err)
 	}
@@ -140,7 +140,9 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 		},
 		Spec: hubv1.MdaiObserverSpec{
 			Observers: observers,
-			Image:     "public.ecr.aws/p3k6k6h3/observer-observer:latest",
+			ObserverResource: hubv1.ObserverResource{
+				Image: "public.ecr.aws/p3k6k6h3/observer-observer:latest",
+			},
 		},
 		Status: hubv1.MdaiObserverStatus{},
 	}

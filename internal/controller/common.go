@@ -155,7 +155,7 @@ func reconcileDesiredObjects(ctx context.Context, kubeClient client.Client, logg
 
 func deleteObjects(ctx context.Context, kubeClient client.Client, logger logr.Logger, objects map[types.UID]client.Object) error {
 	// Pruning owned objects in the cluster which are not should not be present after the reconciliation.
-	pruneErrs := []error{}
+	var pruneErrs []error
 	for _, obj := range objects {
 		l := logger.WithValues(
 			"object_name", obj.GetName(),

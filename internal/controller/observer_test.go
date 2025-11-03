@@ -16,15 +16,15 @@ func TestGetObserverCollectorConfig(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		desc         string
-		observers    []mdaiv1.Observer
-		observerSpec mdaiv1.MdaiObserverSpec
-		check        func(t *testing.T, resultConfig string, err error)
+		desc             string
+		observers        []mdaiv1.Observer
+		observerResource mdaiv1.ObserverResource
+		check            func(t *testing.T, resultConfig string, err error)
 	}{
 		{
 			desc:      "no observers provided",
 			observers: []mdaiv1.Observer{},
-			observerSpec: mdaiv1.MdaiObserverSpec{
+			observerResource: mdaiv1.ObserverResource{
 				GrpcReceiverMaxMsgSize: lo.ToPtr(uint64(123)),
 				OwnLogsOtlpEndpoint:    lo.ToPtr("otlp://my.endpoint:4317"),
 			},
@@ -77,7 +77,7 @@ func TestGetObserverCollectorConfig(t *testing.T) {
 					},
 				},
 			},
-			observerSpec: mdaiv1.MdaiObserverSpec{
+			observerResource: mdaiv1.ObserverResource{
 				GrpcReceiverMaxMsgSize: lo.ToPtr(uint64(123)),
 				OwnLogsOtlpEndpoint:    lo.ToPtr("otlp://my.endpoint:4317"),
 			},
@@ -137,7 +137,7 @@ func TestGetObserverCollectorConfig(t *testing.T) {
 
 			testObj := NewObserverAdapter(nil, logr.Discard(), nil, nil, nil)
 
-			config, err := testObj.getObserverCollectorConfig(tc.observers, tc.observerSpec)
+			config, err := testObj.getObserverCollectorConfig(tc.observers, tc.observerResource)
 			tc.check(t, config, err)
 		})
 	}
