@@ -67,3 +67,6 @@ admissionWebhooks:
   certFile: ""
   keyFile: ""
   caFile: ""
+
+crds:
+  enabled: true

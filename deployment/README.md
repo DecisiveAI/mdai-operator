@@ -43,6 +43,7 @@ MDAI Operator Helm Chart
 | controllerManager.podSecurityContext.seccompProfile.type | string | `"RuntimeDefault"` |  |
 | controllerManager.replicas | int | `1` |  |
 | controllerManager.serviceAccount.annotations | object | `{}` |  |
+| crds.enabled | bool | `true` |  |
 | kubernetesClusterDomain | string | `"cluster.local"` |  |
 | metricsService.ports[0].name | string | `"https"` |  |
 | metricsService.ports[0].port | int | `8443` |  |
