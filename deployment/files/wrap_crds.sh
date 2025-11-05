@@ -7,7 +7,7 @@ EOF
 fi
 
 for f in deployment/templates/*-crd.yaml; do
-  grep -q '{{- if .Values.crds.enabled }}' "$f" && continue
-  gsed -i '1s/^/{{- if .Values.crds.enabled }}\n/' "$f"
+  grep -q '{{- if .Values.crds.create }}' "$f" && continue
+  gsed -i '1s/^/{{- if .Values.crds.create }}\n/' "$f"
   echo -e '\n{{- end }}' >> "$f"
 done
