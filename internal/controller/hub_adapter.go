@@ -701,10 +701,6 @@ func (c HubAdapter) ensureDeletionProcessed(ctx context.Context) (OperationResul
 	return StopProcessing()
 }
 
-func int32Ptr(i int32) *int32 {
-	return &i
-}
-
 func getConfigMapSHA(config corev1.ConfigMap) (string, error) {
 	data, err := json.Marshal(config)
 	if err != nil {

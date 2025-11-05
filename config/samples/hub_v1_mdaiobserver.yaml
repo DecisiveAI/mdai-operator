@@ -39,3 +39,4 @@ spec:
   observerResource:
     grpcReceiverMaxMsgSize: 10
     image: public.ecr.aws/decisiveai/observer-collector:0.1
+    tolerations: []

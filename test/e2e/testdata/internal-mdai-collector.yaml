@@ -7,6 +7,11 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: internal
 spec:
+  tolerations:
+    - key: "dedicated"
+      operator: "Equal"
+      value: "gpu"
+      effect: "NoSchedule"
   aws:
     awsAccessKeySecret: awsy-awsface
   logs:

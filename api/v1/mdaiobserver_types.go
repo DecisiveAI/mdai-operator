@@ -10,11 +10,11 @@ type Observer struct {
 	Name string `json:"name" yaml:"name"`
 	// +kubebuilder:validation:Required
 	LabelResourceAttributes []string `json:"labelResourceAttributes" yaml:"labelResourceAttributes"`
-	// +kubebuilder:validation:Optional
+	// +optional
 	CountMetricName *string `json:"countMetricName,omitempty" yaml:"countMetricName,omitempty"`
-	// +kubebuilder:validation:Optional
+	// +optional
 	BytesMetricName *string `json:"bytesMetricName,omitempty" yaml:"bytesMetricName,omitempty"`
-	// +kubebuilder:validation:Optional
+	// +optional
 	Filter *ObserverFilter `json:"filter,omitempty" yaml:"filter,omitempty"`
 }
 
@@ -24,34 +24,39 @@ type ObserverLogsFilter struct {
 }
 
 type ObserverFilter struct {
-	// +kubebuilder:validation:Optional
+	// +optional
 	ErrorMode *string `json:"error_mode" yaml:"error_mode"` //nolint:tagliatelle
-	// +kubebuilder:validation:Optional
+	// +optional
 	Logs *ObserverLogsFilter `json:"logs" yaml:"logs"`
 }
 
 // TODO: Add metrics and trace filters
 
 type ObserverResource struct {
-	// +kubebuilder:validation:Optional
-	Image *string `json:"image,omitempty" yaml:"image,omitempty"`
-	// +kubebuilder:validation:Optional
-	Replicas *int32 `json:"replicas,omitempty" yaml:"replicas,omitempty"`
-	// +kubebuilder:validation:Optional
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty" yaml:"resources,omitempty"`
-	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="public.ecr.aws/decisiveai/observer-collector:0.1.6"
+	// +optional
+	Image string `json:"image,omitempty"`
+	// +kubebuilder:default=1
+	// +optional
+	Replicas int32 `json:"replicas,omitempty"`
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+	// +optional
 	// +kubebuilder:validation:Minimum=1
-	GrpcReceiverMaxMsgSize *uint64 `json:"grpcReceiverMaxMsgSize,omitempty" yaml:"grpcReceiverMaxMsgSize,omitempty"`
-	// +kubebuilder:validation:Optional
-	OwnLogsOtlpEndpoint *string `json:"ownLogsOtlpEndpoint,omitempty" yaml:"ownLogsOtlpEndpoint,omitempty"`
+	GrpcReceiverMaxMsgSize *uint64 `json:"grpcReceiverMaxMsgSize,omitempty"`
+	// +optional
+	OwnLogsOtlpEndpoint *string `json:"ownLogsOtlpEndpoint,omitempty"`
+	// +kubebuilder:default={}
+	// +optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 }
 
 // MdaiObserverSpec defines the desired state of MdaiObserver.
 type MdaiObserverSpec struct {
 	// +optional
-	Observers []Observer `json:"observers,omitempty" yaml:"observers,omitempty"`
+	Observers []Observer `json:"observers,omitempty"`
 	// +optional
-	ObserverResource ObserverResource `json:"observerResource,omitempty" yaml:"observerResource,omitempty"`
+	ObserverResource ObserverResource `json:"observerResource,omitempty"`
 }
 
 // MdaiObserverStatus defines the observed state of MdaiObserver.

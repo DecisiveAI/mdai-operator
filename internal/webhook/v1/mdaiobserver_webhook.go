@@ -41,7 +41,7 @@ type MdaiObserverCustomValidator struct {
 var _ webhook.CustomValidator = &MdaiObserverCustomValidator{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type MdaiObserver.
-func (v *MdaiObserverCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *MdaiObserverCustomValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	mdaiobserver, ok := obj.(*mdaiv1.MdaiObserver)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiObserver object but got %T", obj)
@@ -52,7 +52,7 @@ func (v *MdaiObserverCustomValidator) ValidateCreate(ctx context.Context, obj ru
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type MdaiObserver.
-func (v *MdaiObserverCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (v *MdaiObserverCustomValidator) ValidateUpdate(_ context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
 	mdaiobserver, ok := newObj.(*mdaiv1.MdaiObserver)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiObserver object for the newObj but got %T", newObj)
@@ -63,7 +63,7 @@ func (v *MdaiObserverCustomValidator) ValidateUpdate(ctx context.Context, oldObj
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type MdaiObserver.
-func (*MdaiObserverCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (*MdaiObserverCustomValidator) ValidateDelete(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	mdaiobserver, ok := obj.(*mdaiv1.MdaiObserver)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiObserver object but got %T", obj)
@@ -78,12 +78,9 @@ func (*MdaiObserverCustomValidator) ValidateDelete(ctx context.Context, obj runt
 func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiobserver *mdaiv1.MdaiObserver) (admission.Warnings, error) {
 	newWarnings := admission.Warnings{}
 	observers := mdaiobserver.Spec.Observers
-	observerResource := mdaiobserver.Spec.ObserverResource
+	observerSpec := mdaiobserver.Spec
 
-	if observerResource.Replicas == nil {
-		newWarnings = append(newWarnings, "ObserverResource "+mdaiobserver.Name+" does not define a replica count")
-	}
-	if observerResource.Resources == nil {
+	if observerSpec.ObserverResource.Resources == nil {
 		newWarnings = append(newWarnings, "ObserverResource "+mdaiobserver.Name+" does not define resource requests/limits")
 	}
 

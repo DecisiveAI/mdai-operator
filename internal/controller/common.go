@@ -40,6 +40,12 @@ const (
 	promHTTPPort        = 8899
 	otelMetricsPort     = 8888
 	observerMetricsPort = 8899
+
+	otlpGRPCName        = "otlp-grpc"
+	otlpHTTPName        = "otlp-http"
+	promHTTPName        = "prom-http"
+	otelMetricsName     = "otel-metrics"
+	observerMetricsName = "observe-metrics"
 )
 
 type ObjectState bool
@@ -149,7 +155,7 @@ func reconcileDesiredObjects(ctx context.Context, kubeClient client.Client, logg
 
 func deleteObjects(ctx context.Context, kubeClient client.Client, logger logr.Logger, objects map[types.UID]client.Object) error {
 	// Pruning owned objects in the cluster which are not should not be present after the reconciliation.
-	pruneErrs := []error{}
+	var pruneErrs []error
 	for _, obj := range objects {
 		l := logger.WithValues(
 			"object_name", obj.GetName(),

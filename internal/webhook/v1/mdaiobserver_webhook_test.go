@@ -36,10 +36,10 @@ var _ = Describe("MdaiObserver Webhook", func() {
 		It("Should deny creation if a required field is missing", func() {
 			By("simulating an invalid creation scenario")
 			obj = createObserver()
-			obj.Spec.ObserverResource.Replicas = nil
+			obj.Spec.ObserverResource.Resources = nil
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(warnings).To(Equal(admission.Warnings{
-				"ObserverResource test-observer does not define a replica count",
+				"ObserverResource test-observer does not define resource requests/limits",
 			}))
 			Expect(err).Error().To(Not(HaveOccurred()))
 		})
@@ -100,8 +100,8 @@ func createObserver() *mdaiv1.MdaiObserver {
 				},
 			},
 			ObserverResource: mdaiv1.ObserverResource{
-				Image:    ptr.To("watcher-image:9.9.9"),
-				Replicas: ptr.To(int32(3)),
+				Image:    "watcher-image:9.9.9",
+				Replicas: int32(3),
 				Resources: &corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
 						"Cpu":    resource.MustParse("500m"),

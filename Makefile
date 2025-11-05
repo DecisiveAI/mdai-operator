@@ -72,7 +72,7 @@ test-coverage: manifests generate fmt vet envtest ## Run tests and generate code
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests and generate code coverage.
 	# Run Go tests and produce coverage report
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.txt
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -count=1 -coverprofile cover.txt
 
 .PHONY: test-e2e
 test-e2e: manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.

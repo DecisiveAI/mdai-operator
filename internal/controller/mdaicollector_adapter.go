@@ -232,12 +232,23 @@ func (c MdaiCollectorAdapter) ensureSynchronized(ctx context.Context) (Operation
 	if err != nil {
 		return RequeueOnErrorOrContinue(err)
 	}
-	err = c.createOrUpdateMdaiCollectorRoleBinding(ctx, namespace, roleName, serviceAccountName)
-	if err != nil {
+	if err = c.createOrUpdateMdaiCollectorRoleBinding(ctx, namespace, roleName, serviceAccountName); err != nil {
 		return RequeueOnErrorOrContinue(err)
 	}
 
-	deploymentName, err := c.createOrUpdateMdaiCollectorDeployment(ctx, namespace, collectorConfigMapName, collectorEnvConfigMapName, serviceAccountName, awsAccessKeySecret, hash)
+	params := CollectorDeploymentParams{
+		Namespace:              namespace,
+		CollectorConfigMapName: collectorConfigMapName,
+		CollectorEnvConfigName: collectorEnvConfigMapName,
+		ServiceAccountName:     serviceAccountName,
+		AwsAccessKeySecret:     awsAccessKeySecret,
+		Hash:                   hash,
+		Image:                  c.collectorCR.Spec.Image,
+		Tolerations:            c.collectorCR.Spec.Tolerations,
+		Replicas:               c.collectorCR.Spec.Replicas,
+	}
+
+	deploymentName, err := c.createOrUpdateMdaiCollectorDeployment(ctx, params)
 	if err != nil {
 		if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
 			c.logger.Info("re-queuing due to resource conflict")
@@ -632,12 +643,35 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorEnvVarConfigMap(ctx con
 	return mdaiCollectorEnvVarConfigMapName, nil
 }
 
-func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, namespace string, collectorConfigMapName string, collectorEnvConfigMapName string, serviceAccountName string, awsAccessKeySecret *string, hash string) (string, error) {
+type CollectorDeploymentParams struct {
+	Namespace              string
+	CollectorConfigMapName string
+	CollectorEnvConfigName string
+	ServiceAccountName     string
+	AwsAccessKeySecret     *string
+	Hash                   string
+	Image                  string
+	Tolerations            []corev1.Toleration
+	Replicas               int32
+}
+
+var DefaultSecurityContext = &corev1.SecurityContext{
+	SeccompProfile: &corev1.SeccompProfile{
+		Type: corev1.SeccompProfileTypeRuntimeDefault,
+	},
+	AllowPrivilegeEscalation: ptr.To(false),
+	Capabilities: &corev1.Capabilities{
+		Drop: []corev1.Capability{"ALL"},
+	},
+	RunAsNonRoot: ptr.To(true),
+}
+
+func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.Context, params CollectorDeploymentParams) (string, error) {
 	mdaiCollectorDeploymentName := c.getScopedMdaiCollectorResourceName("")
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      mdaiCollectorDeploymentName,
-			Namespace: namespace,
+			Namespace: params.Namespace,
 			Labels: map[string]string{
 				LabelManagedByMdaiKey: LabelManagedByMdaiValue,
 				HubComponentLabel:     MdaiCollectorHubComponent,
@@ -650,12 +684,12 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 			return err
 		}
 
-		container := builder.Container(mdaiCollectorDeploymentName, "public.ecr.aws/decisiveai/mdai-collector:0.1.6").
+		container := builder.Container(mdaiCollectorDeploymentName, params.Image).
 			WithCommand("/mdai-collector", "--config=/conf/collector.yaml").
 			WithPorts(
-				corev1.ContainerPort{ContainerPort: otlpGRPCPort, Name: "otlp-grpc"},
-				corev1.ContainerPort{ContainerPort: otlpHTTPPort, Name: "otlp-http"},
-				corev1.ContainerPort{ContainerPort: promHTTPPort, Name: "prom-http"},
+				corev1.ContainerPort{ContainerPort: otlpGRPCPort, Name: otlpGRPCName},
+				corev1.ContainerPort{ContainerPort: otlpHTTPPort, Name: otlpHTTPName},
+				corev1.ContainerPort{ContainerPort: promHTTPPort, Name: promHTTPName},
 			).
 			WithVolumeMounts(corev1.VolumeMount{
 				Name:      "config-volume",
@@ -665,21 +699,12 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 			WithEnvFrom(corev1.EnvFromSource{
 				ConfigMapRef: &corev1.ConfigMapEnvSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: collectorEnvConfigMapName,
+						Name: params.CollectorConfigMapName,
 					},
 				},
 			}).
-			WithAWSSecret(awsAccessKeySecret).
-			WithSecurityContext(&corev1.SecurityContext{
-				SeccompProfile: &corev1.SeccompProfile{
-					Type: corev1.SeccompProfileTypeRuntimeDefault,
-				},
-				AllowPrivilegeEscalation: ptr.To(false),
-				Capabilities: &corev1.Capabilities{
-					Drop: []corev1.Capability{"ALL"},
-				},
-				RunAsNonRoot: ptr.To(true),
-			}).
+			WithAWSSecret(params.AwsAccessKeySecret).
+			WithSecurityContext(DefaultSecurityContext).
 			Build()
 
 		builder.Deployment(deployment).
@@ -688,16 +713,17 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 			WithSelectorLabel("app", mdaiCollectorDeploymentName).
 			WithTemplateLabel("app", mdaiCollectorDeploymentName).
 			WithTemplateLabel("app.kubernetes.io/component", mdaiCollectorDeploymentName).
-			WithTemplateAnnotation("mdai-collector-config/sha256", hash).
-			WithReplicas(1).
-			WithServiceAccount(serviceAccountName).
+			WithTemplateAnnotation("mdai-collector-config/sha256", params.Hash).
+			WithTolerations(params.Tolerations...).
+			WithReplicas(params.Replicas).
+			WithServiceAccount(params.ServiceAccountName).
 			WithContainers(container).
 			WithVolumes(corev1.Volume{
 				Name: "config-volume",
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: collectorConfigMapName,
+							Name: params.CollectorConfigMapName,
 						},
 					},
 				},
@@ -708,7 +734,10 @@ func (c MdaiCollectorAdapter) createOrUpdateMdaiCollectorDeployment(ctx context.
 	if err != nil {
 		return "", err
 	}
-	c.logger.Info(mdaiCollectorDeploymentName+" Deployment created or updated successfully", "deployment", deployment.Name, "operationResult", operationResult)
+	c.logger.Info(mdaiCollectorDeploymentName+" Deployment created or updated successfully",
+		"deployment", deployment.Name,
+		"operationResult", operationResult,
+	)
 
 	return mdaiCollectorDeploymentName, nil
 }
