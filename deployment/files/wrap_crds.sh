@@ -2,7 +2,7 @@ if ! grep -q '^crds:' deployment/values.yaml 2>/dev/null; then
   cat <<EOF >> deployment/values.yaml
 
 crds:
-  enabled: true
+  create: true
 EOF
 fi
 

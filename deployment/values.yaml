@@ -69,4 +69,4 @@ admissionWebhooks:
   caFile: ""
 
 crds:
-  enabled: true
+  create: true
