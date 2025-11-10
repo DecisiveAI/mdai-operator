@@ -244,6 +244,9 @@ type When struct {
 	// +optional
 	// +kubebuilder:validation:Enum=added;removed;set
 	UpdateType *string `json:"updateType,omitempty"`
+
+	//StartReplayNamed    *string `json:"startReplayNamed,omitempty"`
+	//ReplayTelemetryType *string `json:"replayTelemetryType,omitempty"`
 }
 
 // MdaiHubSpec defines the desired state of MdaiHub.
