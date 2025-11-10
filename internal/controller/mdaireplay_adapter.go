@@ -254,6 +254,7 @@ func (c MdaiReplayAdapter) getReplayCollectorConfigYAML(replayId string, hubName
 	replayerAttributes := agentDescription.MustMap("non_identifying_attributes")
 	replayerAttributes.Set("replay_id", replayId)
 	replayerAttributes.Set("hub_name", hubName)
+	replayerAttributes.Set("replay_status_variable", replayCRSpec.StatusVariableRef)
 	agentDescription.Set("non_identifying_attributes", replayerAttributes)
 	opampServer := opampExtension.MustMap("server")
 	opampServer.MustMap("http").Set("endpoint", replayCRSpec.OpAMPEndpoint)
@@ -402,7 +403,7 @@ func (c MdaiReplayAdapter) finalize(ctx context.Context) (ObjectState, error) {
 		}
 		c.logger.Info("replay sending queue is empty, continuing to finalize", "replayName", c.replayCR.Name)
 	}
-	
+
 	if err := c.client.Get(ctx, types.NamespacedName{Name: c.replayCR.Name, Namespace: c.replayCR.Namespace}, c.replayCR); err != nil {
 		if apierrors.IsNotFound(err) {
 			c.logger.Info("✅MdaiReplay has been deleted, no need to finalize")

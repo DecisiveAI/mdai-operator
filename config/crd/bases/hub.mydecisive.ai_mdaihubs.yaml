@@ -433,6 +433,85 @@ spec:
                             - templateRef
                             - url
                             type: object
+                          cleanUpReplay:
+                            type: object
+                          deployReplay:
+                            properties:
+                              replaySpec:
+                                description: ReplaySpec is a MdaiReplaySpec CR spec
+                                  defining the parameters of this replay
+                                properties:
+                                  destination:
+                                    properties:
+                                      otlpHttp:
+                                        properties:
+                                          endpoint:
+                                            type: string
+                                        required:
+                                        - endpoint
+                                        type: object
+                                    type: object
+                                  endTime:
+                                    type: string
+                                  hubName:
+                                    type: string
+                                  ignoreSendingQueue:
+                                    description: 'IgnoreSendingQueue: Bypass checking
+                                      the OTEL sending queue metric when finalizing
+                                      the replay resource'
+                                    type: boolean
+                                  opampEndpoint:
+                                    type: string
+                                  resource:
+                                    properties:
+                                      image:
+                                        type: string
+                                    required:
+                                    - image
+                                    type: object
+                                  source:
+                                    properties:
+                                      aws:
+                                        properties:
+                                          awsAccessKeySecret:
+                                            type: string
+                                        type: object
+                                      s3:
+                                        properties:
+                                          filePrefix:
+                                            type: string
+                                          s3Bucket:
+                                            type: string
+                                          s3Partition:
+                                            type: string
+                                          s3Path:
+                                            type: string
+                                          s3Region:
+                                            type: string
+                                        required:
+                                        - filePrefix
+                                        - s3Bucket
+                                        - s3Partition
+                                        - s3Path
+                                        - s3Region
+                                        type: object
+                                    type: object
+                                  startTime:
+                                    type: string
+                                  statusVariableRef:
+                                    description: |-
+                                      StatusVariableRef a variable that will be updated with the result of this replay upon success or failure.
+                                      Should be referenced in a When VariableUpdated rule so that a CleanUpReplayAction can be triggered
+                                    type: string
+                                  telemetryType:
+                                    type: string
+                                required:
+                                - opampEndpoint
+                                - statusVariableRef
+                                type: object
+                            required:
+                            - replaySpec
+                            type: object
                           removeFromMap:
                             properties:
                               key:
@@ -574,7 +653,6 @@ spec:
                         required:
                         - name
                         type: object
-                      minItems: 1
                       type: array
                     storageType:
                       default: mdai-valkey

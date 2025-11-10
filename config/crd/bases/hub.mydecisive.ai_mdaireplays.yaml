@@ -95,11 +95,16 @@ spec:
                 type: object
               startTime:
                 type: string
+              statusVariableRef:
+                description: |-
+                  StatusVariableRef a variable that will be updated with the result of this replay upon success or failure.
+                  Should be referenced in a When VariableUpdated rule so that a CleanUpReplayAction can be triggered
+                type: string
               telemetryType:
                 type: string
             required:
-            - hubName
             - opampEndpoint
+            - statusVariableRef
             type: object
           status:
             description: MdaiReplayStatus defines the observed state of MdaiReplay.

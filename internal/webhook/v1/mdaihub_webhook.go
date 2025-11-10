@@ -311,10 +311,17 @@ func validateAction(actionPath *field.Path, action mdaiv1.Action, knownVarKeys m
 			},
 		},
 		{
-			key:     "callWebhook",
-			present: action.CallWebhook != nil,
+			key:     "deployReplay",
+			present: action.DeployReplay != nil,
 			validate: func() field.ErrorList {
-				return validateWebhookCall(actionPath.Child("callWebhook"), action.CallWebhook)
+				return validateDeployReplayAction(actionPath.Child("deployReplay"), action.DeployReplay, knownVarKeys)
+			},
+		},
+		{
+			key:     "cleanUpReplay",
+			present: action.CleanUpReplay != nil,
+			validate: func() field.ErrorList {
+				return validateCleanUpReplayAction(actionPath.Child("cleanUpReplay"), action.CleanUpReplay, knownVarKeys)
 			},
 		},
 	}
@@ -362,6 +369,20 @@ func validateMapAction(p *field.Path, a *mdaiv1.MapAction, knownVarKeys map[stri
 			errs = append(errs, field.Required(p.Child("value"), "required for addToMap"))
 		}
 	}
+
+	return errs
+}
+
+// TODO: ADD REAL VALIDATION REJECT THIS PR!
+func validateDeployReplayAction(p *field.Path, a *mdaiv1.DeployReplayAction, knownVarKeys map[string]struct{}) field.ErrorList {
+	var errs field.ErrorList
+
+	return errs
+}
+
+// TODO: ADD REAL VALIDATION REJECT THIS PR!
+func validateCleanUpReplayAction(p *field.Path, a *mdaiv1.CleanUpReplayAction, knownVarKeys map[string]struct{}) field.ErrorList {
+	var errs field.ErrorList
 
 	return errs
 }

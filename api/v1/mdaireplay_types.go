@@ -50,14 +50,24 @@ type MdaiReplayResourceConfiguration struct {
 
 // MdaiReplaySpec defines the desired state of MdaiReplay.
 type MdaiReplaySpec struct {
+	// TODO: These fields marked optional so that the automations can use them. Figure out better way :(
+	// +optional
+	StartTime string `json:"startTime,omitempty" yaml:"startTime,omitempty"`
+	// +optional
+	EndTime string `json:"endTime,omitempty" yaml:"endTime,omitempty"`
+	// +optional
+	TelemetryType MdaiReplayTelemetryType `json:"telemetryType,omitempty" yaml:"telemetryType,omitempty"`
+	// +optional
+	HubName string `json:"hubName" yaml:"hubName"`
+
+	// StatusVariableRef a variable that will be updated with the result of this replay upon success or failure.
+	// Should be referenced in a When VariableUpdated rule so that a CleanUpReplayAction can be triggered
+	StatusVariableRef string `json:"statusVariableRef"`
+
 	OpAMPEndpoint string `json:"opampEndpoint" yaml:"opampEndpoint"`
-	HubName       string `json:"hubName" yaml:"hubName"`
-	StartTime     string `json:"startTime,omitempty" yaml:"startTime,omitempty"`
-	EndTime       string `json:"endTime,omitempty" yaml:"endTime,omitempty"`
 	// IgnoreSendingQueue: Bypass checking the OTEL sending queue metric when finalizing the replay resource
 	// +optional
 	IgnoreSendingQueue bool                               `json:"ignoreSendingQueue" yaml:"ignoreSendingQueue" default:"false"`
-	TelemetryType      MdaiReplayTelemetryType            `json:"telemetryType,omitempty" yaml:"telemetryType,omitempty"`
 	Source             MdaiReplaySourceConfiguration      `json:"source,omitempty" yaml:"source,omitempty"`
 	Destination        MdaiReplayDestinationConfiguration `json:"destination,omitempty" yaml:"destination,omitempty"`
 	Resource           MdaiReplayResourceConfiguration    `json:"resource,omitempty" yaml:"resource,omitempty"`
