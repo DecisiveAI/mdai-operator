@@ -192,6 +192,8 @@ func wantDeploymentBase(container corev1.Container) *appsv1.Deployment {
 			},
 		},
 	}
+	a.Spec.Template.Spec.Tolerations = nil
+
 	return a
 }
 
@@ -204,6 +206,7 @@ func buildDeploymentWithBuilder(container corev1.Container) *appsv1.Deployment {
 		WithTemplateLabel("app", mdaiCollectorDeploymentName).
 		WithTemplateLabel("app.kubernetes.io/component", mdaiCollectorDeploymentName).
 		WithTemplateAnnotation("mdai-collector-config/sha256", hash).
+		WithTolerations(corev1.Toleration{}).
 		WithReplicas(1).
 		WithServiceAccount(serviceAccountName).
 		WithContainers(container).

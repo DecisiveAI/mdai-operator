@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"reflect"
 
 	"github.com/decisiveai/mdai-operator/internal/manifests"
@@ -15,39 +16,56 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
 )
 
-const resourceOwnerKey = "metadata.ownerReferences.name"
+const (
+	resourceOwnerKey            = "metadata.ownerReferences.name"
+	MdaiIngressOtelColLookupKey = "spec.otelCol.lookupKey"
+)
 
 // MdaiIngressReconciler reconciles a MdaiIngress object
 type MdaiIngressReconciler struct {
 	client.Client
 
 	Scheme *runtime.Scheme
-	Cache  cache.Cache
 	Logger *zap.Logger
+}
+
+var ErrIncorrectOtelcolRef = errors.New("incorrect Otelcol reference")
+
+var IndexerOtelCol = func(obj client.Object) []string {
+	a, ok := obj.(*hubv1.MdaiIngress)
+	if !ok {
+		return nil
+	}
+	otelCol := a.Spec.OtelCollector
+	if otelCol.Name != "" {
+		return []string{otelCol.Name}
+	}
+	return nil
 }
 
 //+kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaiingresses,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaiingresses/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaiingresses/finalizers,verbs=update
 //+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=opentelemetry.io,resources=opentelemetrycollectors,verbs=get;list;watch
 
 func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logger.FromContext(ctx)
 	log.Info("-- Starting MDAI Ingress reconciliation --", "name", req.Name)
 
 	var instanceMdaiIngress hubv1.MdaiIngress
-	if err := r.Cache.Get(ctx, req.NamespacedName, &instanceMdaiIngress); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, &instanceMdaiIngress); err != nil {
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "unable to fetch MdaiIngress")
 		}
@@ -58,16 +76,19 @@ func (r *MdaiIngressReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	otelcolName := instanceMdaiIngress.Spec.OtelCollector.Name
+	if otelcolName == "" {
+		log.Error(ErrIncorrectOtelcolRef, "No OtelCollector reference in MdaiIngress", "name", req.Name, "namespace", req.Namespace)
+		return ctrl.Result{}, ErrIncorrectOtelcolRef
+	}
+	otelcolNsName := types.NamespacedName{Name: otelcolName, Namespace: req.Namespace}
+
 	var instanceOtel v1beta1.OpenTelemetryCollector
-	if err := r.Cache.Get(ctx, req.NamespacedName, &instanceOtel); err != nil {
+	if err := r.Get(ctx, otelcolNsName, &instanceOtel); err != nil {
 		if !apierrors.IsNotFound(err) {
 			log.Error(err, "unable to fetch OpenTelemetryCollector")
+			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
-
-		// we'll ignore not-found errors, since they can't be fixed by an immediate
-		// requeue (we'll need to wait for a new notification), and we can get them
-		// on deleted requests.
-		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	otelMdaiComb := hubv1.NewOtelIngressConfig(instanceOtel, instanceMdaiIngress)
@@ -134,74 +155,48 @@ func (r *MdaiIngressReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	); err != nil {
 		return err
 	}
+
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&hubv1.MdaiIngress{}, builder.WithPredicates(predicate.Funcs{
-			CreateFunc: func(e event.CreateEvent) bool {
-				cr, ok := e.Object.(*hubv1.MdaiIngress)
-				if !ok {
-					return false
-				}
-				return r.pairOtelcolMdaiIngressExist(ctx, cr.Name, cr.Namespace)
-			},
-			UpdateFunc: func(e event.UpdateEvent) bool {
-				newCr, ok := e.ObjectNew.(*hubv1.MdaiIngress)
-				if !ok {
-					return false
-				}
-				return r.pairOtelcolMdaiIngressExist(ctx, newCr.Name, newCr.Namespace)
-			},
-			DeleteFunc: func(e event.DeleteEvent) bool { // TODO: implement deletion logic
-				return false
-			},
-			GenericFunc: func(e event.GenericEvent) bool {
-				return false
-			},
-		})).
+		For(&hubv1.MdaiIngress{}, builder.WithPredicates(r.mdaiIngressPredicates(ctx))).
 		Watches(
-			// TODO: try to narrow down the watches if possible
 			&v1beta1.OpenTelemetryCollector{},
-			handler.EnqueueRequestsFromMapFunc(requeueByCollectorRef),
-			builder.WithPredicates(predicate.Funcs{
-				UpdateFunc: func(e event.UpdateEvent) bool {
-					oldCR, okOld := e.ObjectOld.(*v1beta1.OpenTelemetryCollector)
-					if !okOld {
-						return false
-					}
-					newCR, okNew := e.ObjectNew.(*v1beta1.OpenTelemetryCollector)
-					if !okNew {
-						return false
-					}
-					return !reflect.DeepEqual(oldCR.Spec.Config, newCR.Spec.Config) && r.pairOtelcolMdaiIngressExist(ctx, newCR.Name, newCR.Namespace)
-				},
-				CreateFunc: func(e event.CreateEvent) bool {
-					cr, ok := e.Object.(*v1beta1.OpenTelemetryCollector)
-					if !ok {
-						return false
-					}
-					return r.pairOtelcolMdaiIngressExist(ctx, cr.Name, cr.Namespace)
-				},
-				DeleteFunc: func(e event.DeleteEvent) bool { // TODO: implement deletion logic
-					return false
-				},
-				GenericFunc: func(e event.GenericEvent) bool {
-					return false
-				},
-			}),
+			handler.EnqueueRequestsFromMapFunc(r.requeueByCollectorRef),
+			builder.WithPredicates(r.otelcolPredicates()),
 		).
 		Complete(r)
 }
 
-func requeueByCollectorRef(ctx context.Context, obj client.Object) []reconcile.Request {
+func (r *MdaiIngressReconciler) GetParams(otelMdaiComb hubv1.OtelMdaiIngressComb) manifests.Params {
+	p := manifests.Params{
+		Client:              r.Client,
+		OtelMdaiIngressComb: otelMdaiComb,
+		Log:                 r.Logger,
+		Scheme:              r.Scheme,
+	}
+	return p
+}
+
+func (r *MdaiIngressReconciler) requeueByCollectorRef(ctx context.Context, obj client.Object) []reconcile.Request {
 	log := logger.FromContext(ctx)
 	log.Info("-- Requeueing MdaiIngress triggered by otel collector", "collector name", obj.GetName(), "namespace", obj.GetNamespace())
+
+	cr, ok := obj.(*v1beta1.OpenTelemetryCollector)
+	if !ok {
+		return []ctrl.Request{}
+	}
+
+	mdaiIngressName, found := r.findMdaiIngress(ctx, cr.Name, cr.Namespace)
+	if !found {
+		return []ctrl.Request{}
+	}
 
 	// As soon as this method is called _after_ predicated applied, and therefore, we know that a linked pair MdaiIngress -> Otelcol exists,
 	// we dont need to check anything here, just requeue the MdaiIngress
 	return []ctrl.Request{
 		{
 			NamespacedName: types.NamespacedName{
-				Name:      obj.GetName(),
-				Namespace: obj.GetNamespace(),
+				Name:      mdaiIngressName,
+				Namespace: cr.Namespace,
 			},
 		},
 	}
@@ -223,42 +218,11 @@ func BuildCollector(params manifests.Params) ([]client.Object, error) {
 	return resources, nil
 }
 
-func (r *MdaiIngressReconciler) GetParams(otelMdaiComb hubv1.OtelMdaiIngressComb) manifests.Params {
-	p := manifests.Params{
-		Client:              r.Client,
-		OtelMdaiIngressComb: otelMdaiComb,
-		Log:                 r.Logger,
-		Scheme:              r.Scheme,
-	}
-	return p
-}
-
-// pairOtelcolMdaiIngressExist checks if there is a MdaiIngress with the same name and namespace as the provided OpentelemetryCollector
-// TODO: change mdaiingress -> otelcol mapping logic? Labels?
-func (r *MdaiIngressReconciler) pairOtelcolMdaiIngressExist(ctx context.Context, name string, namespace string) bool {
-	log := logger.FromContext(ctx)
-
-	namespacedName := types.NamespacedName{Name: name, Namespace: namespace}
-
-	otelcol := v1beta1.OpenTelemetryCollector{}
-	if err := r.Cache.Get(ctx, namespacedName, &otelcol); err != nil {
-		log.Info("Failed to get OpentelemetryCollector", "name", name, "namespace", namespace, "error", err)
-		return false
-	}
-	mdaiIngress := hubv1.MdaiIngress{}
-	if err := r.Cache.Get(ctx, namespacedName, &mdaiIngress); err != nil {
-		log.Info("Failed to get MdaiIngress", "name", name, "namespace", namespace, "error", err)
-		return false
-	}
-
-	return true
-}
-
 func (r *MdaiIngressReconciler) findMdaiIngressOwnedObjects(ctx context.Context, params manifests.Params) (map[types.UID]client.Object, error) {
 	ownedObjects := map[types.UID]client.Object{}
 	ownedObjectTypes := GetOwnedResourceTypes()
 	listOpts := []client.ListOption{
-		client.InNamespace(params.OtelMdaiIngressComb.Otelcol.Namespace),
+		client.InNamespace(params.OtelMdaiIngressComb.MdaiIngress.Namespace),
 		client.MatchingFields{resourceOwnerKey: params.OtelMdaiIngressComb.MdaiIngress.Name},
 	}
 	for _, objectType := range ownedObjectTypes {
@@ -274,6 +238,43 @@ func (r *MdaiIngressReconciler) findMdaiIngressOwnedObjects(ctx context.Context,
 	return ownedObjects, nil
 }
 
+// otelColExists returns true if the Otelcol instance with the referenced name and namespace is found
+func (r *MdaiIngressReconciler) otelColExists(ctx context.Context, name string, namespace string) bool {
+	log := logger.FromContext(ctx)
+
+	otelcolNsName := types.NamespacedName{Name: name, Namespace: namespace}
+	otelCollector := v1beta1.OpenTelemetryCollector{}
+	if err := r.Get(ctx, otelcolNsName, &otelCollector); err != nil {
+		log.Error(err, "Failed to get OpentelemetryCollector", "name", name, "namespace", namespace)
+		return false
+	}
+
+	return true
+}
+
+// findMdaiIngress returns a Name of the MdaiIngress instance with the given name and namespace.
+func (r *MdaiIngressReconciler) findMdaiIngress(ctx context.Context, name string, namespace string) (string, bool) {
+	log := logger.FromContext(ctx)
+
+	mdaiIngresses := hubv1.MdaiIngressList{}
+	if err := r.List(ctx, &mdaiIngresses,
+		client.InNamespace(namespace),
+		client.MatchingFields{MdaiIngressOtelColLookupKey: name},
+	); err != nil {
+		log.Error(err, "Failed to list MdaiIngresses", "namespace", namespace)
+		return "", false
+	}
+
+	if len(mdaiIngresses.Items) == 0 {
+		log.Info("No MdaiIngress found", "namespace", namespace)
+		return "", false
+	}
+
+	result := mdaiIngresses.Items[0].Name
+
+	return result, true
+}
+
 // GetOwnedResourceTypes returns all the resource types the controller can own. Even though this method returns an array
 // of client.Object, these are (empty) example structs rather than actual resources.
 func GetOwnedResourceTypes() []client.Object {
@@ -283,4 +284,67 @@ func GetOwnedResourceTypes() []client.Object {
 	}
 
 	return ownedResources
+}
+
+func (r *MdaiIngressReconciler) mdaiIngressPredicates(ctx context.Context) predicate.Funcs {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			cr, ok := e.Object.(*hubv1.MdaiIngress)
+			if !ok {
+				return false
+			}
+			return r.otelColExists(ctx, cr.Spec.OtelCollector.Name, cr.Namespace)
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			newCr, ok := e.ObjectNew.(*hubv1.MdaiIngress)
+			if !ok {
+				return false
+			}
+			oldCr, ok := e.ObjectOld.(*hubv1.MdaiIngress)
+			if !ok {
+				return false
+			}
+			if reflect.DeepEqual(oldCr.Spec, newCr.Spec) {
+				return false
+			}
+			return r.otelColExists(ctx, newCr.Spec.OtelCollector.Name, newCr.Namespace) || r.otelColExists(ctx, oldCr.Spec.OtelCollector.Name, oldCr.Namespace)
+		},
+		DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+		GenericFunc: func(e event.GenericEvent) bool { return false },
+	}
+}
+
+// nolint:revive
+func (r *MdaiIngressReconciler) otelcolPredicates() predicate.Funcs {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldCR, ok := e.ObjectOld.(*v1beta1.OpenTelemetryCollector)
+			if !ok {
+				return false
+			}
+			newCR, ok := e.ObjectNew.(*v1beta1.OpenTelemetryCollector)
+			if !ok {
+				return false
+			}
+			return !reflect.DeepEqual(oldCR.Spec.Config, newCR.Spec.Config)
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			return true
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return true
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			return false
+		},
+	}
+}
+
+func SetMdaiIngressIndexers(ctx context.Context, mgr manager.Manager) error {
+	return mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&hubv1.MdaiIngress{},
+		MdaiIngressOtelColLookupKey,
+		IndexerOtelCol,
+	)
 }

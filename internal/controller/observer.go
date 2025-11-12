@@ -11,7 +11,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 )
@@ -155,10 +154,7 @@ func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Co
 			}
 		}
 
-		deployment.Spec.Replicas = int32Ptr(1)
-		if observerResource.Replicas != nil {
-			deployment.Spec.Replicas = observerResource.Replicas
-		}
+		deployment.Spec.Replicas = &observerResource.Replicas
 		if deployment.Spec.Selector == nil {
 			deployment.Spec.Selector = &metav1.LabelSelector{}
 		}
@@ -187,10 +183,10 @@ func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Co
 			Name:  name,
 			Image: observerDefaultImage,
 			Ports: []corev1.ContainerPort{
-				{ContainerPort: otelMetricsPort, Name: "otelcol-metrics"},
-				{ContainerPort: observerMetricsPort, Name: "observe-metrics"},
-				{ContainerPort: otlpGRPCPort, Name: "otlp-grpc"},
-				{ContainerPort: otlpHTTPPort, Name: "otlp-http"},
+				{ContainerPort: otelMetricsPort, Name: otelMetricsName},
+				{ContainerPort: observerMetricsPort, Name: observerMetricsName},
+				{ContainerPort: otlpGRPCPort, Name: otlpGRPCName},
+				{ContainerPort: otlpHTTPPort, Name: otlpHTTPName},
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
@@ -204,22 +200,10 @@ func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Co
 				"/mdai-observer-collector",
 				"--config=/conf/collector.yaml",
 			},
-			SecurityContext: &corev1.SecurityContext{
-				SeccompProfile: &corev1.SeccompProfile{
-					Type: corev1.SeccompProfileTypeRuntimeDefault,
-				},
-				AllowPrivilegeEscalation: ptr.To(false),
-				Capabilities: &corev1.Capabilities{
-					Drop: []corev1.Capability{"ALL"},
-				},
-				RunAsNonRoot: ptr.To(true),
-			},
+			SecurityContext: DefaultSecurityContext,
 		}
 
-		if observerResource.Image != nil && *observerResource.Image != "" {
-			containerSpec.Image = *observerResource.Image
-		}
-
+		containerSpec.Image = observerResource.Image
 		if observerResource.Resources != nil {
 			containerSpec.Resources = *observerResource.Resources
 		}
@@ -240,6 +224,8 @@ func (c ObserverAdapter) createOrUpdateObserverResourceDeployment(ctx context.Co
 				},
 			},
 		}
+
+		deployment.Spec.Template.Spec.Tolerations = observerResource.Tolerations
 
 		return nil
 	})

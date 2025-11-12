@@ -62,6 +62,9 @@ spec:
   collectorEndpoints:
     otlp: otlp.mdai.io
     jaeger: jaeger.mdai.io
+  otelCollector:
+    name: test
+    namespace: test
 `
 
 	goodConfig := v1beta1.Config{}
@@ -165,7 +168,10 @@ spec:
 			logger := zap.NewNop()
 			got, err := tt.instance.getPortsWithUrlPathsForComponentKinds(logger, tt.args.componentKinds)
 			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
+
+			require.Len(t, got, 2)
+			require.ElementsMatch(t, tt.want["jaeger"], got["jaeger"])
+			require.ElementsMatch(t, tt.want["otlp"], got["otlp"])
 		})
 	}
 }

@@ -25,28 +25,33 @@ One Network Load Balancer (NLB) will be created if there is 1 or more non-gRPC (
 
 ### Disable ingress management in the original OTel Collector Custom Resource.
 
-To achieve that do not add `spec.ingress` filed in the Otelcol CR spec.
+To achieve that do not add `spec.ingress` field in the Otelcol CR spec.
 
 
 ###  Configure MDAI Otel Collector Ingress with MdaiIngress Custom Resource.
 
 Create Custom Resource `MdaiIngress` using [this sample](../config/samples/hub_v1_mdaiingress.yaml).
-Your CR name and namespace should be equal to Opentelemetrycollector name and namespace respectively:
+
+`spec.otelCollector` sets a reference to the OpenTelemetry Collector instance, you want to configure an ingress for
+Make sure your `MdaiIngress` instance created in the same namespace as your OpenTelemetry Collector, and a reference `spec.otelCollector` points to teh Otelcol name. 
 
 ```yaml
 apiVersion: hub.mydecisive.ai/v1
 kind: MdaiIngress
 metadata:
-  name: gateway # <<< 
-  namespace: mdai  # <<<
+  name: ingress-for-gateway-collector # can be any
+  namespace: mdai # <<< same as otelcol namespace
+spec:
+  otelCollector:
+    name: gateway  # <<< otelcol name
 ```
 
 ```yaml
 apiVersion: opentelemetry.io/vbeta1
 kind: OpenTelemetryCollector
 metadata:
-  name: gateway # <<<
-  namespace: mdai # <<<
+  name: gateway # <<< otelcol name
+  namespace: mdai # <<< otelcol namespace
 ```
 
 `spec.cloudType` sets the public cloud type. Supported values: `aws`

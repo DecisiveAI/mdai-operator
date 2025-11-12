@@ -132,10 +132,6 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 		},
 	}
 	observers := []hubv1.Observer{observer}
-	observerResource := hubv1.ObserverResource{
-		Image: ptr.To("public.ecr.aws/p3k6k6h3/observer-observer"),
-	}
-	observerResources := observerResource
 
 	mdaiCR := &hubv1.MdaiObserver{
 		ObjectMeta: metav1.ObjectMeta{
@@ -143,8 +139,10 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: hubv1.MdaiObserverSpec{
-			Observers:        observers,
-			ObserverResource: observerResources,
+			Observers: observers,
+			ObserverResource: hubv1.ObserverResource{
+				Image: "public.ecr.aws/p3k6k6h3/observer-observer:latest",
+			},
 		},
 		Status: hubv1.MdaiObserverStatus{},
 	}

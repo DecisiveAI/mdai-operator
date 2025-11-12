@@ -16,6 +16,12 @@ const (
 	CloudProviderAws CloudProvider = "aws"
 )
 
+// OtelColRef represents reference to Otel Collector Custom Resource
+type OtelColRef struct {
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+}
+
 // IngressService defines Service properties related to Ingress configuration.
 type IngressService struct {
 	// Type defines the type of the Service.
@@ -28,6 +34,9 @@ type IngressService struct {
 
 // MdaiIngressSpec defines the desired state of MdaiIngress
 type MdaiIngressSpec struct {
+	// Name of the Otel Collector, current Custom Resource belongs to.
+	OtelCollector OtelColRef `json:"otelCollector"`
+
 	// Supported types are: aws
 	CloudType CloudProvider `json:"cloudType"`
 

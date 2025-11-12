@@ -107,10 +107,21 @@ spec:
                 required:
                 - type
                 type: object
+              otelCollector:
+                description: Name of the Otel Collector, current Custom Resource belongs
+                  to.
+                properties:
+                  name:
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
             required:
             - cloudType
             - grpcService
             - nonGrpcService
+            - otelCollector
             type: object
           status:
             description: MdaiIngressStatus defines the observed state of MdaiIngress
