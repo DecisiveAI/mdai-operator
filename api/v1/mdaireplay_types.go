@@ -45,6 +45,7 @@ type MdaiReplayDestinationConfiguration struct {
 }
 
 type MdaiReplayResourceConfiguration struct {
+	// +optional
 	Image string `json:"image" yaml:"image"`
 }
 
@@ -70,21 +71,12 @@ type MdaiReplaySpec struct {
 	IgnoreSendingQueue bool                               `json:"ignoreSendingQueue" yaml:"ignoreSendingQueue" default:"false"`
 	Source             MdaiReplaySourceConfiguration      `json:"source,omitempty" yaml:"source,omitempty"`
 	Destination        MdaiReplayDestinationConfiguration `json:"destination,omitempty" yaml:"destination,omitempty"`
-	Resource           MdaiReplayResourceConfiguration    `json:"resource,omitempty" yaml:"resource,omitempty"`
+	// +optional
+	Resource MdaiReplayResourceConfiguration `json:"resource,omitempty" yaml:"resource,omitempty"`
 }
-
-type MdaiReplayStatusType string
-
-const (
-	MdaiReplayStatusTypeStarted   MdaiReplayStatusType = "Started"
-	MdaiReplayStatusTypeCompleted MdaiReplayStatusType = "Completed"
-	MdaiReplayStatusTypeFailed    MdaiReplayStatusType = "Failed"
-)
 
 // MdaiReplayStatus defines the observed state of MdaiReplay.
 type MdaiReplayStatus struct {
-	ReplayStatus MdaiReplayStatusType `json:"replayStatus"`
-
 	// Time when last Replay Configuration change was detected
 	// Right now it's updated on each reconcile, we have to skip when reconciliation detects no changes
 	// +optional
