@@ -17,7 +17,7 @@ else
   fi
 fi
 
-gsed -i '
+"$SED" -i '
   /^crds:/q            # If crds: exists, quit with no changes
   $a\
 \
