@@ -299,6 +299,15 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
+	if err = (&controller.MdaiReplayReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MdaiReplay")
+		gracefullyShutdownWithCode(1)
+	}
+	// +kubebuilder:scaffold:builder
+
 	// nolint:goconst
 	if os.Getenv(enableWebhooksEnvVar) != "false" {
 		if err = webhookmdaiv1.SetupMdaiHubWebhookWithManager(mgr); err != nil {
@@ -317,16 +326,12 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiIngress")
 			gracefullyShutdownWithCode(1)
 		}
+		// TODO: do the validation webhook!
+		// if err := webhookmdaiv1.SetupMdaiReplayWebhookWithManager(mgr); err != nil {
+		// 	setupLog.Error(err, "unable to create webhook", "webhook", "MdaiReplay")
+		// 	gracefullyShutdownWithCode(1)
+		// }
 	}
-
-	if err = (&controller.MdaiReplayReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MdaiReplay")
-		os.Exit(1)
-	}
-	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {
 		setupLog.Info("Adding metrics certificate watcher to manager")

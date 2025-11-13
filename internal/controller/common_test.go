@@ -40,8 +40,8 @@ var (
 		"app.kubernetes.io/name":       "test-collector-non-grpc",
 	}
 
-	http = "http"
-	grpc = "grpc"
+	httpProtocol = "http"
+	grpc         = "grpc"
 )
 
 // nolint: gofumpt
@@ -178,7 +178,7 @@ spec:
 									StrVal: "",
 								},
 								Protocol:    "",
-								AppProtocol: &http,
+								AppProtocol: &httpProtocol,
 							},
 						},
 						Selector:              selectorLabels,

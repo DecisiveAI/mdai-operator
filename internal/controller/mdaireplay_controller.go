@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/record"
 
@@ -19,6 +20,7 @@ var _ Controller = (*MdaiReplayReconciler)(nil)
 // MdaiReplayReconciler reconciles a MdaiReplay object
 type MdaiReplayReconciler struct {
 	client.Client
+
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
 }
@@ -64,17 +66,17 @@ func (r *MdaiReplayReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 // ReconcileHandler processes the MdaiReplay CR and performs the necessary operations.
 func (*MdaiReplayReconciler) ReconcileHandler(ctx context.Context, adapter Adapter) (ctrl.Result, error) {
-	ReplayAdapter, ok := adapter.(MdaiReplayAdapter)
+	replayAdapter, ok := adapter.(MdaiReplayAdapter)
 	if !ok {
 		return ctrl.Result{}, fmt.Errorf("unexpected adapter type: %T", adapter)
 	}
 
 	operations := []ReconcileOperation{
-		ReplayAdapter.ensureDeletionProcessed,
-		ReplayAdapter.ensureStatusInitialized,
-		ReplayAdapter.ensureFinalizerInitialized,
-		ReplayAdapter.ensureSynchronized,
-		ReplayAdapter.ensureStatusSetToDone,
+		replayAdapter.ensureDeletionProcessed,
+		replayAdapter.ensureStatusInitialized,
+		replayAdapter.ensureFinalizerInitialized,
+		replayAdapter.ensureSynchronized,
+		replayAdapter.ensureStatusSetToDone,
 	}
 	for _, operation := range operations {
 		result, err := operation(ctx)

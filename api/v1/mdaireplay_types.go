@@ -4,8 +4,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type MdaiReplayTelemetryType string
-type MdaiReplayS3Partition string
+type (
+	MdaiReplayTelemetryType string
+	MdaiReplayS3Partition   string
+)
 
 const (
 	LogsReplayTelemetryType     MdaiReplayTelemetryType = "Logs"
@@ -104,9 +106,10 @@ type MdaiReplay struct {
 type MdaiReplayList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []MdaiReplay `json:"items"`
+
+	Items []MdaiReplay `json:"items"`
 }
 
-func init() {
+func init() { //nolint:gochecknoinits
 	SchemeBuilder.Register(&MdaiReplay{}, &MdaiReplayList{})
 }

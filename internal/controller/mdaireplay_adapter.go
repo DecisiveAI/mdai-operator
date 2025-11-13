@@ -5,10 +5,14 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"net/http"
+	"slices"
+
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/mdai-operator/internal/builder"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/common/expfmt"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -18,11 +22,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
-	"net/http"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
-	"slices"
 )
 
 const (
@@ -164,7 +167,6 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerConfigMap(ctx context.Context) 
 	namespace := c.replayCR.Namespace
 	configMapName := c.getReplayerResourceName("collector-config")
 	collectorYAML, err := c.getReplayCollectorConfigYAML(c.replayCR.Name, c.replayCR.Spec.HubName)
-
 	if err != nil {
 		return "", fmt.Errorf("‼️failed to build replay configuration: %w", err)
 	}
@@ -221,8 +223,8 @@ func (c MdaiReplayAdapter) getReplayCollectorConfigYAML(replayId string, hubName
 		"action": "upsert",
 		"value":  replayId,
 	}
-	newActions := append(attrProcessorActions, upsertReplayIdAction)
-	attrProcessor.Set("actions", newActions)
+	attrProcessorActions = append(attrProcessorActions, upsertReplayIdAction)
+	attrProcessor.Set("actions", attrProcessorActions)
 
 	// Add otlphttp exporter if otlphttp destination is set
 	otlpEndpoint := replayCRSpec.Destination.OtlpHttp.Endpoint
@@ -377,10 +379,6 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerService(ctx context.Context) er
 	return nil
 }
 
-func (c MdaiReplayAdapter) checkPrometheusForEmptySendingQueue(ctx context.Context) error {
-	return nil
-}
-
 func (c MdaiReplayAdapter) finalize(ctx context.Context) (ObjectState, error) {
 	if !controllerutil.ContainsFinalizer(c.replayCR, mdaiReplayFinalizerName) {
 		c.logger.Info("No finalizer found")
@@ -391,8 +389,7 @@ func (c MdaiReplayAdapter) finalize(ctx context.Context) (ObjectState, error) {
 
 	if !c.replayCR.Spec.IgnoreSendingQueue {
 		serviceName := c.getReplayerResourceName("service")
-		metricsUrl := fmt.Sprintf("http://%s.%s.svc.cluster.local:8888/metrics", serviceName, c.replayCR.Namespace)
-		sendingQueueSize, err := getMetricValue(metricsUrl, "otelcol_exporter_queue_size")
+		sendingQueueSize, err := c.getMetricValue(serviceName, c.replayCR.Namespace, "otelcol_exporter_queue_size")
 		if err != nil {
 			c.logger.Error(err, "failed to get otelcol_exporter_queue_size for replay, cannot finalize", "replayName", c.replayCR.Name)
 			return ObjectUnchanged, err
@@ -452,12 +449,23 @@ func (c MdaiReplayAdapter) deleteFinalizer(ctx context.Context, object client.Ob
 	return nil
 }
 
-func getMetricValue(scrapeURL, metricName string) (float64, error) {
-	resp, err := http.Get(scrapeURL)
+func (c MdaiReplayAdapter) getMetricValue(serviceName, namespace, metricName string) (float64, error) {
+	metricsUrl := fmt.Sprintf("http://%s.%s.svc.cluster.local:8888/metrics", serviceName, namespace)
+	request, err := http.NewRequest(http.MethodGet, metricsUrl, http.NoBody)
 	if err != nil {
+		c.logger.Error(err, "Replay finalizer failed to create request for collector metrics", "url", metricsUrl)
 		return 0, err
 	}
-	defer resp.Body.Close()
+	resp, err := http.DefaultClient.Do(request)
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			c.logger.Error(closeErr, "Failed to close response body")
+		}
+	}()
+	if err != nil {
+		c.logger.Error(err, "Replay finalizer failed to get metrics from collector metrics endpoint", "url", metricsUrl)
+		return 0, err
+	}
 
 	var parser expfmt.TextParser
 	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
@@ -471,11 +479,11 @@ func getMetricValue(scrapeURL, metricName string) (float64, error) {
 	}
 
 	for _, metric := range metricFamily.GetMetric() {
-		if metric.Gauge != nil {
-			return metric.Gauge.GetValue(), nil
+		if metric.GetGauge() != nil {
+			return metric.GetGauge().GetValue(), nil
 		}
-		if metric.Counter != nil {
-			return metric.Counter.GetValue(), nil
+		if metric.GetCounter() != nil {
+			return metric.GetCounter().GetValue(), nil
 		}
 	}
 

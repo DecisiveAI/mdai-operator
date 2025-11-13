@@ -203,8 +203,7 @@ type DeployReplayAction struct {
 	ReplaySpec MdaiReplaySpec `json:"replaySpec"`
 }
 
-type CleanUpReplayAction struct {
-}
+type CleanUpReplayAction struct{}
 
 // StringOrFrom represents a string value or a reference to a value in a Secret or ConfigMap.
 // +kubebuilder:validation:XValidation:rule="(has(self.value)?1:0)+(has(self.valueFrom)?1:0)==1",message="set exactly one of value or valueFrom"
@@ -244,9 +243,6 @@ type When struct {
 	// +optional
 	// +kubebuilder:validation:Enum=added;removed;set
 	UpdateType *string `json:"updateType,omitempty"`
-
-	//StartReplayNamed    *string `json:"startReplayNamed,omitempty"`
-	//ReplayTelemetryType *string `json:"replayTelemetryType,omitempty"`
 }
 
 // MdaiHubSpec defines the desired state of MdaiHub.

@@ -466,8 +466,6 @@ spec:
                                     properties:
                                       image:
                                         type: string
-                                    required:
-                                    - image
                                     type: object
                                   source:
                                     properties:
