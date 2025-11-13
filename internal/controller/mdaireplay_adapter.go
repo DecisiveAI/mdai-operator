@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"slices"
 
@@ -42,11 +43,12 @@ var baseReplayCollectorYaml string
 var _ Adapter = (*MdaiReplayAdapter)(nil)
 
 type MdaiReplayAdapter struct {
-	replayCR *mdaiv1.MdaiReplay
-	logger   logr.Logger
-	client   client.Client
-	recorder record.EventRecorder
-	scheme   *runtime.Scheme
+	replayCR   *mdaiv1.MdaiReplay
+	logger     logr.Logger
+	client     client.Client
+	recorder   record.EventRecorder
+	scheme     *runtime.Scheme
+	httpClient *http.Client
 }
 
 func NewMdaiReplayAdapter(
@@ -55,13 +57,15 @@ func NewMdaiReplayAdapter(
 	k8sClient client.Client,
 	recorder record.EventRecorder,
 	scheme *runtime.Scheme,
+	httpClient *http.Client,
 ) *MdaiReplayAdapter {
 	return &MdaiReplayAdapter{
-		replayCR: cr,
-		logger:   log,
-		client:   k8sClient,
-		recorder: recorder,
-		scheme:   scheme,
+		replayCR:   cr,
+		logger:     log,
+		client:     k8sClient,
+		recorder:   recorder,
+		scheme:     scheme,
+		httpClient: httpClient,
 	}
 }
 
@@ -137,7 +141,7 @@ func (c MdaiReplayAdapter) ensureStatusSetToDone(ctx context.Context) (Operation
 }
 
 func (c MdaiReplayAdapter) ensureSynchronized(ctx context.Context) (OperationResult, error) {
-	c.logger.Info("🐙 Synchronizing MdaiReplay 💬")
+	c.logger.Info("Synchronizing MdaiReplay")
 	hash, err := c.createOrUpdateReplayerConfigMap(ctx)
 	if err != nil {
 		return RequeueWithError(err)
@@ -155,7 +159,7 @@ func (c MdaiReplayAdapter) ensureSynchronized(ctx context.Context) (OperationRes
 		return RequeueWithError(err)
 	}
 
-	c.logger.Info("🐙 MdaiReplay sync finished ✅")
+	c.logger.Info("MdaiReplay sync finished")
 	return ContinueProcessing()
 }
 
@@ -168,7 +172,7 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerConfigMap(ctx context.Context) 
 	configMapName := c.getReplayerResourceName("collector-config")
 	collectorYAML, err := c.getReplayCollectorConfigYAML(c.replayCR.Name, c.replayCR.Spec.HubName)
 	if err != nil {
-		return "", fmt.Errorf("‼️failed to build replay configuration: %w", err)
+		return "", fmt.Errorf("failed to build replay configuration: %w", err)
 	}
 
 	desiredConfigMap := &corev1.ConfigMap{
@@ -188,7 +192,7 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerConfigMap(ctx context.Context) 
 	}
 
 	if err := controllerutil.SetControllerReference(c.replayCR, desiredConfigMap, c.scheme); err != nil {
-		c.logger.Error(err, "‼️Failed to set owner reference on ConfigMap", "configmap", configMapName)
+		c.logger.Error(err, "Failed to set owner reference on ConfigMap", "configmap", configMapName)
 		return "", err
 	}
 
@@ -197,11 +201,11 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerConfigMap(ctx context.Context) 
 		return nil
 	})
 	if err != nil {
-		c.logger.Error(err, "‼️Failed to create or update ConfigMap", "configmap", configMapName)
+		c.logger.Error(err, "Failed to create or update ConfigMap", "configmap", configMapName)
 		return "", err
 	}
 
-	c.logger.Info("‼️ConfigMap created or updated successfully", "configmap", configMapName, "operation", operationResult)
+	c.logger.Info("ConfigMap created or updated successfully", "configmap", configMapName, "operation", operationResult)
 	return getConfigMapSHA(*desiredConfigMap)
 }
 
@@ -214,6 +218,12 @@ func (c MdaiReplayAdapter) getReplayCollectorConfigYAML(replayId string, hubName
 		return "", fmt.Errorf(`unmarshal base collector config: %w`, err)
 	}
 
+	c.augmentCollectorConfigPerSpec(replayId, hubName, config, replayCRSpec)
+
+	return config.YAML()
+}
+
+func (c MdaiReplayAdapter) augmentCollectorConfigPerSpec(replayId string, hubName string, config builder.ConfigBlock, replayCRSpec mdaiv1.MdaiReplaySpec) {
 	// Add replayId insert processor.
 	// Assumed to already be in service.pipelines.logs/replay.processors slice as it is not optional!
 	attrProcessor := config.MustMap("processors").MustMap("attributes")
@@ -239,7 +249,7 @@ func (c MdaiReplayAdapter) getReplayCollectorConfigYAML(replayId string, hubName
 		logsReplayPipeline.Set("exporters", logsReplayExporters)
 	}
 
-	// Add S3 receiver thangz
+	// Add S3 receiver info
 	s3ReceiverConfig := config.MustMap("receivers").MustMap("awss3")
 	s3DownloaderConfig := s3ReceiverConfig.MustMap("s3downloader")
 	s3ReceiverConfig.Set("starttime", replayCRSpec.StartTime)
@@ -261,8 +271,6 @@ func (c MdaiReplayAdapter) getReplayCollectorConfigYAML(replayId string, hubName
 	opampServer := opampExtension.MustMap("server")
 	opampServer.MustMap("http").Set("endpoint", replayCRSpec.OpAMPEndpoint)
 	opampExtension.Set("server", opampServer)
-
-	return config.YAML()
 }
 
 func (c MdaiReplayAdapter) createOrUpdateReplayerDeployment(ctx context.Context, configHash string) error {
@@ -277,7 +285,7 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerDeployment(ctx context.Context,
 
 	operationResult, err := controllerutil.CreateOrUpdate(ctx, c.client, deployment, func() error {
 		if err := controllerutil.SetControllerReference(c.replayCR, deployment, c.scheme); err != nil {
-			c.logger.Error(err, "‼️Failed to set owner reference on Deployment", "deployment", deployment.Name)
+			c.logger.Error(err, "Failed to set owner reference on Deployment", "deployment", deployment.Name)
 			return err
 		}
 
@@ -285,56 +293,60 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerDeployment(ctx context.Context,
 		if c.replayCR.Spec.Resource.Image != "" {
 			image = c.replayCR.Spec.Resource.Image
 		}
-		container := builder.Container(name, image).
-			WithCommand("/otelcol-contrib", "--config=/conf/collector.yaml").
-			WithPorts(
-				corev1.ContainerPort{ContainerPort: otelMetricsPort, Name: "otelcol-metrics"},
-			).
-			WithVolumeMounts(corev1.VolumeMount{
-				Name:      "config-volume",
-				MountPath: "/conf/collector.yaml",
-				SubPath:   "collector.yaml",
-			}).
-			WithEnvFrom(corev1.EnvFromSource{
-				ConfigMapRef: &corev1.ConfigMapEnvSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: c.getReplayerResourceName("collector-config"),
-					},
-				},
-			}).
-			WithAWSSecret(c.replayCR.Spec.Source.AWSConfig.AWSAccessKeySecret).
-			Build()
-
-		builder.Deployment(deployment).
-			WithLabel("app", name).
-			WithLabel(hubNameLabel, c.replayCR.Name).
-			WithLabel(LabelManagedByMdaiKey, LabelManagedByMdaiValue).
-			WithLabel(HubComponentLabel, replayCollectorHubComponent).
-			WithSelectorLabel("app", name).
-			WithTemplateLabel("app", name).
-			WithTemplateLabel("app.kubernetes.io/component", name).
-			WithTemplateAnnotation("replay-collector-config/sha256", configHash).
-			WithReplicas(1).
-			WithContainers(container).
-			WithVolumes(corev1.Volume{
-				Name: "config-volume",
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: c.getReplayerResourceName("collector-config"),
-						},
-					},
-				},
-			})
+		c.augmentDeploymentWithValues(deployment, name, image, configHash)
 
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	c.logger.Info("✅ Deployment created or updated successfully", "deployment", deployment.Name, "operationResult", operationResult)
+	c.logger.Info("Deployment created or updated successfully", "deployment", deployment.Name, "operationResult", operationResult)
 
 	return nil
+}
+
+func (c MdaiReplayAdapter) augmentDeploymentWithValues(deployment *appsv1.Deployment, name string, image string, configHash string) {
+	container := builder.Container(name, image).
+		WithCommand("/otelcol-contrib", "--config=/conf/collector.yaml").
+		WithPorts(
+			corev1.ContainerPort{ContainerPort: otelMetricsPort, Name: "otelcol-metrics"},
+		).
+		WithVolumeMounts(corev1.VolumeMount{
+			Name:      "config-volume",
+			MountPath: "/conf/collector.yaml",
+			SubPath:   "collector.yaml",
+		}).
+		WithEnvFrom(corev1.EnvFromSource{
+			ConfigMapRef: &corev1.ConfigMapEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: c.getReplayerResourceName("collector-config"),
+				},
+			},
+		}).
+		WithAWSSecret(c.replayCR.Spec.Source.AWSConfig.AWSAccessKeySecret).
+		Build()
+
+	builder.Deployment(deployment).
+		WithLabel("app", name).
+		WithLabel(hubNameLabel, c.replayCR.Name).
+		WithLabel(LabelManagedByMdaiKey, LabelManagedByMdaiValue).
+		WithLabel(HubComponentLabel, replayCollectorHubComponent).
+		WithSelectorLabel("app", name).
+		WithTemplateLabel("app", name).
+		WithTemplateLabel("app.kubernetes.io/component", name).
+		WithTemplateAnnotation("replay-collector-config/sha256", configHash).
+		WithReplicas(1).
+		WithContainers(container).
+		WithVolumes(corev1.Volume{
+			Name: "config-volume",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: c.getReplayerResourceName("collector-config"),
+					},
+				},
+			},
+		})
 }
 
 func (c MdaiReplayAdapter) createOrUpdateReplayerService(ctx context.Context) error {
@@ -372,10 +384,10 @@ func (c MdaiReplayAdapter) createOrUpdateReplayerService(ctx context.Context) er
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("‼️failed to create or update %s: %w", name, err)
+		return fmt.Errorf("failed to create or update %s: %w", name, err)
 	}
 
-	c.logger.Info("✅ Successfully created or updated "+name, "service", name, "namespace", c.replayCR.Namespace, "operation", operationResult)
+	c.logger.Info("Successfully created or updated "+name, "service", name, "namespace", c.replayCR.Namespace, "operation", operationResult)
 	return nil
 }
 
@@ -385,7 +397,7 @@ func (c MdaiReplayAdapter) finalize(ctx context.Context) (ObjectState, error) {
 		return ObjectModified, nil
 	}
 
-	c.logger.Info("💬Performing Finalizer Operations for MdaiReplay before delete CR")
+	c.logger.Info("Performing Finalizer Operations for MdaiReplay before delete CR")
 
 	if !c.replayCR.Spec.IgnoreSendingQueue {
 		serviceName := c.getReplayerResourceName("service")
@@ -403,10 +415,10 @@ func (c MdaiReplayAdapter) finalize(ctx context.Context) (ObjectState, error) {
 
 	if err := c.client.Get(ctx, types.NamespacedName{Name: c.replayCR.Name, Namespace: c.replayCR.Namespace}, c.replayCR); err != nil {
 		if apierrors.IsNotFound(err) {
-			c.logger.Info("✅MdaiReplay has been deleted, no need to finalize")
+			c.logger.Info("MdaiReplay has been deleted, no need to finalize")
 			return ObjectModified, nil
 		}
-		c.logger.Error(err, "‼️Failed to re-fetch MdaiReplay")
+		c.logger.Error(err, "Failed to re-fetch MdaiReplay")
 		return ObjectUnchanged, err
 	}
 
@@ -457,18 +469,22 @@ func (c MdaiReplayAdapter) getMetricValue(serviceName, namespace, metricName str
 		return 0, err
 	}
 	resp, err := http.DefaultClient.Do(request)
+	if err != nil {
+		c.logger.Error(err, "Replay finalizer failed to get metrics from collector metrics endpoint", "url", metricsUrl)
+		return 0, err
+	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			c.logger.Error(closeErr, "Failed to close response body")
 		}
 	}()
-	if err != nil {
-		c.logger.Error(err, "Replay finalizer failed to get metrics from collector metrics endpoint", "url", metricsUrl)
-		return 0, err
-	}
 
+	return c.extractMetricValueFromResponse(err, resp.Body, metricName)
+}
+
+func (c MdaiReplayAdapter) extractMetricValueFromResponse(err error, body io.Reader, metricName string) (float64, error) {
 	var parser expfmt.TextParser
-	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
+	metricFamilies, err := parser.TextToMetricFamilies(body)
 	if err != nil {
 		return 0, err
 	}

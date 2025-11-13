@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/record"
@@ -54,7 +55,7 @@ func (r *MdaiReplayReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	result, err := r.ReconcileHandler(ctx, *NewMdaiReplayAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme))
+	result, err := r.ReconcileHandler(ctx, *NewMdaiReplayAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme, http.DefaultClient))
 	if err != nil {
 		return result, err
 	}
