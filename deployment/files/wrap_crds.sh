@@ -17,16 +17,22 @@ else
   fi
 fi
 
-if ! grep -q '^crds:' deployment/values.yaml 2>/dev/null; then
-  cat <<EOF >> deployment/values.yaml
-
-crds:
+gsed -i '
+  /^crds:/q            # If crds: exists, quit with no changes
+  $a\
+\
+crds:\
   create: true
-EOF
-fi
+' deployment/values.yaml
 
 for f in deployment/templates/*-crd.yaml; do
-  grep -q '{{- if .Values.crds.create }}' "$f" && continue
-  "$SED" -i '1s/^/{{- if .Values.crds.create }}\n/' "$f"
-  echo -e '\n{{- end }}' >> "$f"
+  "$SED" -i '
+    0,/{{- if .Values.crds.create }}/{
+      /{{- if .Values.crds.create }}/q
+    }
+    1s/^/{{- if .Values.crds.create }}\
+&/
+    $a\
+{{- end }}
+  ' "$f"
 done
