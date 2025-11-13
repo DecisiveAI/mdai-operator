@@ -153,11 +153,13 @@ func assertCmd(t *testing.T, got rule.Command, wantType rule.CommandType, wantPa
 	require.JSONEq(t, string(mustJSON(t, wantPayload)), string(got.Inputs))
 }
 
-func sampleAdd() *mdaiv1.SetAction             { return &mdaiv1.SetAction{} }
-func sampleRemove() *mdaiv1.SetAction          { return &mdaiv1.SetAction{} }
-func sampleScalar() *mdaiv1.ScalarAction       { return &mdaiv1.ScalarAction{} }
-func sampleWebhook() *mdaiv1.CallWebhookAction { return &mdaiv1.CallWebhookAction{} }
-func sampleMap() *mdaiv1.MapAction             { return &mdaiv1.MapAction{} }
+func sampleAdd() *mdaiv1.SetAction                     { return &mdaiv1.SetAction{} }
+func sampleRemove() *mdaiv1.SetAction                  { return &mdaiv1.SetAction{} }
+func sampleScalar() *mdaiv1.ScalarAction               { return &mdaiv1.ScalarAction{} }
+func sampleWebhook() *mdaiv1.CallWebhookAction         { return &mdaiv1.CallWebhookAction{} }
+func sampleMap() *mdaiv1.MapAction                     { return &mdaiv1.MapAction{} }
+func sampleDeployReplay() *mdaiv1.DeployReplayAction   { return &mdaiv1.DeployReplayAction{} }
+func sampleCleanUpReplay() *mdaiv1.CleanUpReplayAction { return &mdaiv1.CleanUpReplayAction{} }
 
 func TestTransformThenToCommands_SinglePerAction_Succeeds(t *testing.T) {
 	actions := []mdaiv1.Action{
@@ -167,6 +169,8 @@ func TestTransformThenToCommands_SinglePerAction_Succeeds(t *testing.T) {
 		{AddToMap: sampleMap()},
 		{RemoveFromMap: sampleMap()},
 		{CallWebhook: sampleWebhook()},
+		{DeployReplay: sampleDeployReplay()},
+		{CleanUpReplay: sampleCleanUpReplay()},
 	}
 
 	cmds, err := transformThenToCommands(actions)
@@ -179,6 +183,8 @@ func TestTransformThenToCommands_SinglePerAction_Succeeds(t *testing.T) {
 	assertCmd(t, cmds[3], rule.CmdVarMapAdd, actions[3].AddToMap)
 	assertCmd(t, cmds[4], rule.CmdVarMapRemove, actions[4].RemoveFromMap)
 	assertCmd(t, cmds[5], rule.CmdWebhookCall, actions[5].CallWebhook)
+	assertCmd(t, cmds[6], rule.CmdDeployReplay, actions[6].DeployReplay)
+	assertCmd(t, cmds[7], rule.CmdCleanUpReplay, actions[7].CleanUpReplay)
 }
 
 func TestTransformThenToCommands_EmptySlice_OK(t *testing.T) {
