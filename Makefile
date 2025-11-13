@@ -17,7 +17,7 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 # Update this version to match new release tag and run helm targets
-VERSION = 0.2.6
+VERSION = 0.2.7
 
 # Image URL to use all building/pushing image targets
 IMG ?= public.ecr.aws/p3k6k6h3/mdai-operator:${VERSION}
@@ -330,6 +330,8 @@ helm-update: manifests kustomize helmify helm-docs helm-values-schema-json-plugi
 	@$(KUSTOMIZE) build config/default | $(HELMIFY) $(CHART_PATH) > /dev/null 2>&1
 	$(call vecho,"🛠️ Adding conditionals for cert manager...")
 	@$(CHART_PATH)/files/no_cert_manager_option.sh
+	$(call vecho,"🛠️ Adding conditionals for CRDs...")
+	@$(CHART_PATH)/files/wrap_crds.sh
 	$(call vecho,"📈 Updating Helm chart version to $(VERSION)...")
 	@$(YQ) -i '.version = "$(VERSION)"' $(CHART_PATH)/Chart.yaml
 	$(call vecho,"🧩 Updating Helm chart appVersion to $(VERSION)...")
