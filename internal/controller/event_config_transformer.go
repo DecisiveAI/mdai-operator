@@ -78,9 +78,6 @@ func transformThenToCommands(actions []mdaiv1.Action) ([]events.Command, error) 
 		if err := appendCmd(action.CallWebhook != nil, action.CallWebhook, events.CmdWebhookCall); err != nil {
 			return nil, err
 		}
-		if err := appendCmd(action.CallWebhook != nil, action.CallWebhook, events.CmdWebhookCall); err != nil {
-			return nil, err
-		}
 		if err := appendCmd(action.DeployReplay != nil, action.DeployReplay, events.CmdDeployReplay); err != nil {
 			return nil, err
 		}

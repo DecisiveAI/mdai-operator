@@ -311,6 +311,13 @@ func validateAction(actionPath *field.Path, action mdaiv1.Action, knownVarKeys m
 			},
 		},
 		{
+			key:     "callWebhook",
+			present: action.CallWebhook != nil,
+			validate: func() field.ErrorList {
+				return validateWebhookCall(actionPath.Child("callWebhook"), action.CallWebhook)
+			},
+		},
+		{
 			key:     "deployReplay",
 			present: action.DeployReplay != nil,
 			validate: func() field.ErrorList {
