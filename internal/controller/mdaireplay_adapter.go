@@ -237,16 +237,20 @@ func (c MdaiReplayAdapter) augmentCollectorConfigPerSpec(replayId string, hubNam
 	attrProcessor.Set("actions", attrProcessorActions)
 
 	// Add otlphttp exporter if otlphttp destination is set
-	otlpEndpoint := replayCRSpec.Destination.OtlpHttp.Endpoint
-	if otlpEndpoint != "" {
-		exporters := config.MustMap("exporters")
-		exporters.Set("otlphttp", map[string]any{
-			"endpoint": otlpEndpoint,
-		})
-		config.Set("exporters", exporters)
-		logsReplayPipeline := config.MustMap("service").MustMap("pipelines").MustMap("logs/replay")
-		logsReplayExporters := append(logsReplayPipeline.MustSlice("exporters"), "otlphttp")
-		logsReplayPipeline.Set("exporters", logsReplayExporters)
+	destinationConfig := replayCRSpec.Destination
+	oltpHttpConfig := destinationConfig.OtlpHttp
+	if oltpHttpConfig != nil {
+		otlpEndpoint := oltpHttpConfig.Endpoint
+		if otlpEndpoint != "" {
+			exporters := config.MustMap("exporters")
+			exporters.Set("otlphttp", map[string]any{
+				"endpoint": otlpEndpoint,
+			})
+			config.Set("exporters", exporters)
+			logsReplayPipeline := config.MustMap("service").MustMap("pipelines").MustMap("logs/replay")
+			logsReplayExporters := append(logsReplayPipeline.MustSlice("exporters"), "otlphttp")
+			logsReplayPipeline.Set("exporters", logsReplayExporters)
+		}
 	}
 
 	// Add S3 receiver info
@@ -323,8 +327,14 @@ func (c MdaiReplayAdapter) augmentDeploymentWithValues(deployment *appsv1.Deploy
 				},
 			},
 		}).
-		WithAWSSecret(c.replayCR.Spec.Source.AWSConfig.AWSAccessKeySecret).
-		Build()
+		WithAWSSecret(c.replayCR.Spec.Source.AWSConfig.AWSAccessKeySecret)
+
+	awsConfig := c.replayCR.Spec.Source.AWSConfig
+	if awsConfig != nil {
+		if awsConfig.AWSAccessKeySecret != nil {
+			container.WithAWSSecret(awsConfig.AWSAccessKeySecret)
+		}
+	}
 
 	builder.Deployment(deployment).
 		WithLabel("app", name).
@@ -336,7 +346,7 @@ func (c MdaiReplayAdapter) augmentDeploymentWithValues(deployment *appsv1.Deploy
 		WithTemplateLabel("app.kubernetes.io/component", name).
 		WithTemplateAnnotation("replay-collector-config/sha256", configHash).
 		WithReplicas(1).
-		WithContainers(container).
+		WithContainers(container.Build()).
 		WithVolumes(corev1.Volume{
 			Name: "config-volume",
 			VolumeSource: corev1.VolumeSource{
@@ -401,7 +411,8 @@ func (c MdaiReplayAdapter) finalize(ctx context.Context) (ObjectState, error) {
 
 	if !c.replayCR.Spec.IgnoreSendingQueue {
 		serviceName := c.getReplayerResourceName("service")
-		sendingQueueSize, err := c.getMetricValue(serviceName, c.replayCR.Namespace, "otelcol_exporter_queue_size")
+		metricsUrl := fmt.Sprintf("http://%s.%s.svc.cluster.local:8888/metrics", serviceName, c.replayCR.Namespace)
+		sendingQueueSize, err := c.getMetricValue(metricsUrl, "otelcol_exporter_queue_size")
 		if err != nil {
 			c.logger.Error(err, "failed to get otelcol_exporter_queue_size for replay, cannot finalize", "replayName", c.replayCR.Name)
 			return ObjectUnchanged, err
@@ -461,8 +472,7 @@ func (c MdaiReplayAdapter) deleteFinalizer(ctx context.Context, object client.Ob
 	return nil
 }
 
-func (c MdaiReplayAdapter) getMetricValue(serviceName, namespace, metricName string) (float64, error) {
-	metricsUrl := fmt.Sprintf("http://%s.%s.svc.cluster.local:8888/metrics", serviceName, namespace)
+func (c MdaiReplayAdapter) getMetricValue(metricsUrl, metricName string) (float64, error) {
 	request, err := http.NewRequest(http.MethodGet, metricsUrl, http.NoBody)
 	if err != nil {
 		c.logger.Error(err, "Replay finalizer failed to create request for collector metrics", "url", metricsUrl)

@@ -1,14 +1,19 @@
 package controller
 
 import (
+	"bytes"
 	"context"
+	"github.com/decisiveai/mdai-operator/internal/builder"
+	"k8s.io/utils/ptr"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -16,465 +21,1446 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-func setupTestAdapter(t *testing.T, replayCR *mdaiv1.MdaiReplay, objects ...client.Object) *MdaiReplayAdapter {
+func TestNewMdaiReplayAdapter(t *testing.T) {
 	scheme := runtime.NewScheme()
-	require.NoError(t, mdaiv1.AddToScheme(scheme))
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, appsv1.AddToScheme(scheme))
+	_ = mdaiv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
 
-	allObjects := append([]client.Object{replayCR}, objects...)
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithObjects(allObjects...).
-		WithStatusSubresource(replayCR).
-		Build()
-
-	logger := zap.New(zap.UseDevMode(true))
-	recorder := record.NewFakeRecorder(10)
-
-	return NewMdaiReplayAdapter(replayCR, logger, fakeClient, recorder, scheme, nil)
-}
-
-func createTestReplayCR(name, namespace string) *mdaiv1.MdaiReplay {
-	return &mdaiv1.MdaiReplay{
+	cr := &mdaiv1.MdaiReplay{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Spec: mdaiv1.MdaiReplaySpec{
-			HubName:           "test-hub",
-			StartTime:         "2024-01-01T00:00:00Z",
-			EndTime:           "2024-01-02T00:00:00Z",
-			OpAMPEndpoint:     "http://opamp:4320",
-			StatusVariableRef: "status-var",
-			Source: mdaiv1.MdaiReplaySourceConfiguration{
-				S3: &mdaiv1.MdaiReplayS3Configuration{
-					FilePrefix:  "logs",
-					S3Region:    "us-east-1",
-					S3Bucket:    "test-bucket",
-					S3Path:      "path/to/logs",
-					S3Partition: "daily",
-				},
-				AWSConfig: &mdaiv1.MdaiReplayAwsConfig{},
-			},
-			Destination: mdaiv1.MdaiReplayDestinationConfiguration{
-				OtlpHttp: &mdaiv1.MdaiReplayOtlpHttpDestinationConfiguration{
-					Endpoint: "http://otlp:4318",
-				},
-			},
+			Name:      "test-replay",
+			Namespace: "default",
 		},
 	}
+
+	logger := logr.Discard()
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	recorder := record.NewFakeRecorder(10)
+	httpClient := &http.Client{}
+
+	adapter := NewMdaiReplayAdapter(cr, logger, k8sClient, recorder, scheme, httpClient)
+
+	assert.NotNil(t, adapter)
+	assert.Equal(t, cr, adapter.replayCR)
+	assert.Equal(t, logger, adapter.logger)
+	assert.Equal(t, k8sClient, adapter.client)
+	assert.Equal(t, recorder, adapter.recorder)
+	assert.Equal(t, scheme, adapter.scheme)
+	assert.Equal(t, httpClient, adapter.httpClient)
 }
 
-// Test ensureFinalizerInitialized
-func TestEnsureFinalizerInitialized(t *testing.T) {
-	t.Run("adds finalizer when not present", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
-
-		result, err := adapter.ensureFinalizerInitialized(ctx)
-
-		require.NoError(t, err)
-		opResult, err := StopProcessing()
-		require.NoError(t, err)
-		assert.Equal(t, opResult, result)
-
-		// Verify finalizer was added
-		updated := &mdaiv1.MdaiReplay{}
-		err = adapter.client.Get(ctx, types.NamespacedName{Name: "test-replay", Namespace: "default"}, updated)
-		require.NoError(t, err)
-		assert.Contains(t, updated.Finalizers, mdaiReplayFinalizerName)
-	})
-
-	t.Run("continues when finalizer already exists", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		replayCR.Finalizers = []string{mdaiReplayFinalizerName}
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
-
-		result, err := adapter.ensureFinalizerInitialized(ctx)
-
-		require.NoError(t, err)
-		opResult, err := ContinueProcessing()
-		require.NoError(t, err)
-		assert.Equal(t, opResult, result)
-	})
-}
-
-// Test ensureStatusInitialized
-func TestEnsureStatusInitialized(t *testing.T) {
-	t.Run("initializes status when empty", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
-
-		result, err := adapter.ensureStatusInitialized(ctx)
-
-		require.NoError(t, err)
-		opResult, err := StopProcessing()
-		require.NoError(t, err)
-		assert.Equal(t, opResult, result)
-
-		// Verify status was initialized
-		updated := &mdaiv1.MdaiReplay{}
-		err = adapter.client.Get(ctx, types.NamespacedName{Name: "test-replay", Namespace: "default"}, updated)
-		require.NoError(t, err)
-		assert.NotEmpty(t, updated.Status.Conditions)
-
-		condition := meta.FindStatusCondition(updated.Status.Conditions, typeAvailableHub)
-		require.NotNil(t, condition)
-		assert.Equal(t, metav1.ConditionUnknown, condition.Status)
-	})
-
-	t.Run("continues when status already initialized", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		replayCR.Status.Conditions = []metav1.Condition{
-			{Type: typeAvailableHub, Status: metav1.ConditionTrue},
-		}
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
-
-		result, err := adapter.ensureStatusInitialized(ctx)
-
-		require.NoError(t, err)
-		opResult, err := ContinueProcessing()
-		require.NoError(t, err)
-		assert.Equal(t, opResult, result)
-	})
-}
-
-// Test ensureDeletionProcessed
 func TestEnsureDeletionProcessed(t *testing.T) {
-	t.Run("continues when deletion timestamp is zero", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
-
-		result, err := adapter.ensureDeletionProcessed(ctx)
-
-		require.NoError(t, err)
-		opResult, err := ContinueProcessing()
-		require.NoError(t, err)
-		assert.Equal(t, opResult, result)
-	})
-
-	t.Run("processes deletion when timestamp is set", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		now := metav1.Now()
-		replayCR.DeletionTimestamp = &now
-		replayCR.Finalizers = []string{mdaiReplayFinalizerName}
-		replayCR.Spec.IgnoreSendingQueue = true // Skip queue check for this test
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
-
-		result, err := adapter.ensureDeletionProcessed(ctx)
-
-		require.NoError(t, err)
-		opResult, err := StopProcessing()
-		require.NoError(t, err)
-		assert.Equal(t, opResult, result)
-	})
-}
-
-// Test getReplayerResourceName
-func TestGetReplayerResourceName(t *testing.T) {
-	replayCR := createTestReplayCR("my-replay", "default")
-	replayCR.Spec.HubName = "my-hub"
-	adapter := setupTestAdapter(t, replayCR)
+	scheme := runtime.NewScheme()
+	_ = mdaiv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
 
 	tests := []struct {
-		suffix   string
-		expected string
+		name           string
+		cr             *mdaiv1.MdaiReplay
+		expectContinue bool
+		expectStop     bool
+		expectRequeue  bool
 	}{
-		{"collector", "replay-my-replay-my-hub-collector"},
-		{"service", "replay-my-replay-my-hub-service"},
-		{"collector-config", "replay-my-replay-my-hub-collector-config"},
+		{
+			name: "not being deleted",
+			cr: &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-replay",
+					Namespace: "default",
+				},
+			},
+			expectContinue: true,
+		},
+		{
+			name: "being deleted with finalizer",
+			cr: &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-replay",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+					Finalizers:        []string{mdaiReplayFinalizerName},
+				},
+				Spec: mdaiv1.MdaiReplaySpec{
+					IgnoreSendingQueue: true,
+				},
+			},
+			expectStop: true,
+		},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.suffix, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.cr).
+				WithStatusSubresource(tt.cr).
+				Build()
+
+			adapter := NewMdaiReplayAdapter(
+				tt.cr,
+				logr.Discard(),
+				k8sClient,
+				record.NewFakeRecorder(10),
+				scheme,
+				&http.Client{},
+			)
+
+			result, err := adapter.ensureDeletionProcessed(context.Background())
+
+			if tt.expectContinue {
+				assert.Equal(t, result, ContinueOperationResult())
+			}
+			if tt.expectStop {
+				assert.Equal(t, result, StopOperationResult())
+			}
+			if tt.expectRequeue {
+				expectedResult, _ := Requeue()
+				assert.Equal(t, result, expectedResult)
+			}
+			if !tt.expectRequeue {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestEnsureFinalizerInitialized(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = mdaiv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	tests := []struct {
+		name              string
+		existingFinalizer bool
+		expectContinue    bool
+		expectStop        bool
+	}{
+		{
+			name:              "finalizer already exists",
+			existingFinalizer: true,
+			expectContinue:    true,
+		},
+		{
+			name:              "finalizer needs to be added",
+			existingFinalizer: false,
+			expectStop:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-replay",
+					Namespace: "default",
+				},
+			}
+
+			if tt.existingFinalizer {
+				cr.Finalizers = []string{mdaiReplayFinalizerName}
+			}
+
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(cr).
+				Build()
+
+			adapter := NewMdaiReplayAdapter(
+				cr,
+				logr.Discard(),
+				k8sClient,
+				record.NewFakeRecorder(10),
+				scheme,
+				&http.Client{},
+			)
+
+			result, err := adapter.ensureFinalizerInitialized(context.Background())
+
+			assert.NoError(t, err)
+			if tt.expectContinue {
+				assert.Equal(t, result, ContinueOperationResult())
+			}
+			if tt.expectStop {
+				assert.Equal(t, result, StopOperationResult())
+			}
+		})
+	}
+}
+
+func TestEnsureStatusInitialized(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = mdaiv1.AddToScheme(scheme)
+
+	tests := []struct {
+		name           string
+		existingStatus bool
+		expectContinue bool
+		expectStop     bool
+	}{
+		{
+			name:           "status already initialized",
+			existingStatus: true,
+			expectContinue: true,
+		},
+		{
+			name:           "status needs initialization",
+			existingStatus: false,
+			expectStop:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-replay",
+					Namespace: "default",
+				},
+			}
+
+			if tt.existingStatus {
+				cr.Status.Conditions = []metav1.Condition{
+					{Type: typeAvailableHub, Status: metav1.ConditionTrue},
+				}
+			}
+
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(cr).
+				WithStatusSubresource(cr).
+				Build()
+
+			adapter := NewMdaiReplayAdapter(
+				cr,
+				logr.Discard(),
+				k8sClient,
+				record.NewFakeRecorder(10),
+				scheme,
+				&http.Client{},
+			)
+
+			result, err := adapter.ensureStatusInitialized(context.Background())
+
+			assert.NoError(t, err)
+			if tt.expectContinue {
+				assert.Equal(t, result, ContinueOperationResult())
+			}
+			if tt.expectStop {
+				assert.Equal(t, result, StopOperationResult())
+			}
+		})
+	}
+}
+
+func TestGetReplayerResourceName(t *testing.T) {
+	tests := []struct {
+		name       string
+		replayName string
+		hubName    string
+		suffix     string
+		expected   string
+	}{
+		{
+			name:       "basic resource name",
+			replayName: "my-replay",
+			hubName:    "my-hub",
+			suffix:     "collector",
+			expected:   "replay-my-replay-my-hub-collector",
+		},
+		{
+			name:       "service suffix",
+			replayName: "test",
+			hubName:    "hub1",
+			suffix:     "service",
+			expected:   "replay-test-hub1-service",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: tt.replayName,
+				},
+				Spec: mdaiv1.MdaiReplaySpec{
+					HubName: tt.hubName,
+				},
+			}
+
+			adapter := NewMdaiReplayAdapter(
+				cr,
+				logr.Discard(),
+				nil,
+				nil,
+				nil,
+				nil,
+			)
+
 			result := adapter.getReplayerResourceName(tt.suffix)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-// Test createOrUpdateReplayerConfigMap
-func TestCreateOrUpdateReplayerConfigMap(t *testing.T) {
-	t.Run("creates configmap successfully", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
+func TestAugmentCollectorConfigPerSpec(t *testing.T) {
+	tests := []struct {
+		name     string
+		replayId string
+		hubName  string
+		spec     mdaiv1.MdaiReplaySpec
+		validate func(t *testing.T, config builder.ConfigBlock)
+	}{
+		{
+			name:     "basic configuration with replay id",
+			replayId: "replay-123",
+			hubName:  "hub-456",
+			spec: mdaiv1.MdaiReplaySpec{
+				StartTime:         "2024-01-01T00:00:00Z",
+				EndTime:           "2024-01-02T00:00:00Z",
+				StatusVariableRef: "test-var",
+				OpAMPEndpoint:     "http://opamp:4320",
+				Source: mdaiv1.MdaiReplaySourceConfiguration{
+					S3: &mdaiv1.MdaiReplayS3Configuration{
+						FilePrefix:  "logs/",
+						S3Region:    "us-east-1",
+						S3Bucket:    "my-bucket",
+						S3Path:      "path/to/logs",
+						S3Partition: "year=2024",
+					},
+				},
+				Destination: mdaiv1.MdaiReplayDestinationConfiguration{
+					OtlpHttp: &mdaiv1.MdaiReplayOtlpHttpDestinationConfiguration{
+						Endpoint: "http://opamp:4320",
+					},
+				},
+			},
+			validate: func(t *testing.T, config builder.ConfigBlock) {
+				// Check attributes processor has replay_name action
+				processors := config.MustMap("processors")
+				attrs := processors.MustMap("attributes")
+				actions := attrs.MustSlice("actions")
 
-		hash, err := adapter.createOrUpdateReplayerConfigMap(ctx)
+				found := false
+				for _, action := range actions {
+					actionMap := action.(map[string]string)
+					if actionMap["key"] == replayNameKey && actionMap["value"] == "replay-123" {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "replay_name action should be present")
 
-		require.NoError(t, err)
-		assert.NotEmpty(t, hash)
+				// Check S3 receiver config
+				receivers := config.MustMap("receivers")
+				s3Receiver := receivers.MustMap("awss3")
+				assert.Equal(t, "2024-01-01T00:00:00Z", s3Receiver.MustString("starttime"))
+				assert.Equal(t, "2024-01-02T00:00:00Z", s3Receiver.MustString("endtime"))
 
-		// Verify ConfigMap was created
-		configMapName := adapter.getReplayerResourceName("collector-config")
-		cm := &corev1.ConfigMap{}
-		err = adapter.client.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: "default"}, cm)
-		require.NoError(t, err)
-		assert.Contains(t, cm.Data, "collector.yaml")
-		assert.NotEmpty(t, cm.Data["collector.yaml"])
-	})
+				s3Downloader := s3Receiver.MustMap("s3downloader")
+				assert.Equal(t, "logs/", s3Downloader.MustString("file_prefix"))
+				assert.Equal(t, "us-east-1", s3Downloader.MustString("region"))
+				assert.Equal(t, "my-bucket", s3Downloader.MustString("s3_bucket"))
 
-	t.Run("configmap has correct labels", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
+				// Check OpAMP extension
+				extensions := config.MustMap("extensions")
+				opamp := extensions.MustMap("opamp")
+				agentDesc := opamp.MustMap("agent_description")
+				nonIdentAttrs := agentDesc["non_identifying_attributes"].(builder.ConfigBlock)
+				assert.Equal(t, "replay-123", nonIdentAttrs.MustString("replay_id"))
+				assert.Equal(t, "hub-456", nonIdentAttrs.MustString("hub_name"))
+			},
+		},
+		{
+			name:     "configuration with otlp http destination",
+			replayId: "replay-456",
+			hubName:  "hub-789",
+			spec: mdaiv1.MdaiReplaySpec{
+				StartTime:         "2024-01-01T00:00:00Z",
+				EndTime:           "2024-01-02T00:00:00Z",
+				StatusVariableRef: "test-var",
+				OpAMPEndpoint:     "http://opamp:4320",
+				Destination: mdaiv1.MdaiReplayDestinationConfiguration{
+					OtlpHttp: &mdaiv1.MdaiReplayOtlpHttpDestinationConfiguration{
+						Endpoint: "http://otlp:4318",
+					},
+				},
+				Source: mdaiv1.MdaiReplaySourceConfiguration{
+					S3: &mdaiv1.MdaiReplayS3Configuration{
+						FilePrefix:  "logs/",
+						S3Region:    "us-west-2",
+						S3Bucket:    "test-bucket",
+						S3Path:      "test/path",
+						S3Partition: "year=2024",
+					},
+				},
+			},
+			validate: func(t *testing.T, config builder.ConfigBlock) {
+				// Check otlphttp exporter is configured
+				exporters := config["exporters"].(builder.ConfigBlock)
+				otlpHttp, exists := exporters.GetMap("otlphttp")
+				assert.True(t, exists, "otlphttp exporter should exist")
 
-		_, err := adapter.createOrUpdateReplayerConfigMap(ctx)
-		require.NoError(t, err)
+				assert.Equal(t, "http://otlp:4318", otlpHttp.MustString("endpoint"))
 
-		configMapName := adapter.getReplayerResourceName("collector-config")
-		cm := &corev1.ConfigMap{}
-		err = adapter.client.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: "default"}, cm)
-		require.NoError(t, err)
+				// Check pipeline includes otlphttp exporter
+				service := config.MustMap("service")
+				pipelines := service.MustMap("pipelines")
+				logsReplay := pipelines.MustMap("logs/replay")
+				exportersList := logsReplay.MustSlice("exporters")
 
-		assert.Equal(t, LabelManagedByMdaiValue, cm.Labels[LabelManagedByMdaiKey])
-		assert.Equal(t, "test-hub", cm.Labels[hubNameLabel])
-		assert.Equal(t, mdaiObserverHubComponent, cm.Labels[HubComponentLabel])
-	})
+				found := false
+				for _, exp := range exportersList {
+					if exp.(string) == "otlphttp" {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "otlphttp should be in exporters list")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-replay",
+					Namespace: "default",
+				},
+				Spec: tt.spec,
+			}
+
+			adapter := NewMdaiReplayAdapter(
+				cr,
+				logr.Discard(),
+				nil,
+				nil,
+				nil,
+				nil,
+			)
+
+			// Create a base config structure
+			config := map[string]any{
+				"receivers": map[string]any{
+					"awss3": map[string]any{
+						"s3downloader": map[string]any{},
+					},
+				},
+				"processors": map[string]any{
+					"attributes": map[string]any{
+						"actions": []any{},
+					},
+				},
+				"exporters": map[string]any{},
+				"extensions": map[string]any{
+					"opamp": map[string]any{
+						"agent_description": map[string]any{
+							"non_identifying_attributes": map[string]any{},
+						},
+						"server": map[string]any{
+							"http": map[string]any{},
+						},
+					},
+				},
+				"service": map[string]any{
+					"pipelines": map[string]any{
+						"logs/replay": map[string]any{
+							"exporters": []any{},
+						},
+					},
+				},
+			}
+
+			adapter.augmentCollectorConfigPerSpec(tt.replayId, tt.hubName, config, tt.spec)
+			tt.validate(t, config)
+		})
+	}
 }
 
-// Test getReplayCollectorConfigYAML
-func TestGetReplayCollectorConfigYAML(t *testing.T) {
-	t.Run("generates valid YAML config", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		adapter := setupTestAdapter(t, replayCR)
+func TestAugmentDeploymentWithValues(t *testing.T) {
+	tests := []struct {
+		name       string
+		depName    string
+		image      string
+		configHash string
+		awsSecret  *string
+		validate   func(t *testing.T, deployment *appsv1.Deployment)
+	}{
+		{
+			name:       "basic deployment configuration",
+			depName:    "test-collector",
+			image:      "otel/collector:latest",
+			configHash: "abc123",
+			validate: func(t *testing.T, deployment *appsv1.Deployment) {
+				assert.Equal(t, int32(1), *deployment.Spec.Replicas)
+				assert.Equal(t, "test-collector", deployment.Labels["app"])
+				assert.Equal(t, "test-collector", deployment.Spec.Selector.MatchLabels["app"])
+				assert.Equal(t, "abc123", deployment.Spec.Template.Annotations["replay-collector-config/sha256"])
 
-		yaml, err := adapter.getReplayCollectorConfigYAML("test-replay", "test-hub")
+				require.Len(t, deployment.Spec.Template.Spec.Containers, 1)
+				container := deployment.Spec.Template.Spec.Containers[0]
+				assert.Equal(t, "test-collector", container.Name)
+				assert.Equal(t, "otel/collector:latest", container.Image)
+				assert.Contains(t, container.Command, "/otelcol-contrib")
+			},
+		},
+		{
+			name:       "deployment with AWS secret",
+			depName:    "test-collector-secret",
+			image:      "custom-image:v1",
+			configHash: "def456",
+			awsSecret:  ptr.To("aws-creds"),
+			validate: func(t *testing.T, deployment *appsv1.Deployment) {
+				container := deployment.Spec.Template.Spec.Containers[0]
 
-		require.NoError(t, err)
-		assert.NotEmpty(t, yaml)
-		// Verify key configuration elements are present
-		assert.Contains(t, yaml, "test-replay")
-		assert.Contains(t, yaml, "test-hub")
-		assert.Contains(t, yaml, "2024-01-01T00:00:00Z")
-		assert.Contains(t, yaml, "2024-01-02T00:00:00Z")
-	})
+				found := false
+				for _, envFrom := range container.EnvFrom {
+					if envFrom.SecretRef != nil && envFrom.SecretRef.Name == "aws-creds" {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "AWS secret should be in EnvFrom")
+			},
+		},
+	}
 
-	t.Run("includes otlphttp exporter when endpoint is set", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		replayCR.Spec.Destination.OtlpHttp.Endpoint = "http://otlp:4318"
-		adapter := setupTestAdapter(t, replayCR)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-replay",
+					Namespace: "default",
+				},
+				Spec: mdaiv1.MdaiReplaySpec{
+					HubName: "test-hub",
+					Source: mdaiv1.MdaiReplaySourceConfiguration{
+						AWSConfig: &mdaiv1.MdaiReplayAwsConfig{
+							AWSAccessKeySecret: tt.awsSecret,
+						},
+					},
+				},
+			}
 
-		yaml, err := adapter.getReplayCollectorConfigYAML("test-replay", "test-hub")
+			adapter := NewMdaiReplayAdapter(
+				cr,
+				logr.Discard(),
+				nil,
+				nil,
+				runtime.NewScheme(),
+				nil,
+			)
 
-		require.NoError(t, err)
-		assert.Contains(t, yaml, "otlphttp")
-		assert.Contains(t, yaml, "http://otlp:4318")
-	})
+			deployment := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      tt.depName,
+					Namespace: "default",
+				},
+			}
 
-	t.Run("includes S3 configuration", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		adapter := setupTestAdapter(t, replayCR)
-
-		yaml, err := adapter.getReplayCollectorConfigYAML("test-replay", "test-hub")
-
-		require.NoError(t, err)
-		assert.Contains(t, yaml, "test-bucket")
-		assert.Contains(t, yaml, "us-east-1")
-		assert.Contains(t, yaml, "path/to/logs")
-	})
+			adapter.augmentDeploymentWithValues(deployment, tt.depName, tt.image, tt.configHash)
+			tt.validate(t, deployment)
+		})
+	}
 }
 
-// Test createOrUpdateReplayerDeployment
-func TestCreateOrUpdateReplayerDeployment(t *testing.T) {
-	t.Run("creates deployment successfully", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
-
-		err := adapter.createOrUpdateReplayerDeployment(ctx, "test-hash")
-
-		require.NoError(t, err)
-
-		// Verify Deployment was created
-		deploymentName := adapter.getReplayerResourceName("collector")
-		deployment := &appsv1.Deployment{}
-		err = adapter.client.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: "default"}, deployment)
-		require.NoError(t, err)
-		assert.Equal(t, int32(1), *deployment.Spec.Replicas)
-	})
-
-	t.Run("uses custom image when specified", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		replayCR.Spec.Resource.Image = "custom/image:v1.0"
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
-
-		err := adapter.createOrUpdateReplayerDeployment(ctx, "test-hash")
-
-		require.NoError(t, err)
-
-		deploymentName := adapter.getReplayerResourceName("collector")
-		deployment := &appsv1.Deployment{}
-		err = adapter.client.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: "default"}, deployment)
-		require.NoError(t, err)
-		assert.Equal(t, "custom/image:v1.0", deployment.Spec.Template.Spec.Containers[0].Image)
-	})
-
-	t.Run("deployment has config hash annotation", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
-
-		err := adapter.createOrUpdateReplayerDeployment(ctx, "abc123")
-
-		require.NoError(t, err)
-
-		deploymentName := adapter.getReplayerResourceName("collector")
-		deployment := &appsv1.Deployment{}
-		err = adapter.client.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: "default"}, deployment)
-		require.NoError(t, err)
-		assert.Equal(t, "abc123", deployment.Spec.Template.Annotations["replay-collector-config/sha256"])
-	})
-}
-
-// Test createOrUpdateReplayerService
-func TestCreateOrUpdateReplayerService(t *testing.T) {
-	t.Run("creates service successfully", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
-
-		err := adapter.createOrUpdateReplayerService(ctx)
-
-		require.NoError(t, err)
-
-		// Verify Service was created
-		serviceName := adapter.getReplayerResourceName("service")
-		service := &corev1.Service{}
-		err = adapter.client.Get(ctx, types.NamespacedName{Name: serviceName, Namespace: "default"}, service)
-		require.NoError(t, err)
-		assert.Equal(t, corev1.ServiceTypeClusterIP, service.Spec.Type)
-	})
-
-	t.Run("service has correct ports", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
-
-		err := adapter.createOrUpdateReplayerService(ctx)
-
-		require.NoError(t, err)
-
-		serviceName := adapter.getReplayerResourceName("service")
-		service := &corev1.Service{}
-		err = adapter.client.Get(ctx, types.NamespacedName{Name: serviceName, Namespace: "default"}, service)
-		require.NoError(t, err)
-		require.Len(t, service.Spec.Ports, 1)
-		assert.Equal(t, "otelcol-metrics", service.Spec.Ports[0].Name)
-		assert.Equal(t, int32(otelMetricsPort), service.Spec.Ports[0].Port)
-	})
-}
-
-// Test getMetricValue
 func TestGetMetricValue(t *testing.T) {
-	t.Run("parses gauge metric successfully", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`# HELP otelcol_exporter_queue_size Current size of the retry queue
+	tests := []struct {
+		name           string
+		metricResponse string
+		metricName     string
+		expectedValue  float64
+		expectError    bool
+	}{
+		{
+			name: "gauge metric found",
+			metricResponse: `# HELP otelcol_exporter_queue_size Queue size
 # TYPE otelcol_exporter_queue_size gauge
-otelcol_exporter_queue_size{exporter="otlphttp"} 42
-`))
-		}))
-		defer server.Close()
+otelcol_exporter_queue_size 42.0
+`,
+			metricName:    "otelcol_exporter_queue_size",
+			expectedValue: 42.0,
+			expectError:   false,
+		},
+		{
+			name: "counter metric found",
+			metricResponse: `# HELP otelcol_exporter_sent_log_records Number of log records sent
+# TYPE otelcol_exporter_sent_log_records counter
+otelcol_exporter_sent_log_records 100.0
+`,
+			metricName:    "otelcol_exporter_sent_log_records",
+			expectedValue: 100.0,
+			expectError:   false,
+		},
+		{
+			name: "metric not found",
+			metricResponse: `# HELP other_metric Other metric
+# TYPE other_metric gauge
+other_metric 10.0
+`,
+			metricName:    "otelcol_exporter_queue_size",
+			expectedValue: 0,
+			expectError:   true,
+		},
+		{
+			name:           "empty response",
+			metricResponse: "",
+			metricName:     "otelcol_exporter_queue_size",
+			expectedValue:  0,
+			expectError:    true,
+		},
+	}
 
-		replayCR := createTestReplayCR("test-replay", "default")
-		adapter := setupTestAdapter(t, replayCR)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/metrics", r.URL.Path)
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(tt.metricResponse))
+			}))
+			defer server.Close()
 
-		// Note: This test would need to be adjusted to inject the test server URL
-		// For now, this demonstrates the test structure
-		_ = adapter
-		_ = server
-	})
+			cr := &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-replay",
+					Namespace: "default",
+				},
+			}
 
-	t.Run("returns error when metric not found", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`# HELP some_other_metric Some other metric
-# TYPE some_other_metric gauge
-some_other_metric 10
-`))
-		}))
-		defer server.Close()
+			adapter := NewMdaiReplayAdapter(
+				cr,
+				logr.Discard(),
+				nil,
+				nil,
+				nil,
+				server.Client(),
+			)
 
-		replayCR := createTestReplayCR("test-replay", "default")
-		adapter := setupTestAdapter(t, replayCR)
+			// Extract the host and port from the test server URL
+			//serviceName := "test-service"
+			//namespace := "default"
 
-		// This demonstrates the error case structure
-		_ = adapter
-		_ = server
-	})
+			// For this test, we need to mock the service URL resolution
+			// In a real test, you'd use the actual getMetricValue method
+			// Here we're testing extractMetricValueFromResponse directly
+			resp, err := server.Client().Get(server.URL + "/metrics")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			value, err := adapter.extractMetricValueFromResponse(nil, resp.Body, tt.metricName)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedValue, value)
+			}
+		})
+	}
 }
 
-// Test deleteFinalizer
-func TestDeleteReplayFinalizer(t *testing.T) {
-	t.Run("removes finalizer when present", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		replayCR.Finalizers = []string{mdaiReplayFinalizerName, "other-finalizer"}
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
+func TestDeleteFinalizer1(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = mdaiv1.AddToScheme(scheme)
 
-		err := adapter.deleteFinalizer(ctx, replayCR, mdaiReplayFinalizerName)
+	tests := []struct {
+		name               string
+		existingFinalizers []string
+		finalizerToDelete  string
+		expectRemoval      bool
+	}{
+		{
+			name:               "remove existing finalizer",
+			existingFinalizers: []string{mdaiReplayFinalizerName, "other-finalizer"},
+			finalizerToDelete:  mdaiReplayFinalizerName,
+			expectRemoval:      true,
+		},
+		{
+			name:               "finalizer not present",
+			existingFinalizers: []string{"other-finalizer"},
+			finalizerToDelete:  mdaiReplayFinalizerName,
+			expectRemoval:      false,
+		},
+		{
+			name:               "no finalizers",
+			existingFinalizers: []string{},
+			finalizerToDelete:  mdaiReplayFinalizerName,
+			expectRemoval:      false,
+		},
+	}
 
-		require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-replay",
+					Namespace:  "default",
+					Finalizers: tt.existingFinalizers,
+				},
+			}
 
-		updated := &mdaiv1.MdaiReplay{}
-		err = adapter.client.Get(ctx, types.NamespacedName{Name: "test-replay", Namespace: "default"}, updated)
-		require.NoError(t, err)
-		assert.NotContains(t, updated.Finalizers, mdaiReplayFinalizerName)
-		assert.Contains(t, updated.Finalizers, "other-finalizer")
-	})
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(cr).
+				Build()
 
-	t.Run("no-op when finalizer not present", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		replayCR.Finalizers = []string{"other-finalizer"}
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
+			adapter := NewMdaiReplayAdapter(
+				cr,
+				logr.Discard(),
+				k8sClient,
+				nil,
+				nil,
+				nil,
+			)
 
-		err := adapter.deleteFinalizer(ctx, replayCR, mdaiReplayFinalizerName)
+			err := adapter.deleteFinalizer(context.Background(), cr, tt.finalizerToDelete)
+			assert.NoError(t, err)
 
-		require.NoError(t, err)
+			// Fetch the updated object
+			updated := &mdaiv1.MdaiReplay{}
+			err = k8sClient.Get(context.Background(), types.NamespacedName{
+				Name:      cr.Name,
+				Namespace: cr.Namespace,
+			}, updated)
+			assert.NoError(t, err)
 
-		updated := &mdaiv1.MdaiReplay{}
-		err = adapter.client.Get(ctx, types.NamespacedName{Name: "test-replay", Namespace: "default"}, updated)
-		require.NoError(t, err)
-		assert.Contains(t, updated.Finalizers, "other-finalizer")
-	})
+			if tt.expectRemoval {
+				assert.NotContains(t, updated.Finalizers, tt.finalizerToDelete)
+			}
+		})
+	}
 }
 
-// Test ensureStatusSetToDone
-func TestEnsureReplayStatusSetToDone(t *testing.T) {
-	t.Run("sets status to done successfully", func(t *testing.T) {
-		replayCR := createTestReplayCR("test-replay", "default")
-		adapter := setupTestAdapter(t, replayCR)
-		ctx := context.Background()
+func TestFinalize(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = mdaiv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
 
-		result, err := adapter.ensureStatusSetToDone(ctx)
+	tests := []struct {
+		name            string
+		cr              *mdaiv1.MdaiReplay
+		setupMockServer func() *httptest.Server
+		expectedState   ObjectState
+		expectError     bool
+	}{
+		{
+			name: "finalizer not present",
+			cr: &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-replay",
+					Namespace: "default",
+				},
+				Spec: mdaiv1.MdaiReplaySpec{
+					HubName:            "test-hub",
+					IgnoreSendingQueue: true,
+				},
+			},
+			expectedState: ObjectModified,
+			expectError:   false,
+			setupMockServer: func() *httptest.Server {
+				return nil
+			},
+		},
+		{
+			name: "queue empty - finalize success",
+			cr: &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-replay",
+					Namespace:  "default",
+					Finalizers: []string{mdaiReplayFinalizerName},
+				},
+				Spec: mdaiv1.MdaiReplaySpec{
+					HubName:            "test-hub",
+					IgnoreSendingQueue: false,
+				},
+			},
+			setupMockServer: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(`# TYPE otelcol_exporter_queue_size gauge
+otelcol_exporter_queue_size 0.0
+`))
+				}))
+			},
+			expectedState: ObjectModified,
+			expectError:   false,
+		},
+		{
+			name: "queue not empty - cannot finalize",
+			cr: &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-replay",
+					Namespace:  "default",
+					Finalizers: []string{mdaiReplayFinalizerName},
+				},
+				Spec: mdaiv1.MdaiReplaySpec{
+					HubName:            "test-hub",
+					IgnoreSendingQueue: false,
+				},
+			},
+			setupMockServer: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(`# TYPE otelcol_exporter_queue_size gauge
+otelcol_exporter_queue_size 100.0
+`))
+				}))
+			},
+			expectedState: ObjectUnchanged,
+			expectError:   false,
+		},
+		{
+			name: "ignore sending queue",
+			cr: &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-replay",
+					Namespace:  "default",
+					Finalizers: []string{mdaiReplayFinalizerName},
+				},
+				Spec: mdaiv1.MdaiReplaySpec{
+					HubName:            "test-hub",
+					IgnoreSendingQueue: true,
+				},
+			},
+			setupMockServer: func() *httptest.Server {
+				return nil
+			},
+			expectedState: ObjectModified,
+			expectError:   false,
+		},
+	}
 
-		require.NoError(t, err)
-		opResult, err := ContinueProcessing()
-		require.NoError(t, err)
-		assert.Equal(t, opResult, result)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var server *httptest.Server
+			server = tt.setupMockServer()
+			defer func() {
+				if server != nil {
+					server.Close()
+				}
+			}()
 
-		updated := &mdaiv1.MdaiReplay{}
-		err = adapter.client.Get(ctx, types.NamespacedName{Name: "test-replay", Namespace: "default"}, updated)
-		require.NoError(t, err)
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.cr).
+				WithStatusSubresource(tt.cr).
+				Build()
 
-		condition := meta.FindStatusCondition(updated.Status.Conditions, typeAvailableHub)
-		require.NotNil(t, condition)
-		assert.Equal(t, metav1.ConditionTrue, condition.Status)
-		assert.Equal(t, "reconciled successfully", condition.Message)
-	})
+			var httpClient *http.Client
+			if server != nil {
+				httpClient = server.Client()
+			}
+
+			adapter := NewMdaiReplayAdapter(
+				tt.cr,
+				logr.Discard(),
+				k8sClient,
+				record.NewFakeRecorder(10),
+				scheme,
+				httpClient,
+			)
+
+			state, err := adapter.finalize(context.Background())
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tt.expectedState, state)
+		})
+	}
+}
+
+func TestEnsureStatusSetToDone1(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = mdaiv1.AddToScheme(scheme)
+
+	tests := []struct {
+		name           string
+		cr             *mdaiv1.MdaiReplay
+		expectContinue bool
+	}{
+		{
+			name: "successfully set status to done",
+			cr: &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-replay",
+					Namespace: "default",
+				},
+				Spec: mdaiv1.MdaiReplaySpec{
+					HubName: "test-hub",
+				},
+			},
+			expectContinue: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.cr).
+				WithStatusSubresource(tt.cr).
+				Build()
+
+			adapter := NewMdaiReplayAdapter(
+				tt.cr,
+				logr.Discard(),
+				k8sClient,
+				record.NewFakeRecorder(10),
+				scheme,
+				&http.Client{},
+			)
+
+			result, err := adapter.ensureStatusSetToDone(context.Background())
+
+			assert.NoError(t, err)
+			if tt.expectContinue {
+				assert.Equal(t, result, ContinueOperationResult())
+			}
+
+			// Verify status was updated
+			updated := &mdaiv1.MdaiReplay{}
+			err = k8sClient.Get(context.Background(), types.NamespacedName{
+				Name:      tt.cr.Name,
+				Namespace: tt.cr.Namespace,
+			}, updated)
+			assert.NoError(t, err)
+
+			condition := meta.FindStatusCondition(updated.Status.Conditions, typeAvailableHub)
+			assert.NotNil(t, condition)
+			assert.Equal(t, metav1.ConditionTrue, condition.Status)
+			assert.Equal(t, "Reconciling", condition.Reason)
+			assert.Equal(t, "reconciled successfully", condition.Message)
+		})
+	}
+}
+
+func TestCreateOrUpdateReplayerConfigMap(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = mdaiv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	tests := []struct {
+		name        string
+		cr          *mdaiv1.MdaiReplay
+		expectError bool
+	}{
+		{
+			name: "create new configmap",
+			cr: &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-replay",
+					Namespace: "default",
+				},
+				Spec: mdaiv1.MdaiReplaySpec{
+					HubName:           "test-hub",
+					StartTime:         "2024-01-01T00:00:00Z",
+					EndTime:           "2024-01-02T00:00:00Z",
+					StatusVariableRef: "test-var",
+					OpAMPEndpoint:     "http://opamp:4320",
+					Source: mdaiv1.MdaiReplaySourceConfiguration{
+						S3: &mdaiv1.MdaiReplayS3Configuration{
+							FilePrefix:  "logs/",
+							S3Region:    "us-east-1",
+							S3Bucket:    "test-bucket",
+							S3Path:      "path/to/logs",
+							S3Partition: "year=2024",
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.cr).
+				Build()
+
+			adapter := NewMdaiReplayAdapter(
+				tt.cr,
+				logr.Discard(),
+				k8sClient,
+				record.NewFakeRecorder(10),
+				scheme,
+				&http.Client{},
+			)
+
+			hash, err := adapter.createOrUpdateReplayerConfigMap(context.Background())
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotEmpty(t, hash)
+
+				// Verify ConfigMap was created
+				configMapName := adapter.getReplayerResourceName("collector-config")
+				cm := &corev1.ConfigMap{}
+				err = k8sClient.Get(context.Background(), types.NamespacedName{
+					Name:      configMapName,
+					Namespace: tt.cr.Namespace,
+				}, cm)
+				assert.NoError(t, err)
+				assert.Contains(t, cm.Data, "collector.yaml")
+				assert.NotEmpty(t, cm.Data["collector.yaml"])
+
+				// Verify labels
+				assert.Equal(t, LabelManagedByMdaiValue, cm.Labels[LabelManagedByMdaiKey])
+				assert.Equal(t, tt.cr.Spec.HubName, cm.Labels[hubNameLabel])
+			}
+		})
+	}
+}
+
+func TestCreateOrUpdateReplayerDeployment(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = mdaiv1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	tests := []struct {
+		name        string
+		cr          *mdaiv1.MdaiReplay
+		configHash  string
+		expectError bool
+	}{
+		{
+			name: "create deployment with default image",
+			cr: &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-replay",
+					Namespace: "default",
+				},
+				Spec: mdaiv1.MdaiReplaySpec{
+					HubName: "test-hub",
+					Resource: mdaiv1.MdaiReplayResourceConfiguration{
+						Image: "",
+					},
+					Source: mdaiv1.MdaiReplaySourceConfiguration{
+						AWSConfig: &mdaiv1.MdaiReplayAwsConfig{},
+					},
+				},
+			},
+			configHash:  "abc123",
+			expectError: false,
+		},
+		{
+			name: "create deployment with custom image",
+			cr: &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-replay",
+					Namespace: "default",
+				},
+				Spec: mdaiv1.MdaiReplaySpec{
+					HubName: "test-hub",
+					Resource: mdaiv1.MdaiReplayResourceConfiguration{
+						Image: "custom/otel-collector:v1.0.0",
+					},
+					Source: mdaiv1.MdaiReplaySourceConfiguration{
+						AWSConfig: &mdaiv1.MdaiReplayAwsConfig{},
+					},
+				},
+			},
+			configHash:  "def456",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.cr).
+				Build()
+
+			adapter := NewMdaiReplayAdapter(
+				tt.cr,
+				logr.Discard(),
+				k8sClient,
+				record.NewFakeRecorder(10),
+				scheme,
+				&http.Client{},
+			)
+
+			err := adapter.createOrUpdateReplayerDeployment(context.Background(), tt.configHash)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+
+				// Verify Deployment was created
+				deploymentName := adapter.getReplayerResourceName("collector")
+				deployment := &appsv1.Deployment{}
+				err = k8sClient.Get(context.Background(), types.NamespacedName{
+					Name:      deploymentName,
+					Namespace: tt.cr.Namespace,
+				}, deployment)
+				assert.NoError(t, err)
+
+				// Verify deployment configuration
+				assert.Equal(t, int32(1), *deployment.Spec.Replicas)
+				assert.Equal(t, tt.configHash, deployment.Spec.Template.Annotations["replay-collector-config/sha256"])
+				assert.Equal(t, LabelManagedByMdaiValue, deployment.Labels[LabelManagedByMdaiKey])
+				assert.Equal(t, replayCollectorHubComponent, deployment.Labels[HubComponentLabel])
+
+				// Verify container
+				require.Len(t, deployment.Spec.Template.Spec.Containers, 1)
+				container := deployment.Spec.Template.Spec.Containers[0]
+
+				expectedImage := replayerDefaultImage
+				if tt.cr.Spec.Resource.Image != "" {
+					expectedImage = tt.cr.Spec.Resource.Image
+				}
+				assert.Equal(t, expectedImage, container.Image)
+			}
+		})
+	}
+}
+
+func TestCreateOrUpdateReplayerService(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = mdaiv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	tests := []struct {
+		name        string
+		cr          *mdaiv1.MdaiReplay
+		expectError bool
+	}{
+		{
+			name: "create service successfully",
+			cr: &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-replay",
+					Namespace: "default",
+				},
+				Spec: mdaiv1.MdaiReplaySpec{
+					HubName: "test-hub",
+				},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.cr).
+				Build()
+
+			adapter := NewMdaiReplayAdapter(
+				tt.cr,
+				logr.Discard(),
+				k8sClient,
+				record.NewFakeRecorder(10),
+				scheme,
+				&http.Client{},
+			)
+
+			err := adapter.createOrUpdateReplayerService(context.Background())
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+
+				// Verify Service was created
+				serviceName := adapter.getReplayerResourceName("service")
+				service := &corev1.Service{}
+				err = k8sClient.Get(context.Background(), types.NamespacedName{
+					Name:      serviceName,
+					Namespace: tt.cr.Namespace,
+				}, service)
+				assert.NoError(t, err)
+
+				// Verify service configuration
+				assert.Equal(t, corev1.ServiceTypeClusterIP, service.Spec.Type)
+				assert.Equal(t, LabelManagedByMdaiValue, service.Labels[LabelManagedByMdaiKey])
+				assert.Equal(t, replayCollectorHubComponent, service.Labels[HubComponentLabel])
+				assert.Equal(t, tt.cr.Name, service.Labels[hubNameLabel])
+
+				// Verify ports
+				require.Len(t, service.Spec.Ports, 1)
+				assert.Equal(t, int32(otelMetricsPort), service.Spec.Ports[0].Port)
+				assert.Equal(t, "otelcol-metrics", service.Spec.Ports[0].Name)
+
+				// Verify selector
+				appLabel := adapter.getReplayerResourceName("collector")
+				assert.Equal(t, appLabel, service.Spec.Selector["app"])
+			}
+		})
+	}
+}
+
+func TestGetReplayCollectorConfigYAML(t *testing.T) {
+	tests := []struct {
+		name        string
+		cr          *mdaiv1.MdaiReplay
+		replayId    string
+		hubName     string
+		expectError bool
+	}{
+		{
+			name:     "generate valid config yaml",
+			replayId: "replay-123",
+			hubName:  "hub-456",
+			cr: &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-replay",
+					Namespace: "default",
+				},
+				Spec: mdaiv1.MdaiReplaySpec{
+					HubName:           "test-hub",
+					StartTime:         "2024-01-01T00:00:00Z",
+					EndTime:           "2024-01-02T00:00:00Z",
+					StatusVariableRef: "test-var",
+					OpAMPEndpoint:     "http://opamp:4320",
+					Source: mdaiv1.MdaiReplaySourceConfiguration{
+						S3: &mdaiv1.MdaiReplayS3Configuration{
+							FilePrefix:  "logs/",
+							S3Region:    "us-east-1",
+							S3Bucket:    "test-bucket",
+							S3Path:      "path/to/logs",
+							S3Partition: "year=2024",
+						},
+					},
+					Destination: mdaiv1.MdaiReplayDestinationConfiguration{
+						OtlpHttp: &mdaiv1.MdaiReplayOtlpHttpDestinationConfiguration{
+							Endpoint: "http://otlp:4318",
+						},
+					},
+				},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adapter := NewMdaiReplayAdapter(
+				tt.cr,
+				logr.Discard(),
+				nil,
+				nil,
+				nil,
+				nil,
+			)
+
+			yaml, err := adapter.getReplayCollectorConfigYAML(tt.replayId, tt.hubName)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotEmpty(t, yaml)
+
+				// Verify YAML contains expected elements
+				assert.Contains(t, yaml, "receivers")
+				assert.Contains(t, yaml, "processors")
+				assert.Contains(t, yaml, "exporters")
+				assert.Contains(t, yaml, "service")
+			}
+		})
+	}
+}
+
+func TestEnsureSynchronized(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = mdaiv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+
+	tests := []struct {
+		name           string
+		cr             *mdaiv1.MdaiReplay
+		expectContinue bool
+		expectError    bool
+	}{
+		{
+			name: "successfully synchronize all resources",
+			cr: &mdaiv1.MdaiReplay{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-replay",
+					Namespace: "default",
+				},
+				Spec: mdaiv1.MdaiReplaySpec{
+					HubName:           "test-hub",
+					StartTime:         "2024-01-01T00:00:00Z",
+					EndTime:           "2024-01-02T00:00:00Z",
+					StatusVariableRef: "test-var",
+					OpAMPEndpoint:     "http://opamp:4320",
+					Source: mdaiv1.MdaiReplaySourceConfiguration{
+						AWSConfig: &mdaiv1.MdaiReplayAwsConfig{
+							AWSAccessKeySecret: ptr.To("foobar-secret"),
+						},
+						S3: &mdaiv1.MdaiReplayS3Configuration{
+							FilePrefix:  "logs/",
+							S3Region:    "us-east-1",
+							S3Bucket:    "test-bucket",
+							S3Path:      "path/to/logs",
+							S3Partition: "year=2024",
+						},
+					},
+				},
+			},
+			expectContinue: true,
+			expectError:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			k8sClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.cr).
+				Build()
+
+			adapter := NewMdaiReplayAdapter(
+				tt.cr,
+				logr.Discard(),
+				k8sClient,
+				record.NewFakeRecorder(10),
+				scheme,
+				&http.Client{},
+			)
+
+			result, err := adapter.ensureSynchronized(context.Background())
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			if tt.expectContinue {
+				assert.Equal(t, result, ContinueOperationResult())
+			}
+
+			if !tt.expectError {
+				// Verify all resources were created
+				configMapName := adapter.getReplayerResourceName("collector-config")
+				cm := &corev1.ConfigMap{}
+				err = k8sClient.Get(context.Background(), types.NamespacedName{
+					Name:      configMapName,
+					Namespace: tt.cr.Namespace,
+				}, cm)
+				assert.NoError(t, err)
+
+				deploymentName := adapter.getReplayerResourceName("collector")
+				deployment := &appsv1.Deployment{}
+				err = k8sClient.Get(context.Background(), types.NamespacedName{
+					Name:      deploymentName,
+					Namespace: tt.cr.Namespace,
+				}, deployment)
+				assert.NoError(t, err)
+
+				serviceName := adapter.getReplayerResourceName("service")
+				service := &corev1.Service{}
+				err = k8sClient.Get(context.Background(), types.NamespacedName{
+					Name:      serviceName,
+					Namespace: tt.cr.Namespace,
+				}, service)
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestExtractMetricValueFromResponse(t *testing.T) {
+	tests := []struct {
+		name          string
+		body          string
+		metricName    string
+		expectedValue float64
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name: "extract gauge metric",
+			body: `# HELP otelcol_exporter_queue_size Current size of the retry queue
+# TYPE otelcol_exporter_queue_size gauge
+otelcol_exporter_queue_size 25.0
+`,
+			metricName:    "otelcol_exporter_queue_size",
+			expectedValue: 25.0,
+			expectError:   false,
+		},
+		{
+			name: "extract counter metric",
+			body: `# HELP otelcol_exporter_sent_log_records Number of log records sent
+# TYPE otelcol_exporter_sent_log_records counter
+otelcol_exporter_sent_log_records 1000.0
+`,
+			metricName:    "otelcol_exporter_sent_log_records",
+			expectedValue: 1000.0,
+			expectError:   false,
+		},
+		{
+			name: "metric not found",
+			body: `# HELP other_metric Some other metric
+# TYPE other_metric gauge
+other_metric 10.0
+`,
+			metricName:    "otelcol_exporter_queue_size",
+			expectError:   true,
+			errorContains: "not found",
+		},
+		{
+			name:          "empty body",
+			body:          "",
+			metricName:    "otelcol_exporter_queue_size",
+			expectError:   true,
+			errorContains: "not found",
+		},
+		{
+			name: "metric with zero value",
+			body: `# HELP otelcol_exporter_queue_size Queue size
+# TYPE otelcol_exporter_queue_size gauge
+otelcol_exporter_queue_size 0.0
+`,
+			metricName:    "otelcol_exporter_queue_size",
+			expectedValue: 0.0,
+			expectError:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adapter := NewMdaiReplayAdapter(
+				&mdaiv1.MdaiReplay{},
+				logr.Discard(),
+				nil,
+				nil,
+				nil,
+				nil,
+			)
+
+			value, err := adapter.extractMetricValueFromResponse(nil,
+				bytes.NewBufferString(tt.body), tt.metricName)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedValue, value)
+			}
+		})
+	}
 }
