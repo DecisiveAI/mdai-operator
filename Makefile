@@ -260,7 +260,7 @@ PLUGIN_HELM_VALUES_SCHEMA_FOUND = $(shell helm plugin list | grep ^schema -c)
 .PHONY: helm-values-schema-json-plugin
 helm-values-schema-json-plugin:
 ifeq ($(PLUGIN_HELM_VALUES_SCHEMA_FOUND), 0)
-	helm plugin install https://github.com/losisin/helm-values-schema-json.git > /dev/null 2>&1
+	helm plugin install https://github.com/losisin/helm-values-schema-json.git
 endif
 
 .PHONY: yq
