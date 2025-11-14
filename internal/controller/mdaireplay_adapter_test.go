@@ -42,7 +42,7 @@ func TestNewMdaiReplayAdapter(t *testing.T) {
 	recorder := record.NewFakeRecorder(10)
 	httpClient := &http.Client{}
 
-	adapter := NewMdaiReplayAdapter(cr, logger, k8sClient, recorder, scheme, httpClient)
+	adapter := NewMdaiReplayAdapter(cr, logger, k8sClient, recorder, scheme, httpClient, nil)
 
 	assert.NotNil(t, adapter)
 	assert.Equal(t, cr, adapter.replayCR)
@@ -108,6 +108,7 @@ func TestEnsureDeletionProcessed(t *testing.T) {
 				record.NewFakeRecorder(10),
 				scheme,
 				&http.Client{},
+				nil,
 			)
 
 			result, err := adapter.ensureDeletionProcessed(context.Background())
@@ -177,6 +178,7 @@ func TestEnsureFinalizerInitialized(t *testing.T) {
 				record.NewFakeRecorder(10),
 				scheme,
 				&http.Client{},
+				nil,
 			)
 
 			result, err := adapter.ensureFinalizerInitialized(context.Background())
@@ -242,6 +244,7 @@ func TestEnsureStatusInitialized(t *testing.T) {
 				record.NewFakeRecorder(10),
 				scheme,
 				&http.Client{},
+				nil,
 			)
 
 			result, err := adapter.ensureStatusInitialized(context.Background())
@@ -295,6 +298,7 @@ func TestGetReplayerResourceName(t *testing.T) {
 			adapter := NewMdaiReplayAdapter(
 				cr,
 				logr.Discard(),
+				nil,
 				nil,
 				nil,
 				nil,
@@ -442,6 +446,7 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 				nil,
 				nil,
 				nil,
+				nil,
 			)
 
 			// Create a base config structure
@@ -554,6 +559,7 @@ func TestAugmentDeploymentWithValues(t *testing.T) {
 				nil,
 				runtime.NewScheme(),
 				nil,
+				nil,
 			)
 
 			deployment := &appsv1.Deployment{
@@ -639,6 +645,7 @@ other_metric 10.0
 				nil,
 				nil,
 				server.Client(),
+				func(_, _ string) string { return server.URL + "/metrics" },
 			)
 
 			// Extract the host and port from the test server URL
@@ -713,6 +720,7 @@ func TestDeleteFinalizer1(t *testing.T) {
 				cr,
 				logr.Discard(),
 				k8sClient,
+				nil,
 				nil,
 				nil,
 				nil,
@@ -864,6 +872,7 @@ otelcol_exporter_queue_size 100.0
 				record.NewFakeRecorder(10),
 				scheme,
 				httpClient,
+				func(_, _ string) string { return server.URL + "/metrics" },
 			)
 
 			state, err := adapter.finalize(context.Background())
@@ -917,6 +926,7 @@ func TestEnsureStatusSetToDone1(t *testing.T) {
 				record.NewFakeRecorder(10),
 				scheme,
 				&http.Client{},
+				nil,
 			)
 
 			result, err := adapter.ensureStatusSetToDone(context.Background())
@@ -995,6 +1005,7 @@ func TestCreateOrUpdateReplayerConfigMap(t *testing.T) {
 				record.NewFakeRecorder(10),
 				scheme,
 				&http.Client{},
+				nil,
 			)
 
 			hash, err := adapter.createOrUpdateReplayerConfigMap(context.Background())
@@ -1092,6 +1103,7 @@ func TestCreateOrUpdateReplayerDeployment(t *testing.T) {
 				record.NewFakeRecorder(10),
 				scheme,
 				&http.Client{},
+				nil,
 			)
 
 			err := adapter.createOrUpdateReplayerDeployment(context.Background(), tt.configHash)
@@ -1169,6 +1181,7 @@ func TestCreateOrUpdateReplayerService(t *testing.T) {
 				record.NewFakeRecorder(10),
 				scheme,
 				&http.Client{},
+				nil,
 			)
 
 			err := adapter.createOrUpdateReplayerService(context.Background())
@@ -1258,6 +1271,7 @@ func TestGetReplayCollectorConfigYAML(t *testing.T) {
 				nil,
 				nil,
 				nil,
+				nil,
 			)
 
 			yaml, err := adapter.getReplayCollectorConfigYAML(tt.replayId, tt.hubName)
@@ -1336,6 +1350,7 @@ func TestEnsureSynchronized(t *testing.T) {
 				record.NewFakeRecorder(10),
 				scheme,
 				&http.Client{},
+				nil,
 			)
 
 			result, err := adapter.ensureSynchronized(context.Background())
@@ -1443,6 +1458,7 @@ otelcol_exporter_queue_size 0.0
 			adapter := NewMdaiReplayAdapter(
 				&mdaiv1.MdaiReplay{},
 				logr.Discard(),
+				nil,
 				nil,
 				nil,
 				nil,

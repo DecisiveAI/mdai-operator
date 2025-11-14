@@ -43,12 +43,13 @@ var baseReplayCollectorYaml string
 var _ Adapter = (*MdaiReplayAdapter)(nil)
 
 type MdaiReplayAdapter struct {
-	replayCR   *mdaiv1.MdaiReplay
-	logger     logr.Logger
-	client     client.Client
-	recorder   record.EventRecorder
-	scheme     *runtime.Scheme
-	httpClient *http.Client
+	replayCR          *mdaiv1.MdaiReplay
+	logger            logr.Logger
+	client            client.Client
+	recorder          record.EventRecorder
+	scheme            *runtime.Scheme
+	httpClient        *http.Client
+	metricsURLBuilder func(serviceName, namespace string) string
 }
 
 func NewMdaiReplayAdapter(
@@ -58,15 +59,25 @@ func NewMdaiReplayAdapter(
 	recorder record.EventRecorder,
 	scheme *runtime.Scheme,
 	httpClient *http.Client,
+	metricsURLBuilder func(serviceName, namespace string) string,
 ) *MdaiReplayAdapter {
-	return &MdaiReplayAdapter{
-		replayCR:   cr,
-		logger:     log,
-		client:     k8sClient,
-		recorder:   recorder,
-		scheme:     scheme,
-		httpClient: httpClient,
+	if metricsURLBuilder == nil {
+		metricsURLBuilder = defaultMetricsURLBuilder
 	}
+	return &MdaiReplayAdapter{
+		replayCR:          cr,
+		logger:            log,
+		client:            k8sClient,
+		recorder:          recorder,
+		scheme:            scheme,
+		httpClient:        httpClient,
+		metricsURLBuilder: metricsURLBuilder,
+	}
+}
+
+// defaultMetricsURLBuilder creates the standard Kubernetes service URL for metrics
+func defaultMetricsURLBuilder(serviceName, namespace string) string {
+	return fmt.Sprintf("http://%s.%s.svc.cluster.local:8888/metrics", serviceName, namespace)
 }
 
 func (c MdaiReplayAdapter) ensureDeletionProcessed(ctx context.Context) (OperationResult, error) {
@@ -326,8 +337,7 @@ func (c MdaiReplayAdapter) augmentDeploymentWithValues(deployment *appsv1.Deploy
 					Name: c.getReplayerResourceName("collector-config"),
 				},
 			},
-		}).
-		WithAWSSecret(c.replayCR.Spec.Source.AWSConfig.AWSAccessKeySecret)
+		})
 
 	awsConfig := c.replayCR.Spec.Source.AWSConfig
 	if awsConfig != nil {
@@ -411,7 +421,7 @@ func (c MdaiReplayAdapter) finalize(ctx context.Context) (ObjectState, error) {
 
 	if !c.replayCR.Spec.IgnoreSendingQueue {
 		serviceName := c.getReplayerResourceName("service")
-		metricsUrl := fmt.Sprintf("http://%s.%s.svc.cluster.local:8888/metrics", serviceName, c.replayCR.Namespace)
+		metricsUrl := c.metricsURLBuilder(serviceName, c.replayCR.Namespace)
 		sendingQueueSize, err := c.getMetricValue(metricsUrl, "otelcol_exporter_queue_size")
 		if err != nil {
 			c.logger.Error(err, "failed to get otelcol_exporter_queue_size for replay, cannot finalize", "replayName", c.replayCR.Name)
