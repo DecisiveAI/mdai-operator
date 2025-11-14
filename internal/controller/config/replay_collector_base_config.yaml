@@ -1,0 +1,57 @@
+receivers:
+  awss3:
+    notifications:
+      opampextension: opamp
+    s3downloader: {}
+#      file_prefix: ""
+#      region: ""
+#      s3_bucket: ""
+#      s3_prefix: ""
+#      s3_partition: ""
+#    starttime: ""
+#    endtime: ""
+
+processors:
+  attributes:
+    actions: []
+#      - key: replay_id
+#        action: upsert
+#        value: ""
+
+exporters: {}
+#  otlphttp:
+#    endpoint: ""
+
+
+extensions:
+  opamp:
+    agent_description:
+      include_resource_attributes: true
+      non_identifying_attributes: {}
+#        replay_id: ""
+#        replica_idx: ""
+#        hub_name: ""
+    server:
+      http:
+#        endpoint: ""
+        tls:
+          insecure: true
+
+service:
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: '0.0.0.0'
+                port: 8888
+  extensions:
+    - opamp
+  pipelines:
+    logs/replay:
+      receivers:
+        - awss3
+      processors:
+        - attributes
+      exporters: []

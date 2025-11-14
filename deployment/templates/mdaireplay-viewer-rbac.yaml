@@ -1,0 +1,21 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "deployment.fullname" . }}-mdaireplay-viewer-role
+  labels:
+  {{- include "deployment.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - hub.mydecisive.ai
+  resources:
+  - mdaireplays
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - hub.mydecisive.ai
+  resources:
+  - mdaireplays/status
+  verbs:
+  - get
