@@ -524,5 +524,5 @@ func extractMetricValueFromResponse(body io.Reader, metricName string) (float64,
 		}
 	}
 
-	return 0, fmt.Errorf("no value found for metric %s", metricName)
+	return 0, fmt.Errorf("found metrics with name %s but need gauge or counter", metricName)
 }

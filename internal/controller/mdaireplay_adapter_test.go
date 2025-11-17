@@ -642,7 +642,7 @@ other_metric 10.0
 	}
 }
 
-func TestDeleteFinalizer1(t *testing.T) {
+func TestDeleteReplayFinalizer(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = mdaiv1.AddToScheme(scheme)
 
@@ -859,7 +859,7 @@ otelcol_exporter_queue_size 100.0
 	}
 }
 
-func TestEnsureStatusSetToDone1(t *testing.T) {
+func TestEnsureReplayStatusSetToDone(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = mdaiv1.AddToScheme(scheme)
 
@@ -1422,6 +1422,26 @@ otelcol_exporter_queue_size 0.0
 			metricName:    "otelcol_exporter_queue_size",
 			expectedValue: 0.0,
 			expectError:   false,
+		},
+		{
+			name: "wrong metric type",
+			body: `# HELP otelcol_exporter_queue_size Queue size
+# TYPE otelcol_exporter_queue_size histogram
+otelcol_exporter_queue_size 0.0
+`,
+			metricName:    "otelcol_exporter_queue_size",
+			expectError:   true,
+			errorContains: "need gauge or counter",
+		},
+		{
+			name: "bad metric type",
+			body: `# HELP otelcol_exporter_queue_size Queue size
+# TYPE otelcol_exporter_queue_size asjkerhiskehraiu
+otelcol_exporter_queue_size 0.0
+`,
+			metricName:    "otelcol_exporter_queue_size",
+			expectError:   true,
+			errorContains: "unknown metric type",
 		},
 	}
 
