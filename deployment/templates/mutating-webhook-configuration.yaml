@@ -48,5 +48,4 @@ webhooks:
     resources:
     - mdaiingresses
   sideEffects: None
-
 {{- end }}

@@ -14,5 +14,4 @@ spec:
     kind: Issuer
     name: '{{ include "deployment.fullname" . }}-selfsigned-issuer'
   secretName: webhook-server-cert
-
 {{- end }}
