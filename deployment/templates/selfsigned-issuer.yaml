@@ -7,4 +7,5 @@ metadata:
   {{- include "deployment.labels" . | nindent 4 }}
 spec:
   selfSigned: {}
+
 {{- end }}

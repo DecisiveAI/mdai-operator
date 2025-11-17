@@ -88,4 +88,5 @@ webhooks:
     resources:
     - mdaiobservers
   sideEffects: None
+
 {{- end }}
