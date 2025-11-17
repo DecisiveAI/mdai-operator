@@ -3,11 +3,12 @@ package controller
 import (
 	"bytes"
 	"context"
-	"github.com/decisiveai/mdai-operator/internal/builder"
-	"k8s.io/utils/ptr"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/decisiveai/mdai-operator/internal/builder"
+	"k8s.io/utils/ptr"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
@@ -121,10 +122,10 @@ func TestEnsureDeletionProcessed(t *testing.T) {
 			}
 			if tt.expectRequeue {
 				expectedResult, _ := Requeue()
-				assert.Equal(t, result, expectedResult)
+				assert.Equal(t, expectedResult, result)
 			}
 			if !tt.expectRequeue {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -183,7 +184,7 @@ func TestEnsureFinalizerInitialized(t *testing.T) {
 
 			result, err := adapter.ensureFinalizerInitialized(context.Background())
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			if tt.expectContinue {
 				assert.Equal(t, result, ContinueOperationResult())
 			}
@@ -249,7 +250,7 @@ func TestEnsureStatusInitialized(t *testing.T) {
 
 			result, err := adapter.ensureStatusInitialized(context.Background())
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			if tt.expectContinue {
 				assert.Equal(t, result, ContinueOperationResult())
 			}
@@ -344,6 +345,7 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, config builder.ConfigBlock) {
+				t.Helper()
 				// Check attributes processor has replay_name action
 				processors := config.MustMap("processors")
 				attrs := processors.MustMap("attributes")
@@ -351,7 +353,8 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 
 				found := false
 				for _, action := range actions {
-					actionMap := action.(map[string]string)
+					actionMap, ok := action.(map[string]string)
+					assert.True(t, ok)
 					if actionMap["key"] == replayNameKey && actionMap["value"] == "replay-123" {
 						found = true
 						break
@@ -374,7 +377,9 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 				extensions := config.MustMap("extensions")
 				opamp := extensions.MustMap("opamp")
 				agentDesc := opamp.MustMap("agent_description")
-				nonIdentAttrs := agentDesc["non_identifying_attributes"].(builder.ConfigBlock)
+				// FIXME: Can't use MustMap here because .Set used in the impl makes it a map[string]any instead of ConfigBlock
+				nonIdentAttrs, ok := agentDesc["non_identifying_attributes"].(builder.ConfigBlock)
+				assert.True(t, ok)
 				assert.Equal(t, "replay-123", nonIdentAttrs.MustString("replay_id"))
 				assert.Equal(t, "hub-456", nonIdentAttrs.MustString("hub_name"))
 			},
@@ -404,8 +409,11 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 				},
 			},
 			validate: func(t *testing.T, config builder.ConfigBlock) {
+				t.Helper()
 				// Check otlphttp exporter is configured
-				exporters := config["exporters"].(builder.ConfigBlock)
+				// FIXME: Can't use MustMap here because .Set used in the impl makes it a map[string]any instead of ConfigBlock
+				exporters, ok := config["exporters"].(builder.ConfigBlock)
+				assert.True(t, ok)
 				otlpHttp, exists := exporters.GetMap("otlphttp")
 				assert.True(t, exists, "otlphttp exporter should exist")
 
@@ -419,7 +427,7 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 
 				found := false
 				for _, exp := range exportersList {
-					if exp.(string) == "otlphttp" {
+					if exp.(string) == "otlphttp" { // nolint:forcetypeassert
 						found = true
 						break
 					}
@@ -431,24 +439,6 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cr := &mdaiv1.MdaiReplay{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-replay",
-					Namespace: "default",
-				},
-				Spec: tt.spec,
-			}
-
-			adapter := NewMdaiReplayAdapter(
-				cr,
-				logr.Discard(),
-				nil,
-				nil,
-				nil,
-				nil,
-				nil,
-			)
-
 			// Create a base config structure
 			config := map[string]any{
 				"receivers": map[string]any{
@@ -481,7 +471,7 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 				},
 			}
 
-			adapter.augmentCollectorConfigPerSpec(tt.replayId, tt.hubName, config, tt.spec)
+			augmentCollectorConfigPerSpec(tt.replayId, tt.hubName, config, tt.spec)
 			tt.validate(t, config)
 		})
 	}
@@ -502,6 +492,7 @@ func TestAugmentDeploymentWithValues(t *testing.T) {
 			image:      "otel/collector:latest",
 			configHash: "abc123",
 			validate: func(t *testing.T, deployment *appsv1.Deployment) {
+				t.Helper()
 				assert.Equal(t, int32(1), *deployment.Spec.Replicas)
 				assert.Equal(t, "test-collector", deployment.Labels["app"])
 				assert.Equal(t, "test-collector", deployment.Spec.Selector.MatchLabels["app"])
@@ -521,6 +512,7 @@ func TestAugmentDeploymentWithValues(t *testing.T) {
 			configHash: "def456",
 			awsSecret:  ptr.To("aws-creds"),
 			validate: func(t *testing.T, deployment *appsv1.Deployment) {
+				t.Helper()
 				container := deployment.Spec.Template.Spec.Containers[0]
 
 				found := false
@@ -627,45 +619,24 @@ other_metric 10.0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, "/metrics", r.URL.Path)
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(tt.metricResponse))
+				w.Write([]byte(tt.metricResponse)) // nolint:errcheck
 			}))
 			defer server.Close()
-
-			cr := &mdaiv1.MdaiReplay{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-replay",
-					Namespace: "default",
-				},
-			}
-
-			adapter := NewMdaiReplayAdapter(
-				cr,
-				logr.Discard(),
-				nil,
-				nil,
-				nil,
-				server.Client(),
-				func(_, _ string) string { return server.URL + "/metrics" },
-			)
-
-			// Extract the host and port from the test server URL
-			//serviceName := "test-service"
-			//namespace := "default"
 
 			// For this test, we need to mock the service URL resolution
 			// In a real test, you'd use the actual getMetricValue method
 			// Here we're testing extractMetricValueFromResponse directly
 			resp, err := server.Client().Get(server.URL + "/metrics")
 			require.NoError(t, err)
-			defer resp.Body.Close()
+			defer resp.Body.Close() // nolint:errcheck
 
-			value, err := adapter.extractMetricValueFromResponse(nil, resp.Body, tt.metricName)
+			value, err := extractMetricValueFromResponse(resp.Body, tt.metricName)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedValue, value)
+				require.NoError(t, err)
+				assert.InDelta(t, tt.expectedValue, value, 0)
 			}
 		})
 	}
@@ -727,7 +698,7 @@ func TestDeleteFinalizer1(t *testing.T) {
 			)
 
 			err := adapter.deleteFinalizer(context.Background(), cr, tt.finalizerToDelete)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Fetch the updated object
 			updated := &mdaiv1.MdaiReplay{}
@@ -735,7 +706,7 @@ func TestDeleteFinalizer1(t *testing.T) {
 				Name:      cr.Name,
 				Namespace: cr.Namespace,
 			}, updated)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			if tt.expectRemoval {
 				assert.NotContains(t, updated.Finalizers, tt.finalizerToDelete)
@@ -791,6 +762,7 @@ func TestFinalize(t *testing.T) {
 			setupMockServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusOK)
+					// nolint:errcheck,revive
 					w.Write([]byte(`# TYPE otelcol_exporter_queue_size gauge
 otelcol_exporter_queue_size 0.0
 `))
@@ -815,6 +787,7 @@ otelcol_exporter_queue_size 0.0
 			setupMockServer: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusOK)
+					// nolint:errcheck,revive
 					w.Write([]byte(`# TYPE otelcol_exporter_queue_size gauge
 otelcol_exporter_queue_size 100.0
 `))
@@ -846,8 +819,7 @@ otelcol_exporter_queue_size 100.0
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var server *httptest.Server
-			server = tt.setupMockServer()
+			server := tt.setupMockServer()
 			defer func() {
 				if server != nil {
 					server.Close()
@@ -878,9 +850,9 @@ otelcol_exporter_queue_size 100.0
 			state, err := adapter.finalize(context.Background())
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 			assert.Equal(t, tt.expectedState, state)
 		})
@@ -931,7 +903,7 @@ func TestEnsureStatusSetToDone1(t *testing.T) {
 
 			result, err := adapter.ensureStatusSetToDone(context.Background())
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			if tt.expectContinue {
 				assert.Equal(t, result, ContinueOperationResult())
 			}
@@ -942,7 +914,7 @@ func TestEnsureStatusSetToDone1(t *testing.T) {
 				Name:      tt.cr.Name,
 				Namespace: tt.cr.Namespace,
 			}, updated)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			condition := meta.FindStatusCondition(updated.Status.Conditions, typeAvailableHub)
 			assert.NotNil(t, condition)
@@ -1011,9 +983,9 @@ func TestCreateOrUpdateReplayerConfigMap(t *testing.T) {
 			hash, err := adapter.createOrUpdateReplayerConfigMap(context.Background())
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotEmpty(t, hash)
 
 				// Verify ConfigMap was created
@@ -1023,7 +995,7 @@ func TestCreateOrUpdateReplayerConfigMap(t *testing.T) {
 					Name:      configMapName,
 					Namespace: tt.cr.Namespace,
 				}, cm)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Contains(t, cm.Data, "collector.yaml")
 				assert.NotEmpty(t, cm.Data["collector.yaml"])
 
@@ -1109,9 +1081,9 @@ func TestCreateOrUpdateReplayerDeployment(t *testing.T) {
 			err := adapter.createOrUpdateReplayerDeployment(context.Background(), tt.configHash)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 
 				// Verify Deployment was created
 				deploymentName := adapter.getReplayerResourceName("collector")
@@ -1120,7 +1092,7 @@ func TestCreateOrUpdateReplayerDeployment(t *testing.T) {
 					Name:      deploymentName,
 					Namespace: tt.cr.Namespace,
 				}, deployment)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 
 				// Verify deployment configuration
 				assert.Equal(t, int32(1), *deployment.Spec.Replicas)
@@ -1187,9 +1159,9 @@ func TestCreateOrUpdateReplayerService(t *testing.T) {
 			err := adapter.createOrUpdateReplayerService(context.Background())
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 
 				// Verify Service was created
 				serviceName := adapter.getReplayerResourceName("service")
@@ -1198,7 +1170,7 @@ func TestCreateOrUpdateReplayerService(t *testing.T) {
 					Name:      serviceName,
 					Namespace: tt.cr.Namespace,
 				}, service)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 
 				// Verify service configuration
 				assert.Equal(t, corev1.ServiceTypeClusterIP, service.Spec.Type)
@@ -1277,9 +1249,9 @@ func TestGetReplayCollectorConfigYAML(t *testing.T) {
 			yaml, err := adapter.getReplayCollectorConfigYAML(tt.replayId, tt.hubName)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.NotEmpty(t, yaml)
 
 				// Verify YAML contains expected elements
@@ -1356,9 +1328,9 @@ func TestEnsureSynchronized(t *testing.T) {
 			result, err := adapter.ensureSynchronized(context.Background())
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 
 			if tt.expectContinue {
@@ -1373,7 +1345,7 @@ func TestEnsureSynchronized(t *testing.T) {
 					Name:      configMapName,
 					Namespace: tt.cr.Namespace,
 				}, cm)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 
 				deploymentName := adapter.getReplayerResourceName("collector")
 				deployment := &appsv1.Deployment{}
@@ -1381,7 +1353,7 @@ func TestEnsureSynchronized(t *testing.T) {
 					Name:      deploymentName,
 					Namespace: tt.cr.Namespace,
 				}, deployment)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 
 				serviceName := adapter.getReplayerResourceName("service")
 				service := &corev1.Service{}
@@ -1389,7 +1361,7 @@ func TestEnsureSynchronized(t *testing.T) {
 					Name:      serviceName,
 					Namespace: tt.cr.Namespace,
 				}, service)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -1455,27 +1427,17 @@ otelcol_exporter_queue_size 0.0
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			adapter := NewMdaiReplayAdapter(
-				&mdaiv1.MdaiReplay{},
-				logr.Discard(),
-				nil,
-				nil,
-				nil,
-				nil,
-				nil,
-			)
-
-			value, err := adapter.extractMetricValueFromResponse(nil,
+			value, err := extractMetricValueFromResponse(
 				bytes.NewBufferString(tt.body), tt.metricName)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				if tt.errorContains != "" {
 					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedValue, value)
+				require.NoError(t, err)
+				assert.InDelta(t, tt.expectedValue, value, 0)
 			}
 		})
 	}

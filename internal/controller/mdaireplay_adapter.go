@@ -77,7 +77,8 @@ func NewMdaiReplayAdapter(
 
 // defaultMetricsURLBuilder creates the standard Kubernetes service URL for metrics
 func defaultMetricsURLBuilder(serviceName, namespace string) string {
-	return fmt.Sprintf("http://%s.%s.svc.cluster.local:8888/metrics", serviceName, namespace)
+	// FIXME: Sort out https support here and w/ cert manager
+	return fmt.Sprintf("http://%s.%s.svc.cluster.local:8888/metrics", serviceName, namespace) // nolint:revive
 }
 
 func (c MdaiReplayAdapter) ensureDeletionProcessed(ctx context.Context) (OperationResult, error) {
@@ -229,12 +230,12 @@ func (c MdaiReplayAdapter) getReplayCollectorConfigYAML(replayId string, hubName
 		return "", fmt.Errorf(`unmarshal base collector config: %w`, err)
 	}
 
-	c.augmentCollectorConfigPerSpec(replayId, hubName, config, replayCRSpec)
+	augmentCollectorConfigPerSpec(replayId, hubName, config, replayCRSpec)
 
 	return config.YAML()
 }
 
-func (c MdaiReplayAdapter) augmentCollectorConfigPerSpec(replayId string, hubName string, config builder.ConfigBlock, replayCRSpec mdaiv1.MdaiReplaySpec) {
+func augmentCollectorConfigPerSpec(replayId string, hubName string, config builder.ConfigBlock, replayCRSpec mdaiv1.MdaiReplaySpec) {
 	// Add replayId insert processor.
 	// Assumed to already be in service.pipelines.logs/replay.processors slice as it is not optional!
 	attrProcessor := config.MustMap("processors").MustMap("attributes")
@@ -499,10 +500,10 @@ func (c MdaiReplayAdapter) getMetricValue(metricsUrl, metricName string) (float6
 		}
 	}()
 
-	return c.extractMetricValueFromResponse(err, resp.Body, metricName)
+	return extractMetricValueFromResponse(resp.Body, metricName)
 }
 
-func (c MdaiReplayAdapter) extractMetricValueFromResponse(err error, body io.Reader, metricName string) (float64, error) {
+func extractMetricValueFromResponse(body io.Reader, metricName string) (float64, error) {
 	var parser expfmt.TextParser
 	metricFamilies, err := parser.TextToMetricFamilies(body)
 	if err != nil {
