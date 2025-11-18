@@ -295,14 +295,6 @@ var _ = Describe("MdaiHub Webhook", func() {
 			Expect(warnings).To(BeEmpty())
 		})
 
-		It("Should fail if priority list doesn't have transformers", func() {
-			obj := createSampleMdaiHub()
-			(obj.Spec.Variables)[6].SerializeAs[0].Transformers = nil
-			warnings, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).To(MatchError(ContainSubstring("MdaiHub.hub.mydecisive.ai \"mdaihub-sample\" is invalid: spec.variables[6].serializeAs[0].transformers: Required value: at least one transformer (e.g., 'join')")))
-			Expect(warnings).To(BeEmpty())
-		})
-
 		It("Should fail if transformers specified for boolean", func() {
 			obj := createSampleMdaiHub()
 			(obj.Spec.Variables)[3].SerializeAs[0].Transformers = []mdaiv1.VariableTransformer{

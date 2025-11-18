@@ -569,7 +569,6 @@ func TestEnsureManualAndComputedVariableSynced(t *testing.T) {
 	if opResult != ContinueOperationResult() {
 		t.Errorf("expected ContinueProcessing, got: %v", opResult)
 	}
-
 	envCMName := mdaiCR.Name + envConfigMapNamePostfix
 	envCM := &v1core.ConfigMap{}
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: envCMName, Namespace: "default"}, envCM); err != nil {

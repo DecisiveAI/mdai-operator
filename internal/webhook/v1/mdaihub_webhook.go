@@ -502,9 +502,7 @@ func (*MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub) (admis
 
 			switch variable.DataType {
 			case mdaiv1.VariableDataTypeSet, mdaiv1.MetaVariableDataTypePriorityList:
-				if len(with.Transformers) == 0 {
-					errs = append(errs, field.Required(serializeIndex.Child("transformers"), "at least one transformer (e.g., 'join')"))
-				}
+				continue
 			case mdaiv1.VariableDataTypeString,
 				mdaiv1.VariableDataTypeFloat,
 				mdaiv1.VariableDataTypeInt,
