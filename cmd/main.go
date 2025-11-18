@@ -8,9 +8,6 @@ import (
 	"os"
 	"path/filepath"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	"github.com/decisiveai/mdai-operator/internal/controller"
-	webhookmdaiv1 "github.com/decisiveai/mdai-operator/internal/webhook/v1"
 	"github.com/go-logr/zapr"
 	opentelemetryv1beta1 "github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -22,6 +19,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"github.com/decisiveai/mdai-operator/internal/controller"
+	webhookmdaiv1 "github.com/decisiveai/mdai-operator/internal/webhook/v1"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -326,11 +327,10 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiIngress")
 			gracefullyShutdownWithCode(1)
 		}
-		// TODO: do the validation webhook!
-		// if err := webhookmdaiv1.SetupMdaiReplayWebhookWithManager(mgr); err != nil {
-		// 	setupLog.Error(err, "unable to create webhook", "webhook", "MdaiReplay")
-		// 	gracefullyShutdownWithCode(1)
-		// }
+		if err := webhookmdaiv1.SetupMdaiReplayWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiReplay")
+			gracefullyShutdownWithCode(1)
+		}
 	}
 
 	if metricsCertWatcher != nil {

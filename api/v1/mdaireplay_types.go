@@ -10,9 +10,9 @@ type (
 )
 
 const (
-	LogsReplayTelemetryType     MdaiReplayTelemetryType = "Logs"
-	MetricssReplayTelemetryType MdaiReplayTelemetryType = "Metrics"
-	TracesReplayTelemetryType   MdaiReplayTelemetryType = "Traces"
+	LogsReplayTelemetryType    MdaiReplayTelemetryType = "Logs"
+	MetricsReplayTelemetryType MdaiReplayTelemetryType = "Metrics"
+	TracesReplayTelemetryType  MdaiReplayTelemetryType = "Traces"
 
 	S3ReplayMinutePartition MdaiReplayS3Partition = "Minute"
 	S3ReplayHourPartition   MdaiReplayS3Partition = "Hour"
