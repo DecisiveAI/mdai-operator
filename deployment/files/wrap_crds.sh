@@ -32,7 +32,6 @@ for f in deployment/templates/*-crd.yaml; do
     }
     1s/^/{{- if .Values.crds.create }}\
 &/
-    $a\
-{{- end }}
+    $a{{- end }}
   ' "$f"
 done

@@ -30,5 +30,5 @@ roleRef:
   name: '{{ include "deployment.fullname" . }}-metrics-auth-role'
 subjects:
 - kind: ServiceAccount
-  name: '{{ include "deployment.fullname" . }}-controller-manager'
+  name: '{{ include "deployment.serviceAccountName" . }}'
   namespace: '{{ .Release.Namespace }}'
