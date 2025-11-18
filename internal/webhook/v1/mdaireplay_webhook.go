@@ -50,7 +50,7 @@ type MdaiReplayCustomValidator struct {
 var _ webhook.CustomValidator = &MdaiReplayCustomValidator{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type MdaiReplay.
-func (v *MdaiReplayCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (*MdaiReplayCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	mdaireplay, ok := obj.(*hubv1.MdaiReplay)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiReplay object but got %T", obj)
@@ -70,7 +70,7 @@ func (v *MdaiReplayCustomValidator) ValidateCreate(ctx context.Context, obj runt
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type MdaiReplay.
-func (v *MdaiReplayCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+func (*MdaiReplayCustomValidator) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	mdaireplay, ok := newObj.(*hubv1.MdaiReplay)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiReplay object for the newObj but got %T", newObj)
@@ -90,13 +90,13 @@ func (v *MdaiReplayCustomValidator) ValidateUpdate(ctx context.Context, oldObj, 
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type MdaiReplay.
-func (v *MdaiReplayCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (*MdaiReplayCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	// deletion validation not used at this time
-	//mdaireplay, ok := obj.(*hubv1.MdaiReplay)
-	//if !ok {
+	// mdaireplay, ok := obj.(*hubv1.MdaiReplay)
+	// if !ok {
 	//	return nil, fmt.Errorf("expected a MdaiReplay object but got %T", obj)
 	//}
-	//mdaireplaylog.Info("Validation for MdaiReplay upon deletion", "name", mdaireplay.GetName())
+	// mdaireplaylog.Info("Validation for MdaiReplay upon deletion", "name", mdaireplay.GetName())
 
 	return nil, nil
 }
@@ -114,13 +114,13 @@ func validateReplaySpec(mdaireplay *hubv1.MdaiReplay) (admission.Warnings, error
 		return warnings, errors.New("opampEndpoint cannot be empty")
 	}
 	if mdaireplay.Spec.TelemetryType == "" || !slices.Contains(validTelemetryTypes, mdaireplay.Spec.TelemetryType) {
-		return warnings, errors.New(fmt.Sprintf("invalid telemetry type %s, expected one of %s", mdaireplay.Spec.TelemetryType, validTelemetryTypes))
+		return warnings, fmt.Errorf("invalid telemetry type %s, expected one of %s", mdaireplay.Spec.TelemetryType, validTelemetryTypes)
 	}
 	if err := validateTimeStr(mdaireplay.Spec.StartTime); err != nil {
-		return warnings, fmt.Errorf("startTime is not in a supported format. Error: %v", err)
+		return warnings, fmt.Errorf("startTime is not in a supported format. Error: %w", err)
 	}
 	if err := validateTimeStr(mdaireplay.Spec.EndTime); err != nil {
-		return warnings, fmt.Errorf("endTime is not in a supported format. Error: %v", err)
+		return warnings, fmt.Errorf("endTime is not in a supported format. Error: %w", err)
 	}
 
 	if mdaireplay.Spec.Source.S3 != nil {
@@ -133,9 +133,8 @@ func validateReplaySpec(mdaireplay *hubv1.MdaiReplay) (admission.Warnings, error
 
 		s3Config := mdaireplay.Spec.Source.S3
 		if s3Config.S3Partition == "" || !slices.Contains(validPartitions, s3Config.S3Partition) {
-			return warnings, errors.New(fmt.Sprintf("invalid s3 partition %s, expected one of %s", s3Config.S3Partition, validPartitions))
+			return warnings, fmt.Errorf("invalid s3 partition %s, expected one of %s", s3Config.S3Partition, validPartitions)
 		}
-
 	}
 	return warnings, nil
 }
@@ -145,13 +144,13 @@ func validateReplaySpec(mdaireplay *hubv1.MdaiReplay) (admission.Warnings, error
 func validateTimeStr(timeStr string) error {
 	var parseErrs error
 	for _, layout := range timeStrLayouts {
-		if _, err := time.Parse(layout, timeStr); err == nil {
+		_, err := time.Parse(layout, timeStr)
+		if err == nil {
 			// if a datetime successfully parsed, return without error
 			return nil
-		} else {
-			parseErrs = errors.Join(err, parseErrs)
 		}
+		parseErrs = errors.Join(err, parseErrs)
 	}
 	// if all formats returned in error, bubble up a decent error message
-	return fmt.Errorf("invalid time format: %s, expected one of %s. Parser errors: %v", timeStr, timeStrLayouts, parseErrs)
+	return fmt.Errorf("invalid time format: %s, expected one of %s. Parser errors: %w", timeStr, timeStrLayouts, parseErrs)
 }

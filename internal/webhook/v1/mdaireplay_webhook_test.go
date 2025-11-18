@@ -2,8 +2,9 @@ package v1
 
 import (
 	"context"
-	"k8s.io/utils/ptr"
 	"testing"
+
+	"k8s.io/utils/ptr"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
