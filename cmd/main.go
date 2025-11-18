@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+
 	"github.com/go-logr/zapr"
 	opentelemetryv1beta1 "github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -311,26 +313,7 @@ func main() {
 
 	// nolint:goconst
 	if os.Getenv(enableWebhooksEnvVar) != "false" {
-		if err = webhookmdaiv1.SetupMdaiHubWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiHub")
-			gracefullyShutdownWithCode(1)
-		}
-		if err = webhookmdaiv1.SetupMdaiCollectorWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiCollector")
-			gracefullyShutdownWithCode(1)
-		}
-		if err = webhookmdaiv1.SetupMdaiObserverWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiObserver")
-			gracefullyShutdownWithCode(1)
-		}
-		if err := webhookmdaiv1.SetupMdaiIngressWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiIngress")
-			gracefullyShutdownWithCode(1)
-		}
-		if err := webhookmdaiv1.SetupMdaiReplayWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiReplay")
-			gracefullyShutdownWithCode(1)
-		}
+		setupWebhooksOrExplode(mgr, gracefullyShutdownWithCode)
 	}
 
 	if metricsCertWatcher != nil {
@@ -362,6 +345,29 @@ func main() {
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
+		gracefullyShutdownWithCode(1)
+	}
+}
+
+func setupWebhooksOrExplode(mgr manager.Manager, gracefullyShutdownWithCode func(code int)) {
+	if err := webhookmdaiv1.SetupMdaiHubWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "MdaiHub")
+		gracefullyShutdownWithCode(1)
+	}
+	if err := webhookmdaiv1.SetupMdaiCollectorWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "MdaiCollector")
+		gracefullyShutdownWithCode(1)
+	}
+	if err := webhookmdaiv1.SetupMdaiObserverWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "MdaiObserver")
+		gracefullyShutdownWithCode(1)
+	}
+	if err := webhookmdaiv1.SetupMdaiIngressWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "MdaiIngress")
+		gracefullyShutdownWithCode(1)
+	}
+	if err := webhookmdaiv1.SetupMdaiReplayWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "MdaiReplay")
 		gracefullyShutdownWithCode(1)
 	}
 }
