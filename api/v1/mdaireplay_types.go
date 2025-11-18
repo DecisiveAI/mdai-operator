@@ -10,12 +10,12 @@ type (
 )
 
 const (
-	LogsReplayTelemetryType    MdaiReplayTelemetryType = "Logs"
-	MetricsReplayTelemetryType MdaiReplayTelemetryType = "Metrics"
-	TracesReplayTelemetryType  MdaiReplayTelemetryType = "Traces"
+	LogsReplayTelemetryType    MdaiReplayTelemetryType = "logs"
+	MetricsReplayTelemetryType MdaiReplayTelemetryType = "metrics"
+	TracesReplayTelemetryType  MdaiReplayTelemetryType = "traces"
 
-	S3ReplayMinutePartition MdaiReplayS3Partition = "Minute"
-	S3ReplayHourPartition   MdaiReplayS3Partition = "Hour"
+	S3ReplayMinutePartition MdaiReplayS3Partition = "minute"
+	S3ReplayHourPartition   MdaiReplayS3Partition = "hour"
 )
 
 type MdaiReplayAwsConfig struct {
@@ -65,7 +65,7 @@ type MdaiReplaySpec struct {
 
 	// StatusVariableRef a variable that will be updated with the result of this replay upon success or failure.
 	// Should be referenced in a When VariableUpdated rule so that a CleanUpReplayAction can be triggered
-	StatusVariableRef string `json:"statusVariableRef"`
+	StatusVariableRef string `json:"statusVariableRef" yaml:"statusVariableRef"`
 
 	OpAMPEndpoint string `json:"opampEndpoint" yaml:"opampEndpoint"`
 	// IgnoreSendingQueue: Bypass checking the OTEL sending queue metric when finalizing the replay resource

@@ -54,14 +54,16 @@ spec:
                 type: string
               hubName:
                 type: string
+              ignoreSendingQueue:
+                description: 'IgnoreSendingQueue: Bypass checking the OTEL sending queue
+                  metric when finalizing the replay resource'
+                type: boolean
               opampEndpoint:
                 type: string
               resource:
                 properties:
                   image:
                     type: string
-                required:
-                - image
                 type: object
               source:
                 properties:
@@ -92,11 +94,16 @@ spec:
                 type: object
               startTime:
                 type: string
+              statusVariableRef:
+                description: |-
+                  StatusVariableRef a variable that will be updated with the result of this replay upon success or failure.
+                  Should be referenced in a When VariableUpdated rule so that a CleanUpReplayAction can be triggered
+                type: string
               telemetryType:
                 type: string
             required:
-            - hubName
             - opampEndpoint
+            - statusVariableRef
             type: object
           status:
             description: MdaiReplayStatus defines the observed state of MdaiReplay.
@@ -164,10 +171,6 @@ spec:
                   Right now it's updated on each reconcile, we have to skip when reconciliation detects no changes
                 format: date-time
                 type: string
-              replayStatus:
-                type: string
-            required:
-            - replayStatus
             type: object
         type: object
     served: true
