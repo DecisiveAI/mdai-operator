@@ -91,13 +91,7 @@ func (*MdaiReplayCustomValidator) ValidateUpdate(ctx context.Context, oldObj, ne
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type MdaiReplay.
 func (*MdaiReplayCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	// deletion validation not used at this time
-	// mdaireplay, ok := obj.(*hubv1.MdaiReplay)
-	// if !ok {
-	//	return nil, fmt.Errorf("expected a MdaiReplay object but got %T", obj)
-	//}
-	// mdaireplaylog.Info("Validation for MdaiReplay upon deletion", "name", mdaireplay.GetName())
-
+	// deletion validation not used at this time, but method is retained to conform to the webhook.CustomValidator interface
 	return nil, nil
 }
 
