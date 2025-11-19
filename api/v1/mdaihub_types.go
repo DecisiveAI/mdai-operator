@@ -59,7 +59,7 @@ type Variable struct {
 	// +kubebuilder:validation:Optional
 	VariableRefs []string `json:"variableRefs,omitempty" yaml:"variableRefs,omitempty"`
 	// +kubebuilder:validation:Optional
-	SerializeAs *[]Serializer `json:"serializeAs" yaml:"serializeAs"`
+	SerializeAs *[]Serializer `json:"serializeAs,omitempty" yaml:"serializeAs,omitempty"`
 }
 
 type PrometheusAlert struct {
