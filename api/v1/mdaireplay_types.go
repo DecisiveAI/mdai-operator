@@ -71,6 +71,7 @@ type MdaiReplaySpec struct {
 
 	OpAMPEndpoint string `json:"opampEndpoint" yaml:"opampEndpoint"`
 	// IgnoreSendingQueue: Bypass checking the OTEL sending queue metric when finalizing the replay resource
+	// +kubebuilder:default=false
 	// +optional
 	IgnoreSendingQueue bool                               `json:"ignoreSendingQueue" yaml:"ignoreSendingQueue" default:"false"`
 	Source             MdaiReplaySourceConfiguration      `json:"source,omitempty" yaml:"source,omitempty"`
