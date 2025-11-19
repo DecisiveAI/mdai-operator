@@ -23,10 +23,11 @@ type MdaiReplayAwsConfig struct {
 }
 
 type MdaiReplayS3Configuration struct {
-	S3Region    string                `json:"s3Region" yaml:"s3Region"`
-	S3Bucket    string                `json:"s3Bucket" yaml:"s3Bucket"`
-	FilePrefix  string                `json:"filePrefix" yaml:"filePrefix"`
-	S3Path      string                `json:"s3Path" yaml:"s3Path"`
+	S3Region   string `json:"s3Region" yaml:"s3Region"`
+	S3Bucket   string `json:"s3Bucket" yaml:"s3Bucket"`
+	FilePrefix string `json:"filePrefix" yaml:"filePrefix"`
+	S3Path     string `json:"s3Path" yaml:"s3Path"`
+	// +kubebuilder:validation:Enum=minute;hour
 	S3Partition MdaiReplayS3Partition `json:"s3Partition" yaml:"s3Partition"`
 }
 
@@ -59,9 +60,10 @@ type MdaiReplaySpec struct {
 	// +optional
 	EndTime string `json:"endTime,omitempty" yaml:"endTime,omitempty"`
 	// +optional
+	// +kubebuilder:validation:Enum=logs;metrics;traces
 	TelemetryType MdaiReplayTelemetryType `json:"telemetryType,omitempty" yaml:"telemetryType,omitempty"`
 	// +optional
-	HubName string `json:"hubName" yaml:"hubName"`
+	HubName string `json:"hubName,omitempty" yaml:"hubName,omitempty"`
 
 	// StatusVariableRef a variable that will be updated with the result of this replay upon success or failure.
 	// Should be referenced in a When VariableUpdated rule so that a CleanUpReplayAction can be triggered

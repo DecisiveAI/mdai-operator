@@ -32,7 +32,6 @@ import (
 const (
 	mdaiReplayFinalizerName     = "mydecisive.ai/replay_finalizer"
 	replayNameKey               = "replay_name"
-	hubNameKey                  = "hub_name"
 	replayerDefaultImage        = "otel/opentelemetry-collector-contrib:0.136.0"
 	replayCollectorHubComponent = "mdai-replay"
 )
