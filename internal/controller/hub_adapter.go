@@ -508,7 +508,11 @@ func (c HubAdapter) ensureVariableSynchronized(ctx context.Context) (OperationRe
 }
 
 func (c HubAdapter) applySerializerToString(variable mdaiv1.Variable, envMap map[string]string, value string) {
-	for _, serializer := range variable.SerializeAs {
+	if variable.SerializeAs == nil {
+		return
+	}
+
+	for _, serializer := range *variable.SerializeAs {
 		exportedVariableName := serializer.Name
 		if _, exists := envMap[exportedVariableName]; exists {
 			c.logger.Info("Serializer configuration overrides existing configuration", "exportedVariableName", exportedVariableName)
@@ -518,7 +522,11 @@ func (c HubAdapter) applySerializerToString(variable mdaiv1.Variable, envMap map
 }
 
 func (c HubAdapter) applySetTransformation(variable mdaiv1.Variable, envMap map[string]string, valueAsSlice []string) {
-	for _, serializer := range variable.SerializeAs {
+	if variable.SerializeAs == nil {
+		return
+	}
+
+	for _, serializer := range *variable.SerializeAs {
 		exportedVariableName := serializer.Name
 		if _, exists := envMap[exportedVariableName]; exists {
 			c.logger.Info("Serializer configuration overrides existing configuration", "exportedVariableName", exportedVariableName)

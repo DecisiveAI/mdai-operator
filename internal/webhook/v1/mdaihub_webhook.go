@@ -387,7 +387,7 @@ func validateDeployReplayAction(p *field.Path, a *mdaiv1.DeployReplayAction, kno
 		errs = append(errs, field.Invalid(p.Child("replaySpec.statusVariableRef"), a.ReplaySpec.StatusVariableRef, "does not reference a known variable"))
 	}
 
-	if _, replaySpecErrs := validateReplaySpec(a.ReplaySpec); replaySpecErrs != nil {
+	if _, replaySpecErrs := validateReplaySpec(a.ReplaySpec, HubAutomationValidatorMode); replaySpecErrs != nil {
 		errs = append(errs, field.Invalid(p.Child("replaySpec"), a.ReplaySpec, fmt.Sprintf("invalid replay spec with errors: %v", replaySpecErrs)))
 	}
 
@@ -499,32 +499,34 @@ func (*MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub) (admis
 			errs = append(errs, field.Forbidden(varIndex.Child("variableRefs"), "not supported for non-meta variables"))
 		}
 
-		for j, with := range variable.SerializeAs {
-			serializeIndex := varIndex.Child("serializeAs").Index(j)
+		if variable.SerializeAs != nil {
+			for j, with := range *variable.SerializeAs {
+				serializeIndex := varIndex.Child("serializeAs").Index(j)
 
-			if _, exists := exportedVariableNames[with.Name]; exists {
-				errs = append(errs, field.Duplicate(serializeIndex.Child("name"), with.Name))
-			} else {
-				exportedVariableNames[with.Name] = struct{}{}
-			}
-
-			switch variable.DataType {
-			case mdaiv1.VariableDataTypeSet, mdaiv1.MetaVariableDataTypePriorityList:
-				continue
-			case mdaiv1.VariableDataTypeString,
-				mdaiv1.VariableDataTypeFloat,
-				mdaiv1.VariableDataTypeInt,
-				mdaiv1.VariableDataTypeBoolean,
-				mdaiv1.VariableDataTypeMap,
-				mdaiv1.MetaVariableDataTypeHashSet:
-				if len(with.Transformers) > 0 {
-					errs = append(errs, field.Forbidden(
-						serializeIndex.Child("transformers"),
-						fmt.Sprintf("transformers are not supported for variable type %s", variable.DataType),
-					))
+				if _, exists := exportedVariableNames[with.Name]; exists {
+					errs = append(errs, field.Duplicate(serializeIndex.Child("name"), with.Name))
+				} else {
+					exportedVariableNames[with.Name] = struct{}{}
 				}
-			default:
-				errs = append(errs, field.Invalid(varIndex.Child("dataType"), variable.DataType, "unsupported variable type"))
+
+				switch variable.DataType {
+				case mdaiv1.VariableDataTypeSet, mdaiv1.MetaVariableDataTypePriorityList:
+					continue
+				case mdaiv1.VariableDataTypeString,
+					mdaiv1.VariableDataTypeFloat,
+					mdaiv1.VariableDataTypeInt,
+					mdaiv1.VariableDataTypeBoolean,
+					mdaiv1.VariableDataTypeMap,
+					mdaiv1.MetaVariableDataTypeHashSet:
+					if len(with.Transformers) > 0 {
+						errs = append(errs, field.Forbidden(
+							serializeIndex.Child("transformers"),
+							fmt.Sprintf("transformers are not supported for variable type %s", variable.DataType),
+						))
+					}
+				default:
+					errs = append(errs, field.Invalid(varIndex.Child("dataType"), variable.DataType, "unsupported variable type"))
+				}
 			}
 		}
 	}

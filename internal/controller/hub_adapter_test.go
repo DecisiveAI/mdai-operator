@@ -316,7 +316,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 		Type:        mdaiv1.VariableTypeComputed,
 		DataType:    mdaiv1.VariableDataTypeSet,
 		Key:         "mykey_set",
-		SerializeAs: []mdaiv1.Serializer{
+		SerializeAs: &[]mdaiv1.Serializer{
 			{
 				Name: "MY_ENV_SET",
 				Transformers: []mdaiv1.VariableTransformer{
@@ -335,7 +335,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 		Type:        mdaiv1.VariableTypeComputed,
 		DataType:    mdaiv1.VariableDataTypeString,
 		Key:         "mykey_string",
-		SerializeAs: []mdaiv1.Serializer{
+		SerializeAs: &[]mdaiv1.Serializer{
 			{
 				Name: "MY_ENV_STR",
 			},
@@ -346,7 +346,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 		Type:        mdaiv1.VariableTypeComputed,
 		DataType:    mdaiv1.VariableDataTypeString,
 		Key:         "mykey_bool",
-		SerializeAs: []mdaiv1.Serializer{
+		SerializeAs: &[]mdaiv1.Serializer{
 			{
 				Name: "MY_ENV_BOOL",
 			},
@@ -358,7 +358,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 		Type:        mdaiv1.VariableTypeComputed,
 		DataType:    mdaiv1.VariableDataTypeInt,
 		Key:         "mykey_int",
-		SerializeAs: []mdaiv1.Serializer{
+		SerializeAs: &[]mdaiv1.Serializer{
 			{
 				Name: "MY_ENV_INT",
 			},
@@ -370,7 +370,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 		Type:        mdaiv1.VariableTypeComputed,
 		DataType:    mdaiv1.VariableDataTypeMap,
 		Key:         "mykey_map",
-		SerializeAs: []mdaiv1.Serializer{
+		SerializeAs: &[]mdaiv1.Serializer{
 			{
 				Name: "MY_ENV_MAP",
 			},
@@ -386,7 +386,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 			"some_key",
 			"mykey_set",
 		},
-		SerializeAs: []mdaiv1.Serializer{
+		SerializeAs: &[]mdaiv1.Serializer{
 			{
 				Name: "MY_ENV_PL",
 				Transformers: []mdaiv1.VariableTransformer{
@@ -410,7 +410,7 @@ func TestEnsureVariableSynced(t *testing.T) {
 			"some_key",
 			"mykey_set",
 		},
-		SerializeAs: []mdaiv1.Serializer{
+		SerializeAs: &[]mdaiv1.Serializer{
 			{
 				Name: "MY_ENV_HS",
 			},
@@ -527,14 +527,14 @@ func TestEnsureManualAndComputedVariableSynced(t *testing.T) {
 		Type:        mdaiv1.VariableTypeComputed,
 		DataType:    variableType,
 		Key:         "mykey",
-		SerializeAs: []mdaiv1.Serializer{varWith},
+		SerializeAs: &[]mdaiv1.Serializer{varWith},
 	}
 	manualVariable := mdaiv1.Variable{
 		StorageType: storageType,
 		Type:        mdaiv1.VariableTypeManual,
 		DataType:    variableType,
 		Key:         "mymanualkey",
-		SerializeAs: []mdaiv1.Serializer{varWith},
+		SerializeAs: &[]mdaiv1.Serializer{varWith},
 	}
 	mdaiCR := newTestMdaiCR()
 	mdaiCR.Spec.Variables = []mdaiv1.Variable{computedVariable, manualVariable}

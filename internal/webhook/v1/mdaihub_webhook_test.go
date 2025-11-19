@@ -30,7 +30,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 			Variables: []mdaiv1.Variable{
 				{
 					Key: "service_list_1",
-					SerializeAs: []mdaiv1.Serializer{
+					SerializeAs: &[]mdaiv1.Serializer{
 						{
 							Name: "SERVICE_LIST_REGEX",
 							Transformers: []mdaiv1.VariableTransformer{
@@ -59,7 +59,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 				},
 				{
 					Key: "service_list_2",
-					SerializeAs: []mdaiv1.Serializer{
+					SerializeAs: &[]mdaiv1.Serializer{
 						{
 							Name: "SERVICE_LIST_2_REGEX",
 							Transformers: []mdaiv1.VariableTransformer{
@@ -90,25 +90,25 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					Key:         "string",
 					DataType:    mdaiv1.VariableDataTypeString,
 					StorageType: mdaiv1.VariableStorageType(storageType),
-					SerializeAs: []mdaiv1.Serializer{{Name: "STR"}},
+					SerializeAs: &[]mdaiv1.Serializer{{Name: "STR"}},
 				},
 				{
 					Key:         "bool",
 					DataType:    mdaiv1.VariableDataTypeBoolean,
 					StorageType: mdaiv1.VariableStorageType(storageType),
-					SerializeAs: []mdaiv1.Serializer{{Name: "BOOL"}},
+					SerializeAs: &[]mdaiv1.Serializer{{Name: "BOOL"}},
 				},
 				{
 					Key:         "int",
 					DataType:    mdaiv1.VariableDataTypeInt,
 					StorageType: mdaiv1.VariableStorageType(storageType),
-					SerializeAs: []mdaiv1.Serializer{{Name: "INT"}},
+					SerializeAs: &[]mdaiv1.Serializer{{Name: "INT"}},
 				},
 				{
 					Key:         "map",
 					DataType:    mdaiv1.VariableDataTypeMap,
 					StorageType: mdaiv1.VariableStorageType(storageType),
-					SerializeAs: []mdaiv1.Serializer{{Name: "MAP"}},
+					SerializeAs: &[]mdaiv1.Serializer{{Name: "MAP"}},
 				},
 				{
 					Key:          "priority_list",
@@ -116,7 +116,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					DataType:     mdaiv1.MetaVariableDataTypePriorityList,
 					VariableRefs: []string{"ref1", "ref2", "ref3"},
 					StorageType:  mdaiv1.VariableStorageType(storageType),
-					SerializeAs: []mdaiv1.Serializer{
+					SerializeAs: &[]mdaiv1.Serializer{
 						{
 							Name: "PRIORITY_LIST",
 							Transformers: []mdaiv1.VariableTransformer{
@@ -136,7 +136,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					DataType:     mdaiv1.MetaVariableDataTypeHashSet,
 					VariableRefs: []string{"ref1", "ref2"},
 					StorageType:  mdaiv1.VariableStorageType(storageType),
-					SerializeAs: []mdaiv1.Serializer{
+					SerializeAs: &[]mdaiv1.Serializer{
 						{
 							Name: "HASH_SET",
 						},
@@ -289,7 +289,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 
 		It("Should fail if exported variable name is duplicated", func() {
 			obj := createSampleMdaiHub()
-			(obj.Spec.Variables)[7].SerializeAs[0].Name = "SERVICE_LIST_CSV"
+			(*(obj.Spec.Variables)[7].SerializeAs)[0].Name = "SERVICE_LIST_CSV"
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(MatchError(ContainSubstring(`MdaiHub.hub.mydecisive.ai "mdaihub-sample" is invalid: spec.variables[7].serializeAs[0].name: Duplicate value: "SERVICE_LIST_CSV"`)))
 			Expect(warnings).To(BeEmpty())
@@ -297,7 +297,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 
 		It("Should fail if transformers specified for boolean", func() {
 			obj := createSampleMdaiHub()
-			(obj.Spec.Variables)[3].SerializeAs[0].Transformers = []mdaiv1.VariableTransformer{
+			(*(obj.Spec.Variables)[3].SerializeAs)[0].Transformers = []mdaiv1.VariableTransformer{
 				{
 					Type: mdaiv1.TransformerTypeJoin,
 					Join: &mdaiv1.JoinTransformer{
@@ -695,10 +695,6 @@ var _ = Describe("MdaiHub Webhook", func() {
 			action := mdaiv1.Action{
 				DeployReplay: &mdaiv1.DeployReplayAction{
 					ReplaySpec: mdaiv1.MdaiReplaySpec{
-						StartTime:         "2024-01-01T00:00:00Z",
-						EndTime:           "2024-01-01T01:00:00Z",
-						TelemetryType:     mdaiv1.LogsReplayTelemetryType,
-						HubName:           "test-hub",
 						StatusVariableRef: "string_1",
 						OpAMPEndpoint:     "http://opamp.example.com",
 						Source: mdaiv1.MdaiReplaySourceConfiguration{
@@ -731,12 +727,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			action := mdaiv1.Action{
 				DeployReplay: &mdaiv1.DeployReplayAction{
 					ReplaySpec: mdaiv1.MdaiReplaySpec{
-						StartTime:         "e",
-						EndTime:           "e",
-						TelemetryType:     mdaiv1.LogsReplayTelemetryType,
-						HubName:           "test-hub",
 						StatusVariableRef: "string_1",
-						OpAMPEndpoint:     "http://opamp.example.com",
 						Source: mdaiv1.MdaiReplaySourceConfiguration{
 							AWSConfig: &mdaiv1.MdaiReplayAwsConfig{
 								AWSAccessKeySecret: ptr.To("secret"),
@@ -770,10 +761,6 @@ var _ = Describe("MdaiHub Webhook", func() {
 			action := mdaiv1.Action{
 				DeployReplay: &mdaiv1.DeployReplayAction{
 					ReplaySpec: mdaiv1.MdaiReplaySpec{
-						StartTime:         "2024-01-01T00:00:00Z",
-						EndTime:           "2024-01-01T01:00:00Z",
-						TelemetryType:     mdaiv1.LogsReplayTelemetryType,
-						HubName:           "test-hub",
 						StatusVariableRef: "adlsfjlskadjflkadsasfjalskdjf",
 						OpAMPEndpoint:     "http://opamp.example.com",
 						Source: mdaiv1.MdaiReplaySourceConfiguration{

@@ -677,7 +677,6 @@ spec:
                   required:
                   - dataType
                   - key
-                  - serializeAs
                   - storageType
                   - type
                   type: object

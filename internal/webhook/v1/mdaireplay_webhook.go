@@ -59,7 +59,7 @@ func (*MdaiReplayCustomValidator) ValidateCreate(ctx context.Context, obj runtim
 
 	var warnings admission.Warnings
 
-	replaySpecWarnings, err := validateReplaySpec(mdaireplay.Spec)
+	replaySpecWarnings, err := validateReplaySpec(mdaireplay.Spec, ReplayCustomResourceValidatorMode)
 	warnings = append(warnings, replaySpecWarnings...)
 
 	if err != nil {
@@ -79,7 +79,7 @@ func (*MdaiReplayCustomValidator) ValidateUpdate(ctx context.Context, oldObj, ne
 
 	var warnings admission.Warnings
 
-	replaySpecWarnings, err := validateReplaySpec(mdaireplay.Spec)
+	replaySpecWarnings, err := validateReplaySpec(mdaireplay.Spec, ReplayCustomResourceValidatorMode)
 	warnings = append(warnings, replaySpecWarnings...)
 
 	if err != nil {
@@ -101,26 +101,41 @@ func (*MdaiReplayCustomValidator) ValidateDelete(ctx context.Context, obj runtim
 	return nil, nil
 }
 
-func validateReplaySpec(mdaiReplaySpec hubv1.MdaiReplaySpec) (admission.Warnings, error) {
+type ValidatorMode string
+
+const (
+	ReplayCustomResourceValidatorMode ValidatorMode = "ValidateForReplayCR"
+	HubAutomationValidatorMode        ValidatorMode = "ValidateForHubAutomation"
+)
+
+var validValidatorModes = []ValidatorMode{ReplayCustomResourceValidatorMode, HubAutomationValidatorMode}
+
+func validateReplaySpec(mdaiReplaySpec hubv1.MdaiReplaySpec, validatorMode ValidatorMode) (admission.Warnings, error) {
 	warnings := admission.Warnings{}
 
-	if mdaiReplaySpec.HubName == "" {
-		return warnings, errors.New("hubName cannot be empty")
+	if !slices.Contains(validValidatorModes, validatorMode) {
+		return warnings, errors.New("tried to call validator with invalid validator mode (why/how are you calling this anyway?)")
+	}
+
+	if validatorMode != HubAutomationValidatorMode {
+		if mdaiReplaySpec.HubName == "" {
+			return warnings, errors.New("hubName cannot be empty")
+		}
+		if err := validateTimeStr(mdaiReplaySpec.StartTime); err != nil {
+			return warnings, fmt.Errorf("startTime is not in a supported format. Error: %w", err)
+		}
+		if err := validateTimeStr(mdaiReplaySpec.EndTime); err != nil {
+			return warnings, fmt.Errorf("endTime is not in a supported format. Error: %w", err)
+		}
+		if mdaiReplaySpec.TelemetryType == "" || !slices.Contains(validTelemetryTypes, mdaiReplaySpec.TelemetryType) {
+			return warnings, fmt.Errorf("invalid telemetry type %s, expected one of %s", mdaiReplaySpec.TelemetryType, validTelemetryTypes)
+		}
 	}
 	if mdaiReplaySpec.StatusVariableRef == "" {
 		return warnings, errors.New("status variable ref cannot be empty")
 	}
 	if mdaiReplaySpec.OpAMPEndpoint == "" {
 		return warnings, errors.New("opampEndpoint cannot be empty")
-	}
-	if mdaiReplaySpec.TelemetryType == "" || !slices.Contains(validTelemetryTypes, mdaiReplaySpec.TelemetryType) {
-		return warnings, fmt.Errorf("invalid telemetry type %s, expected one of %s", mdaiReplaySpec.TelemetryType, validTelemetryTypes)
-	}
-	if err := validateTimeStr(mdaiReplaySpec.StartTime); err != nil {
-		return warnings, fmt.Errorf("startTime is not in a supported format. Error: %w", err)
-	}
-	if err := validateTimeStr(mdaiReplaySpec.EndTime); err != nil {
-		return warnings, fmt.Errorf("endTime is not in a supported format. Error: %w", err)
 	}
 
 	if mdaiReplaySpec.Source.S3 != nil {

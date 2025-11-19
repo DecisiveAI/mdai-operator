@@ -1371,9 +1371,13 @@ func (in *Variable) DeepCopyInto(out *Variable) {
 	}
 	if in.SerializeAs != nil {
 		in, out := &in.SerializeAs, &out.SerializeAs
-		*out = make([]Serializer, len(*in))
-		for i := range *in {
-			(*in)[i].DeepCopyInto(&(*out)[i])
+		*out = new([]Serializer)
+		if **in != nil {
+			in, out := *in, *out
+			*out = make([]Serializer, len(*in))
+			for i := range *in {
+				(*in)[i].DeepCopyInto(&(*out)[i])
+			}
 		}
 	}
 }

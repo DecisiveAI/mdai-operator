@@ -57,8 +57,9 @@ type Variable struct {
 	StorageType VariableStorageType `json:"storageType" yaml:"storageType"`
 	// VariableRefs name references to other managed variables to be included in meta calculation. Listed variables should be of the same data type.
 	// +kubebuilder:validation:Optional
-	VariableRefs []string     `json:"variableRefs,omitempty" yaml:"variableRefs,omitempty"`
-	SerializeAs  []Serializer `json:"serializeAs" yaml:"serializeAs"`
+	VariableRefs []string `json:"variableRefs,omitempty" yaml:"variableRefs,omitempty"`
+	// +kubebuilder:validation:Optional
+	SerializeAs *[]Serializer `json:"serializeAs" yaml:"serializeAs"`
 }
 
 type PrometheusAlert struct {
