@@ -691,6 +691,130 @@ var _ = Describe("MdaiHub Webhook", func() {
 			Expect(errs).To(BeEmpty())
 		})
 
+		It("should pass validation when a single valid 'deployReplay' action is specified", func() {
+			action := mdaiv1.Action{
+				DeployReplay: &mdaiv1.DeployReplayAction{
+					ReplaySpec: mdaiv1.MdaiReplaySpec{
+						StartTime:         "2024-01-01T00:00:00Z",
+						EndTime:           "2024-01-01T01:00:00Z",
+						TelemetryType:     mdaiv1.LogsReplayTelemetryType,
+						HubName:           "test-hub",
+						StatusVariableRef: "string_1",
+						OpAMPEndpoint:     "http://opamp.example.com",
+						Source: mdaiv1.MdaiReplaySourceConfiguration{
+							AWSConfig: &mdaiv1.MdaiReplayAwsConfig{
+								AWSAccessKeySecret: ptr.To("secret"),
+							},
+							S3: &mdaiv1.MdaiReplayS3Configuration{
+								S3Region:    "region",
+								S3Bucket:    "bucket",
+								FilePrefix:  "prefix",
+								S3Path:      "path",
+								S3Partition: mdaiv1.S3ReplayMinutePartition,
+							},
+						},
+						Destination: mdaiv1.MdaiReplayDestinationConfiguration{
+							OtlpHttp: &mdaiv1.MdaiReplayOtlpHttpDestinationConfiguration{
+								Endpoint: "http://otlp.example.com",
+							},
+						},
+					},
+				},
+			}
+			actionPath := field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(BeEmpty())
+		})
+
+		It("should fail validation when a single invalid 'deployReplay' action is specified", func() {
+			action := mdaiv1.Action{
+				DeployReplay: &mdaiv1.DeployReplayAction{
+					ReplaySpec: mdaiv1.MdaiReplaySpec{
+						StartTime:         "e",
+						EndTime:           "e",
+						TelemetryType:     mdaiv1.LogsReplayTelemetryType,
+						HubName:           "test-hub",
+						StatusVariableRef: "string_1",
+						OpAMPEndpoint:     "http://opamp.example.com",
+						Source: mdaiv1.MdaiReplaySourceConfiguration{
+							AWSConfig: &mdaiv1.MdaiReplayAwsConfig{
+								AWSAccessKeySecret: ptr.To("secret"),
+							},
+							S3: &mdaiv1.MdaiReplayS3Configuration{
+								S3Region:    "region",
+								S3Bucket:    "bucket",
+								FilePrefix:  "prefix",
+								S3Path:      "path",
+								S3Partition: mdaiv1.S3ReplayMinutePartition,
+							},
+						},
+						Destination: mdaiv1.MdaiReplayDestinationConfiguration{
+							OtlpHttp: &mdaiv1.MdaiReplayOtlpHttpDestinationConfiguration{
+								Endpoint: "http://otlp.example.com",
+							},
+						},
+					},
+				},
+			}
+			actionPath := field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeInvalid))
+			Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].deployReplay.replaySpec"))
+			Expect(errs[0].Detail).To(ContainSubstring("invalid replay spec"))
+		})
+
+		It("should fail validation when a single invalid 'deployReplay' action with unknown var ref is specified", func() {
+			action := mdaiv1.Action{
+				DeployReplay: &mdaiv1.DeployReplayAction{
+					ReplaySpec: mdaiv1.MdaiReplaySpec{
+						StartTime:         "2024-01-01T00:00:00Z",
+						EndTime:           "2024-01-01T01:00:00Z",
+						TelemetryType:     mdaiv1.LogsReplayTelemetryType,
+						HubName:           "test-hub",
+						StatusVariableRef: "adlsfjlskadjflkadsasfjalskdjf",
+						OpAMPEndpoint:     "http://opamp.example.com",
+						Source: mdaiv1.MdaiReplaySourceConfiguration{
+							AWSConfig: &mdaiv1.MdaiReplayAwsConfig{
+								AWSAccessKeySecret: ptr.To("secret"),
+							},
+							S3: &mdaiv1.MdaiReplayS3Configuration{
+								S3Region:    "region",
+								S3Bucket:    "bucket",
+								FilePrefix:  "prefix",
+								S3Path:      "path",
+								S3Partition: mdaiv1.S3ReplayMinutePartition,
+							},
+						},
+						Destination: mdaiv1.MdaiReplayDestinationConfiguration{
+							OtlpHttp: &mdaiv1.MdaiReplayOtlpHttpDestinationConfiguration{
+								Endpoint: "http://otlp.example.com",
+							},
+						},
+					},
+				},
+			}
+			actionPath := field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeInvalid))
+			Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].deployReplay.replaySpec.statusVariableRef"))
+			Expect(errs[0].Detail).To(ContainSubstring("does not reference"))
+		})
+
+		It("should pass validation when a single 'cleanUpReplay' action is specified", func() {
+			action := mdaiv1.Action{
+				CleanUpReplay: &mdaiv1.CleanUpReplayAction{},
+			}
+			actionPath := field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(BeEmpty())
+		})
+
 		Context("validateMapAction", func() {
 			It("Should fail validation for an 'addToMap' action when the value is nil", func() {
 				action := &mdaiv1.MapAction{

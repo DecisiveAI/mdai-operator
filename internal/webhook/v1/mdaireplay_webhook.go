@@ -59,7 +59,7 @@ func (*MdaiReplayCustomValidator) ValidateCreate(ctx context.Context, obj runtim
 
 	var warnings admission.Warnings
 
-	replaySpecWarnings, err := validateReplaySpec(mdaireplay)
+	replaySpecWarnings, err := validateReplaySpec(mdaireplay.Spec)
 	warnings = append(warnings, replaySpecWarnings...)
 
 	if err != nil {
@@ -79,7 +79,7 @@ func (*MdaiReplayCustomValidator) ValidateUpdate(ctx context.Context, oldObj, ne
 
 	var warnings admission.Warnings
 
-	replaySpecWarnings, err := validateReplaySpec(mdaireplay)
+	replaySpecWarnings, err := validateReplaySpec(mdaireplay.Spec)
 	warnings = append(warnings, replaySpecWarnings...)
 
 	if err != nil {
@@ -101,37 +101,37 @@ func (*MdaiReplayCustomValidator) ValidateDelete(ctx context.Context, obj runtim
 	return nil, nil
 }
 
-func validateReplaySpec(mdaireplay *hubv1.MdaiReplay) (admission.Warnings, error) {
+func validateReplaySpec(mdaiReplaySpec hubv1.MdaiReplaySpec) (admission.Warnings, error) {
 	warnings := admission.Warnings{}
 
-	if mdaireplay.Spec.HubName == "" {
+	if mdaiReplaySpec.HubName == "" {
 		return warnings, errors.New("hubName cannot be empty")
 	}
-	if mdaireplay.Spec.StatusVariableRef == "" {
+	if mdaiReplaySpec.StatusVariableRef == "" {
 		return warnings, errors.New("status variable ref cannot be empty")
 	}
-	if mdaireplay.Spec.OpAMPEndpoint == "" {
+	if mdaiReplaySpec.OpAMPEndpoint == "" {
 		return warnings, errors.New("opampEndpoint cannot be empty")
 	}
-	if mdaireplay.Spec.TelemetryType == "" || !slices.Contains(validTelemetryTypes, mdaireplay.Spec.TelemetryType) {
-		return warnings, fmt.Errorf("invalid telemetry type %s, expected one of %s", mdaireplay.Spec.TelemetryType, validTelemetryTypes)
+	if mdaiReplaySpec.TelemetryType == "" || !slices.Contains(validTelemetryTypes, mdaiReplaySpec.TelemetryType) {
+		return warnings, fmt.Errorf("invalid telemetry type %s, expected one of %s", mdaiReplaySpec.TelemetryType, validTelemetryTypes)
 	}
-	if err := validateTimeStr(mdaireplay.Spec.StartTime); err != nil {
+	if err := validateTimeStr(mdaiReplaySpec.StartTime); err != nil {
 		return warnings, fmt.Errorf("startTime is not in a supported format. Error: %w", err)
 	}
-	if err := validateTimeStr(mdaireplay.Spec.EndTime); err != nil {
+	if err := validateTimeStr(mdaiReplaySpec.EndTime); err != nil {
 		return warnings, fmt.Errorf("endTime is not in a supported format. Error: %w", err)
 	}
 
-	if mdaireplay.Spec.Source.S3 != nil {
-		if mdaireplay.Spec.Source.AWSConfig == nil {
+	if mdaiReplaySpec.Source.S3 != nil {
+		if mdaiReplaySpec.Source.AWSConfig == nil {
 			return warnings, errors.New("source.awsConfig is not set, but is required for the s3 source")
 		}
-		if mdaireplay.Spec.Source.AWSConfig.AWSAccessKeySecret == nil {
+		if mdaiReplaySpec.Source.AWSConfig.AWSAccessKeySecret == nil {
 			return warnings, errors.New("source.awsConfig.awsAccessKeySecret is not set, but is required for the s3 source")
 		}
 
-		s3Config := mdaireplay.Spec.Source.S3
+		s3Config := mdaiReplaySpec.Source.S3
 		if s3Config.S3Partition == "" || !slices.Contains(validPartitions, s3Config.S3Partition) {
 			return warnings, fmt.Errorf("invalid s3 partition %s, expected one of %s", s3Config.S3Partition, validPartitions)
 		}

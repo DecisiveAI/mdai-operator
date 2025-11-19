@@ -380,16 +380,24 @@ func validateMapAction(p *field.Path, a *mdaiv1.MapAction, knownVarKeys map[stri
 	return errs
 }
 
-// TODO: ADD REAL VALIDATION REJECT THIS PR!
 func validateDeployReplayAction(p *field.Path, a *mdaiv1.DeployReplayAction, knownVarKeys map[string]struct{}) field.ErrorList {
 	var errs field.ErrorList
+
+	if _, ok := knownVarKeys[a.ReplaySpec.StatusVariableRef]; !ok {
+		errs = append(errs, field.Invalid(p.Child("replaySpec.statusVariableRef"), a.ReplaySpec.StatusVariableRef, "does not reference a known variable"))
+	}
+
+	if _, replaySpecErrs := validateReplaySpec(a.ReplaySpec); replaySpecErrs != nil {
+		errs = append(errs, field.Invalid(p.Child("replaySpec"), a.ReplaySpec, fmt.Sprintf("invalid replay spec with errors: %v", replaySpecErrs)))
+	}
 
 	return errs
 }
 
-// TODO: ADD REAL VALIDATION REJECT THIS PR!
 func validateCleanUpReplayAction(p *field.Path, a *mdaiv1.CleanUpReplayAction, knownVarKeys map[string]struct{}) field.ErrorList {
 	var errs field.ErrorList
+
+	// TODO: No fields to validate on CleanUpReplayAction yet. Implement this when we have fields
 
 	return errs
 }

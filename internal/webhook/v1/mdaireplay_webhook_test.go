@@ -582,7 +582,7 @@ func TestValidateReplaySpec(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			warnings, err := validateReplaySpec(tt.replay)
+			warnings, err := validateReplaySpec(tt.replay.Spec)
 
 			if tt.wantErr {
 				require.Error(t, err)
