@@ -283,7 +283,7 @@ var _ = Describe("MdaiHub Webhook", func() {
 			obj := createSampleMdaiHub()
 			(obj.Spec.Variables)[7].VariableRefs = []string{"ref1", "ref2", "ref3"}
 			warnings, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).To(MatchError(ContainSubstring(`MdaiHub.hub.mydecisive.ai "mdaihub-sample" is invalid: spec.variables[7].variableRefs: Invalid value: []string{"ref1", "ref2", "ref3"}: Meta HashSet must have exactly 2 elements`)))
+			Expect(err).To(MatchError(ContainSubstring(`MdaiHub.hub.mydecisive.ai "mdaihub-sample" is invalid: spec.variables[7].variableRefs: Invalid value: [\"ref1\",\"ref2\",\"ref3\"]: Meta HashSet must have exactly 2 elements`)))
 			Expect(warnings).To(BeEmpty())
 		})
 
