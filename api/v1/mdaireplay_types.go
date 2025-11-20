@@ -93,7 +93,8 @@ type MdaiReplayStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
+// +genclient
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // MdaiReplay is the Schema for the mdaireplays API.
 type MdaiReplay struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -104,7 +105,6 @@ type MdaiReplay struct {
 }
 
 // +kubebuilder:object:root=true
-
 // MdaiReplayList contains a list of MdaiReplay.
 type MdaiReplayList struct {
 	metav1.TypeMeta `json:",inline"`

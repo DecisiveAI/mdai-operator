@@ -367,3 +367,7 @@ helm-publish: helm-package
 		rm -rf $(CLONE_DIR)
 
 	$(call vecho,"✅ Chart published")
+
+.PHONY: generate-clientset
+generate-clientset:
+	./hack/update-codegen.sh

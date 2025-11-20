@@ -73,7 +73,8 @@ type MdaiObserverStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
+// +genclient
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // MdaiObserver is the Schema for the mdaiobservers API.
 type MdaiObserver struct {
 	metav1.TypeMeta   `json:",inline"`
