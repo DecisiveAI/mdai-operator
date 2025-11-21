@@ -183,5 +183,5 @@ roleRef:
   name: '{{ include "deployment.fullname" . }}-manager-role'
 subjects:
 - kind: ServiceAccount
-  name: '{{ include "deployment.fullname" . }}-controller-manager'
+  name: '{{ include "deployment.serviceAccountName" . }}'
   namespace: '{{ .Release.Namespace }}'

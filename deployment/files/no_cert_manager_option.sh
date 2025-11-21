@@ -91,7 +91,7 @@ for file in ${TEMPLATES_DIR}/*; do
     {
       printf "%s\n" "$CRT_MGR_ON_HEADER"
       cat "$file"
-      printf "\n%s" "$CRT_MGR_FOOTER"
+      printf "%s" "$CRT_MGR_FOOTER"
     } > ${TEMPLATES_DIR}/.tmp_file
     mv ${TEMPLATES_DIR}/.tmp_file "$file"
   fi

@@ -211,7 +211,7 @@ ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
 GOLANGCI_LINT_VERSION ?= v2.4
-HELMIFY_VERSION ?= v0.4.17
+HELMIFY_VERSION ?= v0.4.19
 HELM_DOCS_VERSION ?= v1.14.2
 YQ_VERSION ?= v4.45.4
 
@@ -260,7 +260,7 @@ PLUGIN_HELM_VALUES_SCHEMA_FOUND = $(shell helm plugin list | grep ^schema -c)
 .PHONY: helm-values-schema-json-plugin
 helm-values-schema-json-plugin:
 ifeq ($(PLUGIN_HELM_VALUES_SCHEMA_FOUND), 0)
-	helm plugin install https://github.com/losisin/helm-values-schema-json.git > /dev/null 2>&1
+	helm plugin install https://github.com/losisin/helm-values-schema-json.git
 endif
 
 .PHONY: yq
@@ -330,6 +330,8 @@ helm-update: manifests kustomize helmify helm-docs helm-values-schema-json-plugi
 	@$(KUSTOMIZE) build config/default | $(HELMIFY) $(CHART_PATH) > /dev/null 2>&1
 	$(call vecho,"🛠️ Adding conditionals for cert manager...")
 	@$(CHART_PATH)/files/no_cert_manager_option.sh
+	$(call vecho,"🛠️ Adding conditionals for CRDs...")
+	@$(CHART_PATH)/files/wrap_crds.sh
 	$(call vecho,"📈 Updating Helm chart version to $(VERSION)...")
 	@$(YQ) -i '.version = "$(VERSION)"' $(CHART_PATH)/Chart.yaml
 	$(call vecho,"🧩 Updating Helm chart appVersion to $(VERSION)...")

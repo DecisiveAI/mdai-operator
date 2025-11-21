@@ -13,5 +13,7 @@ spec:
   issuerRef:
     kind: Issuer
     name: '{{ include "deployment.fullname" . }}-selfsigned-issuer'
+  privateKey:
+    rotationPolicy: Always
   secretName: webhook-server-cert
 {{- end }}
