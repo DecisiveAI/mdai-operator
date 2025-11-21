@@ -317,6 +317,20 @@ func validateAction(actionPath *field.Path, action mdaiv1.Action, knownVarKeys m
 				return validateWebhookCall(actionPath.Child("callWebhook"), action.CallWebhook)
 			},
 		},
+		{
+			key:     "deployReplay",
+			present: action.DeployReplay != nil,
+			validate: func() field.ErrorList {
+				return validateDeployReplayAction(actionPath.Child("deployReplay"), action.DeployReplay, knownVarKeys)
+			},
+		},
+		{
+			key:     "cleanUpReplay",
+			present: action.CleanUpReplay != nil,
+			validate: func() field.ErrorList {
+				return validateCleanUpReplayAction(actionPath.Child("cleanUpReplay"), action.CleanUpReplay, knownVarKeys)
+			},
+		},
 	}
 
 	// find exactly one present; short-circuit on multi
@@ -362,6 +376,28 @@ func validateMapAction(p *field.Path, a *mdaiv1.MapAction, knownVarKeys map[stri
 			errs = append(errs, field.Required(p.Child("value"), "required for addToMap"))
 		}
 	}
+
+	return errs
+}
+
+func validateDeployReplayAction(p *field.Path, a *mdaiv1.DeployReplayAction, knownVarKeys map[string]struct{}) field.ErrorList {
+	var errs field.ErrorList
+
+	if _, ok := knownVarKeys[a.ReplaySpec.StatusVariableRef]; !ok {
+		errs = append(errs, field.Invalid(p.Child("replaySpec.statusVariableRef"), a.ReplaySpec.StatusVariableRef, "does not reference a known variable"))
+	}
+
+	if _, replaySpecErrs := validateReplaySpec(a.ReplaySpec, HubAutomationValidatorMode); replaySpecErrs != nil {
+		errs = append(errs, field.Invalid(p.Child("replaySpec"), a.ReplaySpec, fmt.Sprintf("invalid replay spec with errors: %v", replaySpecErrs)))
+	}
+
+	return errs
+}
+
+func validateCleanUpReplayAction(p *field.Path, a *mdaiv1.CleanUpReplayAction, knownVarKeys map[string]struct{}) field.ErrorList {
+	var errs field.ErrorList
+
+	// TODO: No fields to validate on CleanUpReplayAction yet. Implement this when we have fields
 
 	return errs
 }
@@ -463,34 +499,34 @@ func (*MdaiHubCustomValidator) validateVariables(mdaihub *mdaiv1.MdaiHub) (admis
 			errs = append(errs, field.Forbidden(varIndex.Child("variableRefs"), "not supported for non-meta variables"))
 		}
 
-		for j, with := range variable.SerializeAs {
-			serializeIndex := varIndex.Child("serializeAs").Index(j)
+		if variable.SerializeAs != nil {
+			for j, with := range *variable.SerializeAs {
+				serializeIndex := varIndex.Child("serializeAs").Index(j)
 
-			if _, exists := exportedVariableNames[with.Name]; exists {
-				errs = append(errs, field.Duplicate(serializeIndex.Child("name"), with.Name))
-			} else {
-				exportedVariableNames[with.Name] = struct{}{}
-			}
+				if _, exists := exportedVariableNames[with.Name]; exists {
+					errs = append(errs, field.Duplicate(serializeIndex.Child("name"), with.Name))
+				} else {
+					exportedVariableNames[with.Name] = struct{}{}
+				}
 
-			switch variable.DataType {
-			case mdaiv1.VariableDataTypeSet, mdaiv1.MetaVariableDataTypePriorityList:
-				if len(with.Transformers) == 0 {
-					errs = append(errs, field.Required(serializeIndex.Child("transformers"), "at least one transformer (e.g., 'join')"))
+				switch variable.DataType {
+				case mdaiv1.VariableDataTypeSet, mdaiv1.MetaVariableDataTypePriorityList:
+					continue
+				case mdaiv1.VariableDataTypeString,
+					mdaiv1.VariableDataTypeFloat,
+					mdaiv1.VariableDataTypeInt,
+					mdaiv1.VariableDataTypeBoolean,
+					mdaiv1.VariableDataTypeMap,
+					mdaiv1.MetaVariableDataTypeHashSet:
+					if len(with.Transformers) > 0 {
+						errs = append(errs, field.Forbidden(
+							serializeIndex.Child("transformers"),
+							fmt.Sprintf("transformers are not supported for variable type %s", variable.DataType),
+						))
+					}
+				default:
+					errs = append(errs, field.Invalid(varIndex.Child("dataType"), variable.DataType, "unsupported variable type"))
 				}
-			case mdaiv1.VariableDataTypeString,
-				mdaiv1.VariableDataTypeFloat,
-				mdaiv1.VariableDataTypeInt,
-				mdaiv1.VariableDataTypeBoolean,
-				mdaiv1.VariableDataTypeMap,
-				mdaiv1.MetaVariableDataTypeHashSet:
-				if len(with.Transformers) > 0 {
-					errs = append(errs, field.Forbidden(
-						serializeIndex.Child("transformers"),
-						fmt.Sprintf("transformers are not supported for variable type %s", variable.DataType),
-					))
-				}
-			default:
-				errs = append(errs, field.Invalid(varIndex.Child("dataType"), variable.DataType, "unsupported variable type"))
 			}
 		}
 	}

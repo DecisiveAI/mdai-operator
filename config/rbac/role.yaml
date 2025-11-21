@@ -91,6 +91,7 @@ rules:
   - mdaihubs
   - mdaiingresses
   - mdaiobservers
+  - mdaireplays
   verbs:
   - create
   - delete
@@ -106,6 +107,7 @@ rules:
   - mdaihubs/finalizers
   - mdaiingresses/finalizers
   - mdaiobservers/finalizers
+  - mdaireplays/finalizers
   verbs:
   - update
 - apiGroups:
@@ -115,6 +117,7 @@ rules:
   - mdaihubs/status
   - mdaiingresses/status
   - mdaiobservers/status
+  - mdaireplays/status
   verbs:
   - get
   - patch

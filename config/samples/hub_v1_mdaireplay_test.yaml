@@ -1,0 +1,27 @@
+apiVersion: hub.mydecisive.ai/v1
+kind: MdaiReplay
+metadata:
+  labels:
+    app.kubernetes.io/name: mdai-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: mdaireplay-sample
+  namespace: mdai
+spec:
+  opampEndpoint: "http://mdai-gateway.mdai.svc.cluster.local:8081/opamp"
+  hubName: mdaihub-sample
+  startTime: "2025-08-14 17:00"
+  endTime: "2025-08-14 20:00"
+  telemetryType: "logs"
+  source:
+    aws:
+      awsAccessKeySecret: aws-credentials
+    s3:
+      s3Region: "us-east-1"
+      s3Bucket: "mdai-collector-logs"
+      filePrefix: "test-"
+      s3Path: "test-logs"
+      s3Partition: "minute"
+  destination:
+    otlpHttp:
+        endpoint: "http://gateway-collector.mdai.svc.cluster.local:4318"
+

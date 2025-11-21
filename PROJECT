@@ -59,4 +59,16 @@ resources:
   webhooks:
     defaulting: true
     webhookVersion: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: mydecisive.ai
+  group: hub
+  kind: MdaiReplay
+  path: github.com/decisiveai/mdai-operator/api/v1
+  version: v1
+  webhooks:
+    validation: true
+    webhookVersion: v1
 version: "3"

@@ -130,3 +130,23 @@ webhooks:
     resources:
     - mdaiobservers
   sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-hub-mydecisive-ai-v1-mdaireplay
+  failurePolicy: Fail
+  name: vmdaireplay-v1.kb.io
+  rules:
+  - apiGroups:
+    - hub.mydecisive.ai
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - mdaireplays
+  sideEffects: None

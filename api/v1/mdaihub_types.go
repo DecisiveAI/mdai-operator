@@ -58,9 +58,8 @@ type Variable struct {
 	// VariableRefs name references to other managed variables to be included in meta calculation. Listed variables should be of the same data type.
 	// +kubebuilder:validation:Optional
 	VariableRefs []string `json:"variableRefs,omitempty" yaml:"variableRefs,omitempty"`
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinItems=1
-	SerializeAs []Serializer `json:"serializeAs" yaml:"serializeAs"`
+	// +kubebuilder:validation:Optional
+	SerializeAs *[]Serializer `json:"serializeAs,omitempty" yaml:"serializeAs,omitempty"`
 }
 
 type PrometheusAlert struct {
@@ -112,6 +111,9 @@ type Action struct {
 	RemoveFromMap *MapAction `json:"removeFromMap,omitempty"`
 
 	CallWebhook *CallWebhookAction `json:"callWebhook,omitempty"`
+
+	DeployReplay  *DeployReplayAction  `json:"deployReplay,omitempty"`
+	CleanUpReplay *CleanUpReplayAction `json:"cleanUpReplay,omitempty"`
 }
 
 type SetAction struct {
@@ -197,6 +199,13 @@ type CallWebhookAction struct {
 	Timeout *metav1.Duration `json:"timeout,omitempty"`
 }
 
+type DeployReplayAction struct {
+	// ReplaySpec is a MdaiReplaySpec CR spec defining the parameters of this replay
+	ReplaySpec MdaiReplaySpec `json:"replaySpec"`
+}
+
+type CleanUpReplayAction struct{}
+
 // StringOrFrom represents a string value or a reference to a value in a Secret or ConfigMap.
 // +kubebuilder:validation:XValidation:rule="(has(self.value)?1:0)+(has(self.valueFrom)?1:0)==1",message="set exactly one of value or valueFrom"
 type StringOrFrom struct {
@@ -265,7 +274,8 @@ type MdaiHubStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
+// +genclient
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // MdaiHub is the Schema for the mdaihubs API.
 type MdaiHub struct {
 	metav1.TypeMeta   `json:",inline"`

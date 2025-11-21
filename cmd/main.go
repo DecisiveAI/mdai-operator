@@ -8,9 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	"github.com/decisiveai/mdai-operator/internal/controller"
-	webhookmdaiv1 "github.com/decisiveai/mdai-operator/internal/webhook/v1"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+
 	"github.com/go-logr/zapr"
 	opentelemetryv1beta1 "github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -22,6 +21,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"github.com/decisiveai/mdai-operator/internal/controller"
+	webhookmdaiv1 "github.com/decisiveai/mdai-operator/internal/webhook/v1"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -299,24 +302,18 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
+	if err = (&controller.MdaiReplayReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MdaiReplay")
+		gracefullyShutdownWithCode(1)
+	}
+	// +kubebuilder:scaffold:builder
+
 	// nolint:goconst
 	if os.Getenv(enableWebhooksEnvVar) != "false" {
-		if err = webhookmdaiv1.SetupMdaiHubWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiHub")
-			gracefullyShutdownWithCode(1)
-		}
-		if err = webhookmdaiv1.SetupMdaiCollectorWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiCollector")
-			gracefullyShutdownWithCode(1)
-		}
-		if err = webhookmdaiv1.SetupMdaiObserverWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiObserver")
-			gracefullyShutdownWithCode(1)
-		}
-		if err := webhookmdaiv1.SetupMdaiIngressWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "MdaiIngress")
-			gracefullyShutdownWithCode(1)
-		}
+		setupWebhooksOrExplode(mgr, gracefullyShutdownWithCode)
 	}
 
 	if metricsCertWatcher != nil {
@@ -348,6 +345,29 @@ func main() {
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
+		gracefullyShutdownWithCode(1)
+	}
+}
+
+func setupWebhooksOrExplode(mgr manager.Manager, gracefullyShutdownWithCode func(code int)) {
+	if err := webhookmdaiv1.SetupMdaiHubWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "MdaiHub")
+		gracefullyShutdownWithCode(1)
+	}
+	if err := webhookmdaiv1.SetupMdaiCollectorWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "MdaiCollector")
+		gracefullyShutdownWithCode(1)
+	}
+	if err := webhookmdaiv1.SetupMdaiObserverWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "MdaiObserver")
+		gracefullyShutdownWithCode(1)
+	}
+	if err := webhookmdaiv1.SetupMdaiIngressWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "MdaiIngress")
+		gracefullyShutdownWithCode(1)
+	}
+	if err := webhookmdaiv1.SetupMdaiReplayWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "MdaiReplay")
 		gracefullyShutdownWithCode(1)
 	}
 }

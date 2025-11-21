@@ -54,8 +54,6 @@ patches:
   target:
     kind: Deployment
 
-# [CERTMANAGER] To silence the warning:
-# `"Warning: spec.privateKey.rotationPolicy: In cert-manager >= v1.18.0, the default value changed from `Never` to `Always`."`
 - path: certificate-privatekey-rotation-policy-patch.yaml
   target:
     kind: Certificate

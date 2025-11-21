@@ -69,9 +69,10 @@ type MdaiIngressStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +genclient
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // MdaiIngress is the Schema for the mdaiingresses API
 type MdaiIngress struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -81,7 +82,7 @@ type MdaiIngress struct {
 	Status MdaiIngressStatus `json:"status,omitempty"`
 }
 
-//+kubebuilder:object:root=true
+// +kubebuilder:object:root=true
 
 // MdaiIngressList contains a list of MdaiIngress
 type MdaiIngressList struct {

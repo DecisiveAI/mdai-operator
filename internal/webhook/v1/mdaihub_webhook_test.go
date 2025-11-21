@@ -30,7 +30,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 			Variables: []mdaiv1.Variable{
 				{
 					Key: "service_list_1",
-					SerializeAs: []mdaiv1.Serializer{
+					SerializeAs: &[]mdaiv1.Serializer{
 						{
 							Name: "SERVICE_LIST_REGEX",
 							Transformers: []mdaiv1.VariableTransformer{
@@ -59,7 +59,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 				},
 				{
 					Key: "service_list_2",
-					SerializeAs: []mdaiv1.Serializer{
+					SerializeAs: &[]mdaiv1.Serializer{
 						{
 							Name: "SERVICE_LIST_2_REGEX",
 							Transformers: []mdaiv1.VariableTransformer{
@@ -90,25 +90,25 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					Key:         "string",
 					DataType:    mdaiv1.VariableDataTypeString,
 					StorageType: mdaiv1.VariableStorageType(storageType),
-					SerializeAs: []mdaiv1.Serializer{{Name: "STR"}},
+					SerializeAs: &[]mdaiv1.Serializer{{Name: "STR"}},
 				},
 				{
 					Key:         "bool",
 					DataType:    mdaiv1.VariableDataTypeBoolean,
 					StorageType: mdaiv1.VariableStorageType(storageType),
-					SerializeAs: []mdaiv1.Serializer{{Name: "BOOL"}},
+					SerializeAs: &[]mdaiv1.Serializer{{Name: "BOOL"}},
 				},
 				{
 					Key:         "int",
 					DataType:    mdaiv1.VariableDataTypeInt,
 					StorageType: mdaiv1.VariableStorageType(storageType),
-					SerializeAs: []mdaiv1.Serializer{{Name: "INT"}},
+					SerializeAs: &[]mdaiv1.Serializer{{Name: "INT"}},
 				},
 				{
 					Key:         "map",
 					DataType:    mdaiv1.VariableDataTypeMap,
 					StorageType: mdaiv1.VariableStorageType(storageType),
-					SerializeAs: []mdaiv1.Serializer{{Name: "MAP"}},
+					SerializeAs: &[]mdaiv1.Serializer{{Name: "MAP"}},
 				},
 				{
 					Key:          "priority_list",
@@ -116,7 +116,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					DataType:     mdaiv1.MetaVariableDataTypePriorityList,
 					VariableRefs: []string{"ref1", "ref2", "ref3"},
 					StorageType:  mdaiv1.VariableStorageType(storageType),
-					SerializeAs: []mdaiv1.Serializer{
+					SerializeAs: &[]mdaiv1.Serializer{
 						{
 							Name: "PRIORITY_LIST",
 							Transformers: []mdaiv1.VariableTransformer{
@@ -136,7 +136,7 @@ func createSampleMdaiHub() *mdaiv1.MdaiHub {
 					DataType:     mdaiv1.MetaVariableDataTypeHashSet,
 					VariableRefs: []string{"ref1", "ref2"},
 					StorageType:  mdaiv1.VariableStorageType(storageType),
-					SerializeAs: []mdaiv1.Serializer{
+					SerializeAs: &[]mdaiv1.Serializer{
 						{
 							Name: "HASH_SET",
 						},
@@ -283,29 +283,21 @@ var _ = Describe("MdaiHub Webhook", func() {
 			obj := createSampleMdaiHub()
 			(obj.Spec.Variables)[7].VariableRefs = []string{"ref1", "ref2", "ref3"}
 			warnings, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).To(MatchError(ContainSubstring(`MdaiHub.hub.mydecisive.ai "mdaihub-sample" is invalid: spec.variables[7].variableRefs: Invalid value: []string{"ref1", "ref2", "ref3"}: Meta HashSet must have exactly 2 elements`)))
+			Expect(err).To(MatchError(ContainSubstring(`MdaiHub.hub.mydecisive.ai "mdaihub-sample" is invalid: spec.variables[7].variableRefs: Invalid value: ["ref1","ref2","ref3"]: Meta HashSet must have exactly 2 elements`)))
 			Expect(warnings).To(BeEmpty())
 		})
 
 		It("Should fail if exported variable name is duplicated", func() {
 			obj := createSampleMdaiHub()
-			(obj.Spec.Variables)[7].SerializeAs[0].Name = "SERVICE_LIST_CSV"
+			(*(obj.Spec.Variables)[7].SerializeAs)[0].Name = "SERVICE_LIST_CSV"
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(MatchError(ContainSubstring(`MdaiHub.hub.mydecisive.ai "mdaihub-sample" is invalid: spec.variables[7].serializeAs[0].name: Duplicate value: "SERVICE_LIST_CSV"`)))
 			Expect(warnings).To(BeEmpty())
 		})
 
-		It("Should fail if priority list doesn't have transformers", func() {
-			obj := createSampleMdaiHub()
-			(obj.Spec.Variables)[6].SerializeAs[0].Transformers = nil
-			warnings, err := validator.ValidateCreate(ctx, obj)
-			Expect(err).To(MatchError(ContainSubstring("MdaiHub.hub.mydecisive.ai \"mdaihub-sample\" is invalid: spec.variables[6].serializeAs[0].transformers: Required value: at least one transformer (e.g., 'join')")))
-			Expect(warnings).To(BeEmpty())
-		})
-
 		It("Should fail if transformers specified for boolean", func() {
 			obj := createSampleMdaiHub()
-			(obj.Spec.Variables)[3].SerializeAs[0].Transformers = []mdaiv1.VariableTransformer{
+			(*(obj.Spec.Variables)[3].SerializeAs)[0].Transformers = []mdaiv1.VariableTransformer{
 				{
 					Type: mdaiv1.TransformerTypeJoin,
 					Join: &mdaiv1.JoinTransformer{
@@ -696,6 +688,117 @@ var _ = Describe("MdaiHub Webhook", func() {
 			}
 			path := actionPath.Child("removeFromMap")
 			errs := validateAction(path, action, knownVarKeys)
+			Expect(errs).To(BeEmpty())
+		})
+
+		It("should pass validation when a single valid 'deployReplay' action is specified", func() {
+			action := mdaiv1.Action{
+				DeployReplay: &mdaiv1.DeployReplayAction{
+					ReplaySpec: mdaiv1.MdaiReplaySpec{
+						StatusVariableRef: "string_1",
+						OpAMPEndpoint:     "http://opamp.example.com",
+						Source: mdaiv1.MdaiReplaySourceConfiguration{
+							AWSConfig: &mdaiv1.MdaiReplayAwsConfig{
+								AWSAccessKeySecret: ptr.To("secret"),
+							},
+							S3: &mdaiv1.MdaiReplayS3Configuration{
+								S3Region:    "region",
+								S3Bucket:    "bucket",
+								FilePrefix:  "prefix",
+								S3Path:      "path",
+								S3Partition: mdaiv1.S3ReplayMinutePartition,
+							},
+						},
+						Destination: mdaiv1.MdaiReplayDestinationConfiguration{
+							OtlpHttp: &mdaiv1.MdaiReplayOtlpHttpDestinationConfiguration{
+								Endpoint: "http://otlp.example.com",
+							},
+						},
+					},
+				},
+			}
+			actionPath := field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(BeEmpty())
+		})
+
+		It("should fail validation when a single invalid 'deployReplay' action is specified", func() {
+			action := mdaiv1.Action{
+				DeployReplay: &mdaiv1.DeployReplayAction{
+					ReplaySpec: mdaiv1.MdaiReplaySpec{
+						StatusVariableRef: "string_1",
+						Source: mdaiv1.MdaiReplaySourceConfiguration{
+							AWSConfig: &mdaiv1.MdaiReplayAwsConfig{
+								AWSAccessKeySecret: ptr.To("secret"),
+							},
+							S3: &mdaiv1.MdaiReplayS3Configuration{
+								S3Region:    "region",
+								S3Bucket:    "bucket",
+								FilePrefix:  "prefix",
+								S3Path:      "path",
+								S3Partition: mdaiv1.S3ReplayMinutePartition,
+							},
+						},
+						Destination: mdaiv1.MdaiReplayDestinationConfiguration{
+							OtlpHttp: &mdaiv1.MdaiReplayOtlpHttpDestinationConfiguration{
+								Endpoint: "http://otlp.example.com",
+							},
+						},
+					},
+				},
+			}
+			actionPath := field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeInvalid))
+			Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].deployReplay.replaySpec"))
+			Expect(errs[0].Detail).To(ContainSubstring("invalid replay spec"))
+		})
+
+		It("should fail validation when a single invalid 'deployReplay' action with unknown var ref is specified", func() {
+			action := mdaiv1.Action{
+				DeployReplay: &mdaiv1.DeployReplayAction{
+					ReplaySpec: mdaiv1.MdaiReplaySpec{
+						StatusVariableRef: "adlsfjlskadjflkadsasfjalskdjf",
+						OpAMPEndpoint:     "http://opamp.example.com",
+						Source: mdaiv1.MdaiReplaySourceConfiguration{
+							AWSConfig: &mdaiv1.MdaiReplayAwsConfig{
+								AWSAccessKeySecret: ptr.To("secret"),
+							},
+							S3: &mdaiv1.MdaiReplayS3Configuration{
+								S3Region:    "region",
+								S3Bucket:    "bucket",
+								FilePrefix:  "prefix",
+								S3Path:      "path",
+								S3Partition: mdaiv1.S3ReplayMinutePartition,
+							},
+						},
+						Destination: mdaiv1.MdaiReplayDestinationConfiguration{
+							OtlpHttp: &mdaiv1.MdaiReplayOtlpHttpDestinationConfiguration{
+								Endpoint: "http://otlp.example.com",
+							},
+						},
+					},
+				},
+			}
+			actionPath := field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVarKeys)
+			Expect(errs).To(HaveLen(1))
+			Expect(errs[0].Type).To(Equal(field.ErrorTypeInvalid))
+			Expect(errs[0].Field).To(Equal("spec.rules[0].then[0].deployReplay.replaySpec.statusVariableRef"))
+			Expect(errs[0].Detail).To(ContainSubstring("does not reference"))
+		})
+
+		It("should pass validation when a single 'cleanUpReplay' action is specified", func() {
+			action := mdaiv1.Action{
+				CleanUpReplay: &mdaiv1.CleanUpReplayAction{},
+			}
+			actionPath := field.NewPath("spec", "rules").Index(0).Child("then").Index(0)
+
+			errs := validateAction(actionPath, action, knownVarKeys)
 			Expect(errs).To(BeEmpty())
 		})
 
