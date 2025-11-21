@@ -17,7 +17,7 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 # Update this version to match new release tag and run helm targets
-VERSION = 0.2.7
+VERSION = 0.2.9
 
 # Image URL to use all building/pushing image targets
 IMG ?= public.ecr.aws/p3k6k6h3/mdai-operator:${VERSION}
