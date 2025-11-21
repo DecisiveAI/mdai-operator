@@ -1,0 +1,6 @@
+- op: add
+  path: /spec/privateKey
+  value: {}
+- op: add
+  path: /spec/privateKey/rotationPolicy
+  value: Always
