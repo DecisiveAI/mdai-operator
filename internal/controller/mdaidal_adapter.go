@@ -49,6 +49,10 @@ func NewMdaiDalAdapter(
 	}
 }
 
+func (c MdaiDalAdapter) configMapName() string {
+	return fmt.Sprintf("%s-%s", c.dalCR.Name, MdaiDalConfigMapName)
+}
+
 func (c MdaiDalAdapter) ensureDeletionProcessed(ctx context.Context) (OperationResult, error) {
 	if c.dalCR.DeletionTimestamp.IsZero() {
 		return ContinueProcessing()
@@ -68,6 +72,33 @@ func (c MdaiDalAdapter) ensureStatusSetToDone(ctx context.Context) (OperationRes
 		c.logger.Error(err, "Failed to re-fetch MDAI DAL")
 		return Requeue()
 	}
+
+	deployment := &appsv1.Deployment{}
+	if err := c.client.Get(ctx, types.NamespacedName{Name: c.dalCR.Name, Namespace: c.dalCR.Namespace}, deployment); err != nil {
+		if apierrors.IsNotFound(err) {
+			c.logger.Info("Deployment not found yet, requeueing for status update")
+			return Requeue()
+		}
+		c.logger.Error(err, "Failed to get MDAI DAL deployment for status")
+		return Requeue()
+	}
+
+	service := &corev1.Service{}
+	if err := c.client.Get(ctx, types.NamespacedName{Name: c.dalCR.Name, Namespace: c.dalCR.Namespace}, service); err != nil {
+		if apierrors.IsNotFound(err) {
+			c.logger.Info("Service not found yet, requeueing for status update")
+			return Requeue()
+		}
+		c.logger.Error(err, "Failed to get MDAI DAL service for status")
+		return Requeue()
+	}
+
+	c.dalCR.Status.ObservedGeneration = c.dalCR.Generation
+	c.dalCR.Status.Replicas = deployment.Status.Replicas
+	c.dalCR.Status.ReadyReplicas = deployment.Status.ReadyReplicas
+	c.dalCR.Status.Endpoint = fmt.Sprintf("%s.%s.svc.cluster.local:%d", service.Name, service.Namespace, otlpHTTPPort)
+	c.dalCR.Status.LastSyncedTime = metav1.Now()
+
 	meta.SetStatusCondition(&c.dalCR.Status.Conditions, metav1.Condition{
 		Type:   typeAvailableHub,
 		Status: metav1.ConditionTrue, Reason: "Reconciling",
@@ -200,12 +231,14 @@ func (c MdaiDalAdapter) ensureSynchronized(ctx context.Context) (OperationResult
 
 func (c MdaiDalAdapter) createOrUpdateConfigMap(ctx context.Context) error {
 	const envPrefix = "MDAI_DAL_"
+	configMapName := c.configMapName()
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      MdaiDalConfigMapName,
+			Name:      configMapName,
 			Namespace: c.dalCR.Namespace,
 			Labels: map[string]string{
 				LabelAppNameKey:       MdaiDalHubComponent,
+				LabelAppInstanceKey:   c.dalCR.Name,
 				LabelManagedByMdaiKey: LabelManagedByMdaiValue,
 				HubComponentLabel:     MdaiDalHubComponent,
 			},
@@ -228,11 +261,11 @@ func (c MdaiDalAdapter) createOrUpdateConfigMap(ctx context.Context) error {
 		return nil
 	})
 	if err != nil {
-		c.logger.Error(err, "Failed to create or update mdai-dal-config ConfigMap", "configmap", "mdai-dal-config")
+		c.logger.Error(err, "Failed to create or update mdai-dal-config ConfigMap", "configmap", configMapName)
 		return err
 	}
 
-	c.logger.Info("mdai-dal-config ConfigMap created or updated successfully", "configmap", "mdai-dal-config", "operation", operationResult)
+	c.logger.Info("mdai-dal-config ConfigMap created or updated successfully", "configmap", configMapName, "operation", operationResult)
 	return nil
 }
 
@@ -243,7 +276,7 @@ func (c MdaiDalAdapter) createOrUpdateService(ctx context.Context) error {
 			Namespace: c.dalCR.Namespace,
 			Labels: map[string]string{
 				LabelAppNameKey:       MdaiDalHubComponent,
-				LabelAppInstanceKey:   MdaiDalHubComponent,
+				LabelAppInstanceKey:   c.dalCR.Name,
 				LabelManagedByMdaiKey: LabelManagedByMdaiValue,
 				HubComponentLabel:     MdaiDalHubComponent,
 			},
@@ -258,6 +291,7 @@ func (c MdaiDalAdapter) createOrUpdateService(ctx context.Context) error {
 		builder.Service(service).
 			WithLabel(LabelAppNameKey, MdaiDalHubComponent).
 			WithSelectorLabel(LabelAppNameKey, MdaiDalHubComponent).
+			WithSelectorLabel(LabelAppInstanceKey, c.dalCR.Name).
 			WithPorts(
 				corev1.ServicePort{
 					Port:       otlpGRPCPort,
@@ -286,6 +320,7 @@ func (c MdaiDalAdapter) createOrUpdateService(ctx context.Context) error {
 
 func (c MdaiDalAdapter) createOrUpdateDeployment(ctx context.Context) error {
 	awsCredentials := c.dalCR.Spec.AWS.Credentials
+	configMapName := c.configMapName()
 	livenessProbe := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -314,7 +349,7 @@ func (c MdaiDalAdapter) createOrUpdateDeployment(ctx context.Context) error {
 		).
 		WithEnvFromSecretKey("AWS_ACCESS_KEY_ID", awsCredentials.SecretName, awsCredentials.AccessKeyField).
 		WithEnvFromSecretKey("AWS_SECRET_ACCESS_KEY", awsCredentials.SecretName, awsCredentials.SecretKeyField).
-		WithEnvFromConfigMap(MdaiDalConfigMapName).
+		WithEnvFromConfigMap(configMapName).
 		WithSecurityContext(DefaultSecurityContext).
 		WithLivenessProbe(livenessProbe).
 		WithReadinessProbe(readinessProbe)
@@ -325,7 +360,7 @@ func (c MdaiDalAdapter) createOrUpdateDeployment(ctx context.Context) error {
 			Namespace: c.dalCR.Namespace,
 			Labels: map[string]string{
 				LabelAppNameKey:       MdaiDalHubComponent,
-				LabelAppInstanceKey:   MdaiDalHubComponent,
+				LabelAppInstanceKey:   c.dalCR.Name,
 				LabelManagedByMdaiKey: LabelManagedByMdaiValue,
 				HubComponentLabel:     MdaiDalHubComponent,
 			},
@@ -341,9 +376,9 @@ func (c MdaiDalAdapter) createOrUpdateDeployment(ctx context.Context) error {
 			WithReplicas(1).
 			WithSelectorLabel(LabelAppNameKey, MdaiDalHubComponent).
 			WithSelectorLabel(LabelManagedByMdaiKey, LabelManagedByMdaiValue).
-			WithSelectorLabel(LabelAppInstanceKey, MdaiDalHubComponent).
+			WithSelectorLabel(LabelAppInstanceKey, c.dalCR.Name).
 			WithTemplateLabel(LabelAppNameKey, MdaiDalHubComponent).
-			WithTemplateLabel(LabelAppInstanceKey, MdaiDalHubComponent).
+			WithTemplateLabel(LabelAppInstanceKey, c.dalCR.Name).
 			WithTemplateLabel(LabelManagedByMdaiKey, LabelManagedByMdaiValue).
 			WithContainers(container.Build())
 

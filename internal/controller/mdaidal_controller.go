@@ -25,6 +25,8 @@ type MdaiDalReconciler struct {
 // +kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaidals,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaidals/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaidals/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=services;configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -89,6 +91,7 @@ func (r *MdaiDalReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&mdaiv1.MdaiDal{}).
 		Named("mdaidal").
 		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Service{}).
 		Complete(r)
 }

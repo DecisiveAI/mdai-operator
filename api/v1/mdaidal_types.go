@@ -4,20 +4,25 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // MdaiDalSpec defines the desired state of MdaiDal
 type MdaiDalSpec struct {
 	// +required
 	// +kubebuilder:validation:Enum=weekly;daily;hourly;minutely
+	// Granularity is how often to partition the data
 	Granularity string `json:"granularity"`
 	// +kubebuilder:default=false
+	// +optional
+	// UsePayloadTS determines whether to partition by earliest payload
+	// timestamp instead of ingest time
 	UsePayloadTS bool `json:"usePayloadTs,omitempty"`
 	// +kubebuilder:default=json
+	// +optional
+	// Marshaler of payload data
 	Marshaler string `json:"marshaler,omitempty"`
 
-	S3  MdaiDalS3Config  `json:"s3"`
+	// +kubebuilder:validation:Required
+	S3 MdaiDalS3Config `json:"s3"`
+	// +kubebuilder:validation:Required
 	AWS MdaiDalAWSConfig `json:"aws"`
 }
 
@@ -26,55 +31,74 @@ type MdaiDalS3Config struct {
 	// +kubebuilder:validation:MinLength=3
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern="^[a-z0-9][a-z0-9.-]*[a-z0-9]$"
+	// Bucket is the name of the S3 bucket to write to
 	Bucket string `json:"bucket"`
 
-	// +kubebuilder:validation:Pattern="^[a-zA-Z_]*$"
+	// +kubebuilder:validation:Pattern="^[A-Za-z0-9._/\\-]*$"
+	// +optional
+	// Prefix is the S3 bucket prefix (path)
 	Prefix string `json:"prefix,omitempty"`
 }
 
 type MdaiDalAWSConfig struct {
 	// +required
 	// +kubebuilder:validation:Pattern=`^[a-z]{2}(-[a-z]+)+-\d+$`
+	// Region is the AWS Region
 	Region string `json:"region"`
 
+	// +optional
 	Credentials MdaiDalAWSCredentials `json:"credentials,omitempty"`
 }
 
 type MdaiDalAWSCredentials struct {
 	// +kubebuilder:default="aws-credentials"
 	// +kubebuilder:validation:MinLength=1
+	// +optional
+	// SecretName is the name of the kubernetes secret that holds
+	// the AWS credentials
 	SecretName string `json:"secretName,omitempty"`
 
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:default="AWS_ACCESS_KEY_ID"
+	// +optional
+	// AccessKeyField is the key of the AWS credentials secret
+	// that holds the value for `AWS_ACCESS_KEY_ID`
 	AccessKeyField string `json:"accessKeyField,omitempty"`
 
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:default="AWS_SECRET_ACCESS_KEY"
+	// +optional
+	// SecretKeyField is the key of the AWS credentials secret
+	// that holds the value for `AWS_SECRET_ACCESS_KEY`
 	SecretKeyField string `json:"secretKeyField,omitempty"`
 }
 
 // MdaiDalStatus defines the observed state of MdaiDal.
 type MdaiDalStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// For Kubernetes API conventions, see:
-	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
-
-	// conditions represent the current state of the MdaiDal resource.
-	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
-	//
-	// Standard condition types include:
-	// - "Available": the resource is fully functional
-	// - "Progressing": the resource is being created or updated
-	// - "Degraded": the resource failed to reach or maintain its desired state
-	//
-	// The status of each condition is one of True, False, or Unknown.
 	// +listType=map
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// ObservedGeneration is the last generation the controller processed.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Replicas is the desired number of replicas for the DAL deployment.
+	// +optional
+	Replicas int32 `json:"replicas,omitempty"`
+
+	// ReadyReplicas is the number of ready replicas for the DAL deployment.
+	// +optional
+	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+
+	// Endpoint is the in-cluster address for the DAL service.
+	// +optional
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// LastSyncedTime is the last time the controller successfully reconciled.
+	// +optional
+	LastSyncedTime metav1.Time `json:"lastSyncedTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -86,7 +110,7 @@ type MdaiDal struct {
 
 	// metadata is a standard object metadata
 	// +optional
-	metav1.ObjectMeta `json:"metadata,omitzero"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// spec defines the desired state of MdaiDal
 	// +required
@@ -94,7 +118,7 @@ type MdaiDal struct {
 
 	// status defines the observed state of MdaiDal
 	// +optional
-	Status MdaiDalStatus `json:"status,omitzero"`
+	Status MdaiDalStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -102,7 +126,7 @@ type MdaiDal struct {
 // MdaiDalList contains a list of MdaiDal
 type MdaiDalList struct {
 	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitzero"`
+	metav1.ListMeta `json:"metadata,omitempty"`
 
 	Items []MdaiDal `json:"items"`
 }

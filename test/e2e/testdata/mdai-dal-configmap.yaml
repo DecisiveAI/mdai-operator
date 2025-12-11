@@ -8,12 +8,12 @@ data:
   MDAI_DAL_USE_PAYLOAD_TS: "false"
 kind: ConfigMap
 metadata:
-#  creationTimestamp: "2025-12-10T18:07:22Z"
   labels:
     app.kubernetes.io/name: mdai-dal
+    app.kubernetes.io/instance: mdaidal-sample
     app.kubernetes.io/managed-by: mdai-operator
     mydecisive.ai/hub-component: mdai-dal
-  name: mdai-dal-config
+  name: mdaidal-sample-mdai-dal-config
   namespace: mdai
   ownerReferences:
   - apiVersion: hub.mydecisive.ai/v1
@@ -21,6 +21,3 @@ metadata:
     controller: true
     kind: MdaiDal
     name: mdaidal-sample
-#    uid: dda25010-db29-4e1b-8b51-e12ab3450cba
-#  resourceVersion: "103417"
-#  uid: 58454144-bf74-4f56-a60e-877b5dccf7fb

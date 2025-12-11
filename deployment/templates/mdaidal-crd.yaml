@@ -47,24 +47,35 @@ spec:
                     properties:
                       accessKeyField:
                         default: AWS_ACCESS_KEY_ID
+                        description: |-
+                          AccessKeyField is the key of the AWS credentials secret
+                          that holds the value for `AWS_ACCESS_KEY_ID`
                         minLength: 1
                         type: string
                       secretKeyField:
                         default: AWS_SECRET_ACCESS_KEY
+                        description: |-
+                          SecretKeyField is the key of the AWS credentials secret
+                          that holds the value for `AWS_SECRET_ACCESS_KEY`
                         minLength: 1
                         type: string
                       secretName:
                         default: aws-credentials
+                        description: |-
+                          SecretName is the name of the kubernetes secret that holds
+                          the AWS credentials
                         minLength: 1
                         type: string
                     type: object
                   region:
+                    description: Region is the AWS Region
                     pattern: ^[a-z]{2}(-[a-z]+)+-\d+$
                     type: string
                 required:
                 - region
                 type: object
               granularity:
+                description: Granularity is how often to partition the data
                 enum:
                 - weekly
                 - daily
@@ -73,22 +84,28 @@ spec:
                 type: string
               marshaler:
                 default: json
+                description: Marshaler of payload data
                 type: string
               s3:
                 properties:
                   bucket:
+                    description: Bucket is the name of the S3 bucket to write to
                     maxLength: 63
                     minLength: 3
                     pattern: ^[a-z0-9][a-z0-9.-]*[a-z0-9]$
                     type: string
                   prefix:
-                    pattern: ^[a-zA-Z_]*$
+                    description: Prefix is the S3 bucket prefix (path)
+                    pattern: ^[A-Za-z0-9._/\-]*$
                     type: string
                 required:
                 - bucket
                 type: object
               usePayloadTs:
                 default: false
+                description: |-
+                  UsePayloadTS determines whether to partition by earliest payload
+                  timestamp instead of ingest time
                 type: boolean
             required:
             - aws
@@ -99,16 +116,6 @@ spec:
             description: status defines the observed state of MdaiDal
             properties:
               conditions:
-                description: |-
-                  conditions represent the current state of the MdaiDal resource.
-                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
-  
-                  Standard condition types include:
-                  - "Available": the resource is fully functional
-                  - "Progressing": the resource is being created or updated
-                  - "Degraded": the resource failed to reach or maintain its desired state
-  
-                  The status of each condition is one of True, False, or Unknown.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -167,6 +174,29 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              endpoint:
+                description: Endpoint is the in-cluster address for the DAL service.
+                type: string
+              lastSyncedTime:
+                description: LastSyncedTime is the last time the controller successfully
+                  reconciled.
+                format: date-time
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the last generation the controller
+                  processed.
+                format: int64
+                type: integer
+              readyReplicas:
+                description: ReadyReplicas is the number of ready replicas for the DAL
+                  deployment.
+                format: int32
+                type: integer
+              replicas:
+                description: Replicas is the desired number of replicas for the DAL
+                  deployment.
+                format: int32
+                type: integer
             type: object
         required:
         - spec

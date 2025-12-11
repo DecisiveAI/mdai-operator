@@ -683,10 +683,10 @@ var _ = Describe("Manager", Ordered, func() {
 
 		It("can create the config map for MDAI DAL", func() {
 			By("verifying the config map exists")
-			configMapExists("mdai-dal-config", namespace)
+			configMapExists("mdaidal-sample-mdai-dal-config", namespace)
 
 			By("reading the config map in as YAML")
-			yamlStr, err := configMapYAML("mdai-dal-config", namespace)
+			yamlStr, err := configMapYAML("mdaidal-sample-mdai-dal-config", namespace)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("validating the config map values are correct")
@@ -717,6 +717,21 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(out).To(Equal("1"), "MDAI DAL deployment should have 1 ready replicas")
 			}
 			Eventually(verifyMdaiDal, "1m", "5s").Should(Succeed())
+
+			By("verifying the service and deployment carry per-instance labels/selectors")
+			cmd := exec.Command("kubectl", "get", "service", "mdaidal-sample",
+				"-n", namespace,
+				"-o", "jsonpath={.spec.selector.app\\.kubernetes\\.io\\/instance}")
+			out, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "failed to get MDAI DAL service selector")
+			Expect(out).To(Equal("mdaidal-sample"), "service selector should target instance label")
+
+			cmd = exec.Command("kubectl", "get", "deployment", "mdaidal-sample",
+				"-n", namespace,
+				"-o", "jsonpath={.spec.template.metadata.labels.app\\.kubernetes\\.io\\/instance}")
+			out, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "failed to get MDAI DAL deployment labels")
+			Expect(out).To(Equal("mdaidal-sample"), "deployment template should include instance label")
 
 			By("verifying the MDAI DAL pods are ready")
 			verifyMdaiDalPods := func(g Gomega) {
