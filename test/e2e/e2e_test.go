@@ -663,6 +663,103 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyMdaiCollectorLogs).Should(Succeed())
 		})
 
+		It("can reconcile a MDAI DAL CR", func() {
+			By("creating an aws-credentials secret for the MDAI DAL")
+			cmd := exec.Command("kubectl", "create", "secret", "generic", "aws-credentials",
+				"--namespace", namespace,
+				"--from-literal=AWS_ACCESS_KEY_ID=foo",
+				"--from-literal=AWS_SECRET_ACCESS_KEY=bar")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create secret")
+
+			By("applying a MDAI DAL CR")
+			verifyMdaiDal := func(g Gomega) {
+				cmd := exec.Command("kubectl", "apply", "-f", "test/e2e/testdata/mdai-dal.yaml", "-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyMdaiDal).Should(Succeed())
+		})
+
+		It("can create the config map for MDAI DAL", func() {
+			By("verifying the config map exists")
+			configMapExists("mdai-dal-config", namespace)
+
+			By("reading the config map in as YAML")
+			yamlStr, err := configMapYAML("mdai-dal-config", namespace)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("validating the config map values are correct")
+			var (
+				actual   k8sObject
+				expected k8sObject
+			)
+
+			err = yaml.Unmarshal([]byte(yamlStr), &actual)
+			Expect(err).NotTo(HaveOccurred())
+			actual.stripVolatile()
+
+			bytes, err := testdata.ReadFile("testdata/mdai-dal-configmap.yaml")
+			Expect(err).NotTo(HaveOccurred())
+			err = yaml.Unmarshal(bytes, &expected)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(actual).To(Equal(expected))
+		})
+
+		It("can deploy the MDAI DAL", func() {
+			By("verifying the MDAI DAL deployment is ready")
+			verifyMdaiDal := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployment", "mdaidal-sample",
+					"-n", namespace,
+					"-o", "jsonpath={.status.readyReplicas}")
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "failed to get MDAI DAL deployment status")
+				g.Expect(out).To(Equal("1"), "MDAI DAL deployment should have 1 ready replicas")
+			}
+			Eventually(verifyMdaiDal, "1m", "5s").Should(Succeed())
+
+			By("verifying the MDAI DAL pods are ready")
+			verifyMdaiDalPods := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pods",
+					"-n", namespace,
+					"-l", "app.kubernetes.io/name=mdai-dal",
+					"-o", "jsonpath={range .items[*]}{.metadata.name}:{.status.phase}{\"\\n\"}{end}")
+				out, err := utils.Run(cmd)
+
+				g.Expect(err).NotTo(HaveOccurred(), "failed to get MDAI DAL pods")
+				lines := strings.Split(strings.TrimSpace(out), "\n")
+
+				g.Expect(lines).To(HaveLen(1), "expected 1 MDAI DAL pods")
+				for _, line := range lines {
+					parts := strings.Split(line, ":")
+					g.Expect(parts).To(HaveLen(2), "unexpected pod output format")
+					g.Expect(parts[1]).To(Equal("Running"), "expected pod to be in Running state")
+				}
+			}
+			Eventually(verifyMdaiDalPods, "1m", "5s").Should(Succeed())
+
+			By("verifying the MDAL DAL logs do not contain errors")
+			verifyMdaiDalLogs := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pods", "-n", namespace, "-l",
+					"app.kubernetes.io/name=mdai-dal", "-o", "jsonpath={.items[*].metadata.name}")
+				out, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+
+				podNames := strings.Fields(out)
+				for _, pod := range podNames {
+					if pod == "" {
+						continue
+					}
+					logCmd := exec.Command("kubectl", "logs", pod, "-n", namespace)
+					logOut, err := utils.Run(logCmd)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					g.Expect(strings.Contains(strings.ToLower(logOut), "error")).To(BeFalse(), "Log for pod %s contains error", pod)
+				}
+			}
+			Eventually(verifyMdaiDalLogs).Should(Succeed())
+		})
+
 		It("can create Prometheus rules", func() {
 			verifyPrometheusRules := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "prometheusrule", "mdai-mdaihub-sample-alert-rules", "-n", namespace, "-o", "yaml")
@@ -940,6 +1037,35 @@ metadata:
 			}
 
 			Eventually(verifyObserverDeleted, "30s", "3s").Should(Succeed(), "expected all observer pods to be deleted")
+		})
+
+		It("can delete MdaiDal CRs and clean up resources", func() {
+			By("deleting a MdaiDal CR")
+			verifyMdaiCollector := func(g Gomega) {
+				cmd := exec.Command("kubectl", "delete", "-f", "test/e2e/testdata/mdai-dal.yaml", "-n", namespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyMdaiCollector).Should(Succeed())
+
+			By("validating observer deleted")
+
+			verifyObserverDeleted := func() error {
+				cmd := exec.Command("kubectl", "get", "pods",
+					"-n", namespace,
+					"-l", "app=mdai-dal",
+					"-o", "json")
+				out, err := utils.Run(cmd)
+				if err != nil {
+					return err
+				}
+				if strings.Contains(out, `"items": [`) && !strings.Contains(out, `"items": []`) {
+					return errors.New("mdai dal pods still present")
+				}
+				return nil
+			}
+
+			Eventually(verifyObserverDeleted, "30s", "3s").Should(Succeed(), "expected all mdai dal pods to be deleted")
 		})
 
 		It("can delete OTEL CRs", func() {

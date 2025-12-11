@@ -34,6 +34,8 @@ const (
 	ObjectUnchanged         ObjectState = false
 	LabelManagedByMdaiKey               = "app.kubernetes.io/managed-by"
 	LabelManagedByMdaiValue             = "mdai-operator"
+	LabelAppNameKey                     = "app.kubernetes.io/name"
+	LabelAppInstanceKey                 = "app.kubernetes.io/instance"
 
 	otlpGRPCPort        = 4317
 	otlpHTTPPort        = 4318

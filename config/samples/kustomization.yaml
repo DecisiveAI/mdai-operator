@@ -10,4 +10,5 @@ resources:
 - hub_v1_mdaiobserver-second.yaml
 - hub_v1_mdaiingress.yaml
 - hub_v1_mdaireplay.yaml
+- hub_v1_mdaidal.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
