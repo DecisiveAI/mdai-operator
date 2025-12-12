@@ -236,12 +236,6 @@ func (c MdaiDalAdapter) createOrUpdateConfigMap(ctx context.Context) error {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configMapName,
 			Namespace: c.dalCR.Namespace,
-			Labels: map[string]string{
-				LabelAppNameKey:       MdaiDalHubComponent,
-				LabelAppInstanceKey:   c.dalCR.Name,
-				LabelManagedByMdaiKey: LabelManagedByMdaiValue,
-				HubComponentLabel:     MdaiDalHubComponent,
-			},
 		},
 	}
 
@@ -249,6 +243,13 @@ func (c MdaiDalAdapter) createOrUpdateConfigMap(ctx context.Context) error {
 		if err := controllerutil.SetControllerReference(c.dalCR, configMap, c.scheme); err != nil {
 			return err
 		}
+		if configMap.Labels == nil {
+			configMap.Labels = map[string]string{}
+		}
+		configMap.Labels[LabelAppNameKey] = MdaiDalHubComponent
+		configMap.Labels[LabelAppInstanceKey] = c.dalCR.Name
+		configMap.Labels[LabelManagedByMdaiKey] = LabelManagedByMdaiValue
+		configMap.Labels[HubComponentLabel] = MdaiDalHubComponent
 		configMap.Data = map[string]string{
 			envPrefix + "S3_BUCKET":      c.dalCR.Spec.S3.Bucket,
 			envPrefix + "AWS_REGION":     c.dalCR.Spec.AWS.Region,
@@ -274,12 +275,6 @@ func (c MdaiDalAdapter) createOrUpdateService(ctx context.Context) error {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.dalCR.Name,
 			Namespace: c.dalCR.Namespace,
-			Labels: map[string]string{
-				LabelAppNameKey:       MdaiDalHubComponent,
-				LabelAppInstanceKey:   c.dalCR.Name,
-				LabelManagedByMdaiKey: LabelManagedByMdaiValue,
-				HubComponentLabel:     MdaiDalHubComponent,
-			},
 		},
 	}
 
@@ -290,6 +285,9 @@ func (c MdaiDalAdapter) createOrUpdateService(ctx context.Context) error {
 
 		builder.Service(service).
 			WithLabel(LabelAppNameKey, MdaiDalHubComponent).
+			WithLabel(LabelAppInstanceKey, c.dalCR.Name).
+			WithLabel(LabelManagedByMdaiKey, LabelManagedByMdaiValue).
+			WithLabel(HubComponentLabel, MdaiDalHubComponent).
 			WithSelectorLabel(LabelAppNameKey, MdaiDalHubComponent).
 			WithSelectorLabel(LabelAppInstanceKey, c.dalCR.Name).
 			WithPorts(
@@ -305,12 +303,24 @@ func (c MdaiDalAdapter) createOrUpdateService(ctx context.Context) error {
 					TargetPort: intstr.FromInt32(otlpHTTPPort),
 					Protocol:   corev1.ProtocolTCP,
 				},
-			).
-			WithType(corev1.ServiceTypeClusterIP)
+			)
+
+		if service.CreationTimestamp.IsZero() {
+			builder.Service(service).
+				WithType(corev1.ServiceTypeClusterIP)
+		}
 
 		return nil
 	})
 	if err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			c.logger.Info("Service already exists, skipping",
+				"service", service.Name,
+				"namespace", service.Namespace,
+			)
+			return nil
+		}
+
 		return fmt.Errorf("failed to create or update mdai dal service: %w", err)
 	}
 
@@ -358,12 +368,6 @@ func (c MdaiDalAdapter) createOrUpdateDeployment(ctx context.Context) error {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.dalCR.Name,
 			Namespace: c.dalCR.Namespace,
-			Labels: map[string]string{
-				LabelAppNameKey:       MdaiDalHubComponent,
-				LabelAppInstanceKey:   c.dalCR.Name,
-				LabelManagedByMdaiKey: LabelManagedByMdaiValue,
-				HubComponentLabel:     MdaiDalHubComponent,
-			},
 		},
 	}
 
@@ -372,11 +376,19 @@ func (c MdaiDalAdapter) createOrUpdateDeployment(ctx context.Context) error {
 			return err
 		}
 
+		if deployment.CreationTimestamp.IsZero() {
+			builder.Deployment(deployment).
+				WithSelectorLabel(LabelAppNameKey, MdaiDalHubComponent).
+				WithSelectorLabel(LabelManagedByMdaiKey, LabelManagedByMdaiValue).
+				WithSelectorLabel(LabelAppInstanceKey, c.dalCR.Name)
+		}
+
 		builder.Deployment(deployment).
 			WithReplicas(1).
-			WithSelectorLabel(LabelAppNameKey, MdaiDalHubComponent).
-			WithSelectorLabel(LabelManagedByMdaiKey, LabelManagedByMdaiValue).
-			WithSelectorLabel(LabelAppInstanceKey, c.dalCR.Name).
+			WithLabel(LabelAppNameKey, MdaiDalHubComponent).
+			WithLabel(LabelAppInstanceKey, c.dalCR.Name).
+			WithLabel(LabelManagedByMdaiKey, LabelManagedByMdaiValue).
+			WithLabel(HubComponentLabel, MdaiDalHubComponent).
 			WithTemplateLabel(LabelAppNameKey, MdaiDalHubComponent).
 			WithTemplateLabel(LabelAppInstanceKey, c.dalCR.Name).
 			WithTemplateLabel(LabelManagedByMdaiKey, LabelManagedByMdaiValue).
@@ -385,6 +397,13 @@ func (c MdaiDalAdapter) createOrUpdateDeployment(ctx context.Context) error {
 		return nil
 	})
 	if err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			c.logger.Info("Deployment already exists, skipping",
+				"deployment", deployment.Name,
+				"namespace", deployment.Namespace,
+			)
+			return nil
+		}
 		return fmt.Errorf("failed to create or update mdai dal deployment: %w", err)
 	}
 	c.logger.Info("Successfully created or updated "+c.dalCR.Name+" Deployment", "service", c.dalCR.Name, "namespace", c.dalCR.Namespace, "operation", operationResult)
