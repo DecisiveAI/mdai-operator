@@ -7,6 +7,7 @@ resources:
 - bases/hub.mydecisive.ai_mdaiobservers.yaml
 - bases/hub.mydecisive.ai_mdaiingresses.yaml
 - bases/hub.mydecisive.ai_mdaireplays.yaml
+- bases/hub.mydecisive.ai_mdaidals.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

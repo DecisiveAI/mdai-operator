@@ -44,6 +44,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the mdai-operator itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- mdaidal_admin_role.yaml
+- mdaidal_editor_role.yaml
+- mdaidal_viewer_role.yaml
 - mdaiingress_admin_role.yaml
 - mdaiingress_editor_role.yaml
 - mdaiingress_viewer_role.yaml

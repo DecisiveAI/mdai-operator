@@ -4,7 +4,7 @@ kind: CustomResourceDefinition
 metadata:
   name: mdaihubs.hub.mydecisive.ai
   annotations:
-    controller-gen.kubebuilder.io/version: v0.17.2
+    controller-gen.kubebuilder.io/version: v0.19.0
   labels:
   {{- include "deployment.labels" . | nindent 4 }}
 spec:
@@ -453,6 +453,7 @@ spec:
                                   hubName:
                                     type: string
                                   ignoreSendingQueue:
+                                    default: false
                                     description: 'IgnoreSendingQueue: Bypass checking
                                       the OTEL sending queue metric when finalizing
                                       the replay resource'
@@ -478,6 +479,9 @@ spec:
                                           s3Bucket:
                                             type: string
                                           s3Partition:
+                                            enum:
+                                            - minute
+                                            - hour
                                             type: string
                                           s3Path:
                                             type: string
@@ -499,6 +503,10 @@ spec:
                                       Should be referenced in a When VariableUpdated rule so that a CleanUpReplayAction can be triggered
                                     type: string
                                   telemetryType:
+                                    enum:
+                                    - logs
+                                    - metrics
+                                    - traces
                                     type: string
                                 required:
                                 - opampEndpoint

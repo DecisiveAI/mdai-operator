@@ -1,0 +1,23 @@
+apiVersion: v1
+data:
+  MDAI_DAL_AWS_REGION: us-east-1
+  MDAI_DAL_GRANULARITY: hourly
+  MDAI_DAL_MARSHALER: json
+  MDAI_DAL_S3_BUCKET: telemetry
+  MDAI_DAL_S3_PREFIX: ""
+  MDAI_DAL_USE_PAYLOAD_TS: "false"
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/name: mdai-dal
+    app.kubernetes.io/instance: mdaidal-sample
+    app.kubernetes.io/managed-by: mdai-operator
+    mydecisive.ai/hub-component: mdai-dal
+  name: mdaidal-sample-mdai-dal-config
+  namespace: mdai
+  ownerReferences:
+  - apiVersion: hub.mydecisive.ai/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: MdaiDal
+    name: mdaidal-sample

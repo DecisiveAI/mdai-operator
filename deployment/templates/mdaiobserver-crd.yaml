@@ -4,7 +4,7 @@ kind: CustomResourceDefinition
 metadata:
   name: mdaiobservers.hub.mydecisive.ai
   annotations:
-    controller-gen.kubebuilder.io/version: v0.17.2
+    controller-gen.kubebuilder.io/version: v0.19.0
   labels:
   {{- include "deployment.labels" . | nindent 4 }}
 spec:
@@ -65,7 +65,7 @@ spec:
                           Claims lists the names of resources, defined in spec.resourceClaims,
                           that are used by this container.
   
-                          This is an alpha field and requires enabling the
+                          This field depends on the
                           DynamicResourceAllocation feature gate.
   
                           This field is immutable. It can only be set for containers.

@@ -30,6 +30,11 @@ func (b *ContainerBuilder) WithVolumeMounts(mounts ...corev1.VolumeMount) *Conta
 	return b
 }
 
+func (b *ContainerBuilder) WithEnv(env ...corev1.EnvVar) *ContainerBuilder {
+	b.container.Env = append(b.container.Env, env...)
+	return b
+}
+
 func (b *ContainerBuilder) WithEnvFrom(envFrom ...corev1.EnvFromSource) *ContainerBuilder {
 	b.container.EnvFrom = append(b.container.EnvFrom, envFrom...)
 	return b
@@ -37,6 +42,15 @@ func (b *ContainerBuilder) WithEnvFrom(envFrom ...corev1.EnvFromSource) *Contain
 
 func (b *ContainerBuilder) WithSecurityContext(sc *corev1.SecurityContext) *ContainerBuilder {
 	b.container.SecurityContext = sc
+	return b
+}
+
+func (b *ContainerBuilder) WithEnvFromConfigMap(configMapName string) *ContainerBuilder {
+	b.container.EnvFrom = append(b.container.EnvFrom, corev1.EnvFromSource{
+		ConfigMapRef: &corev1.ConfigMapEnvSource{
+			LocalObjectReference: corev1.LocalObjectReference{Name: configMapName},
+		},
+	})
 	return b
 }
 
@@ -59,6 +73,36 @@ func (b *ContainerBuilder) WithAWSSecret(secretName *string) *ContainerBuilder {
 			},
 		})
 	}
+	return b
+}
+
+func (b *ContainerBuilder) WithEnvFromSecretKey(envVarName, secretName, key string) *ContainerBuilder {
+	if secretName == "" || key == "" || envVarName == "" {
+		return b
+	}
+
+	b.container.Env = append(b.container.Env, corev1.EnvVar{
+		Name: envVarName,
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: secretName,
+				},
+				Key: key,
+			},
+		},
+	})
+
+	return b
+}
+
+func (b *ContainerBuilder) WithLivenessProbe(livenessProbe *corev1.Probe) *ContainerBuilder {
+	b.container.LivenessProbe = livenessProbe
+	return b
+}
+
+func (b *ContainerBuilder) WithReadinessProbe(readinessProbe *corev1.Probe) *ContainerBuilder {
+	b.container.ReadinessProbe = readinessProbe
 	return b
 }
 
