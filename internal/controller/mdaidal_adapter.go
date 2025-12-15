@@ -352,7 +352,7 @@ func (c MdaiDalAdapter) createOrUpdateDeployment(ctx context.Context) error {
 		PeriodSeconds:       5, //nolint:mnd
 	}
 
-	container := builder.Container(c.dalCR.Name, imageRef(c.dalCR.Spec.ImageSpec)).
+	container := builder.Container(c.dalCR.Name, imageRef(*c.dalCR.Spec.ImageSpec)).
 		WithImagePullPolicy(c.dalCR.Spec.ImageSpec.PullPolicy.ToK8s()).
 		WithPorts(
 			corev1.ContainerPort{ContainerPort: otlpGRPCPort, Name: otlpGRPCName, Protocol: corev1.ProtocolTCP},

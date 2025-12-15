@@ -81,6 +81,10 @@ spec:
                 - minutely
                 type: string
               imageSpec:
+                default:
+                  pullPolicy: IfNotPresent
+                  repository: public.ecr.aws/decisiveai/mdai-dal
+                  tag: 0.0.1
                 properties:
                   pullPolicy:
                     default: IfNotPresent

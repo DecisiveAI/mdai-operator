@@ -28,7 +28,8 @@ type MdaiDalSpec struct {
 	// +kubebuilder:validation:Required
 	AWS MdaiDalAWSConfig `json:"aws"`
 	// +optional
-	ImageSpec MdaiDalImageSpec `json:"imageSpec"`
+	// +kubebuilder:default:={repository:"public.ecr.aws/decisiveai/mdai-dal",tag:"0.0.1",pullPolicy:"IfNotPresent"}
+	ImageSpec *MdaiDalImageSpec `json:"imageSpec,omitempty"`
 }
 
 type MdaiDalS3Config struct {
