@@ -1,8 +1,11 @@
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+type ImagePullPolicy string
 
 // MdaiDalSpec defines the desired state of MdaiDal
 type MdaiDalSpec struct {
@@ -24,6 +27,8 @@ type MdaiDalSpec struct {
 	S3 MdaiDalS3Config `json:"s3"`
 	// +kubebuilder:validation:Required
 	AWS MdaiDalAWSConfig `json:"aws"`
+	// +optional
+	ImageSpec MdaiDalImageSpec `json:"imageSpec"`
 }
 
 type MdaiDalS3Config struct {
@@ -71,6 +76,21 @@ type MdaiDalAWSCredentials struct {
 	// SecretKeyField is the key of the AWS credentials secret
 	// that holds the value for `AWS_SECRET_ACCESS_KEY`
 	SecretKeyField string `json:"secretKeyField,omitempty"`
+}
+
+type MdaiDalImageSpec struct {
+	// Repository, e.g. public.ecr.aws/decisiveai/mdai-dal
+	// +kubebuilder:default="public.ecr.aws/decisiveai/mdai-dal"
+	Repository string `json:"repository,omitempty"`
+
+	// Tag, e.g. v0.0.1
+	// +kubebuilder:default="0.0.1"
+	Tag string `json:"tag,omitempty"`
+
+	// PullPolicy, e.g. IfNotPresent, Always, Never
+	// +kubebuilder:default="IfNotPresent"
+	// +kubebuilder:validation:Enum=Always;IfNotPresent;Never
+	PullPolicy ImagePullPolicy `json:"pullPolicy,omitempty"`
 }
 
 // MdaiDalStatus defines the observed state of MdaiDal.
@@ -133,4 +153,11 @@ type MdaiDalList struct {
 
 func init() { //nolint:gochecknoinits
 	SchemeBuilder.Register(&MdaiDal{}, &MdaiDalList{})
+}
+
+func (p ImagePullPolicy) ToK8s() corev1.PullPolicy {
+	if p == "" {
+		return corev1.PullIfNotPresent
+	}
+	return corev1.PullPolicy(p)
 }

@@ -9,12 +9,10 @@ metadata:
 spec:
   aws:
     region: us-east-1
-    credentials:
-      secretName: aws-credentials
-      accessKeyField: AWS_ACCESS_KEY_ID
-      secretKeyField: AWS_SECRET_ACCESS_KEY
+    credentials: {}
   s3:
     bucket: telemetry
+  imageSpec: {}
 
   granularity: hourly
   marshaler: json

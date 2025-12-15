@@ -106,6 +106,11 @@ func (b *ContainerBuilder) WithReadinessProbe(readinessProbe *corev1.Probe) *Con
 	return b
 }
 
+func (b *ContainerBuilder) WithImagePullPolicy(pullPolicy corev1.PullPolicy) *ContainerBuilder {
+	b.container.ImagePullPolicy = pullPolicy
+	return b
+}
+
 func (b *ContainerBuilder) Build() corev1.Container {
 	return b.container
 }

@@ -352,7 +352,8 @@ func (c MdaiDalAdapter) createOrUpdateDeployment(ctx context.Context) error {
 		PeriodSeconds:       5, //nolint:mnd
 	}
 
-	container := builder.Container(c.dalCR.Name, "public.ecr.aws/decisiveai/mdai-dal:0.0.1").
+	container := builder.Container(c.dalCR.Name, imageRef(c.dalCR.Spec.ImageSpec)).
+		WithImagePullPolicy(c.dalCR.Spec.ImageSpec.PullPolicy.ToK8s()).
 		WithPorts(
 			corev1.ContainerPort{ContainerPort: otlpGRPCPort, Name: otlpGRPCName, Protocol: corev1.ProtocolTCP},
 			corev1.ContainerPort{ContainerPort: otlpHTTPPort, Name: otlpHTTPName, Protocol: corev1.ProtocolTCP},
@@ -408,4 +409,15 @@ func (c MdaiDalAdapter) createOrUpdateDeployment(ctx context.Context) error {
 	}
 	c.logger.Info("Successfully created or updated "+c.dalCR.Name+" Deployment", "service", c.dalCR.Name, "namespace", c.dalCR.Namespace, "operation", operationResult)
 	return nil
+}
+
+func imageRef(i mdaiv1.MdaiDalImageSpec) string {
+	switch {
+	case i.Repository == "":
+		return ""
+	case i.Tag == "":
+		return i.Repository
+	default:
+		return i.Repository + ":" + i.Tag
+	}
 }

@@ -80,6 +80,25 @@ spec:
                 - hourly
                 - minutely
                 type: string
+              imageSpec:
+                properties:
+                  pullPolicy:
+                    default: IfNotPresent
+                    description: PullPolicy, e.g. IfNotPresent, Always, Never
+                    enum:
+                    - Always
+                    - IfNotPresent
+                    - Never
+                    type: string
+                  repository:
+                    default: public.ecr.aws/decisiveai/mdai-dal
+                    description: Repository, e.g. public.ecr.aws/decisiveai/mdai-dal
+                    type: string
+                  tag:
+                    default: 0.0.1
+                    description: Tag, e.g. v0.0.1
+                    type: string
+                type: object
               marshaler:
                 default: json
                 description: Marshaler of payload data
