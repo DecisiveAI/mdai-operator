@@ -16,6 +16,10 @@ func (c *FakeHubV1) MdaiCollectors(namespace string) v1.MdaiCollectorInterface {
 	return newFakeMdaiCollectors(c, namespace)
 }
 
+func (c *FakeHubV1) MdaiDals(namespace string) v1.MdaiDalInterface {
+	return newFakeMdaiDals(c, namespace)
+}
+
 func (c *FakeHubV1) MdaiHubs(namespace string) v1.MdaiHubInterface {
 	return newFakeMdaiHubs(c, namespace)
 }

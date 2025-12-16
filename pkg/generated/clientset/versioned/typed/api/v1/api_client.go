@@ -13,6 +13,7 @@ import (
 type HubV1Interface interface {
 	RESTClient() rest.Interface
 	MdaiCollectorsGetter
+	MdaiDalsGetter
 	MdaiHubsGetter
 	MdaiIngressesGetter
 	MdaiObserversGetter
@@ -26,6 +27,10 @@ type HubV1Client struct {
 
 func (c *HubV1Client) MdaiCollectors(namespace string) MdaiCollectorInterface {
 	return newMdaiCollectors(c, namespace)
+}
+
+func (c *HubV1Client) MdaiDals(namespace string) MdaiDalInterface {
+	return newMdaiDals(c, namespace)
 }
 
 func (c *HubV1Client) MdaiHubs(namespace string) MdaiHubInterface {
