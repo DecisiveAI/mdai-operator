@@ -124,7 +124,8 @@ type MdaiDalStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
+// +genclient
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // MdaiDal is the Schema for the mdaidals API
 type MdaiDal struct {
 	metav1.TypeMeta `json:",inline"`
