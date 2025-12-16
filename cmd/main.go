@@ -309,6 +309,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "MdaiReplay")
 		gracefullyShutdownWithCode(1)
 	}
+	if err := (&controller.MdaiDalReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MdaiDal")
+		gracefullyShutdownWithCode(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	// nolint:goconst

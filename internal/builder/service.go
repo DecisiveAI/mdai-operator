@@ -33,6 +33,7 @@ func (b *ServiceBuilder) WithPorts(ports ...corev1.ServicePort) *ServiceBuilder 
 	return b
 }
 
+//nolint:unparam // follows same builder pattern as the rest but is always called last (currently)
 func (b *ServiceBuilder) WithType(svcType corev1.ServiceType) *ServiceBuilder {
 	b.svc.Spec.Type = svcType
 	return b

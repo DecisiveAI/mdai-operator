@@ -10,6 +10,14 @@ type MdaiCollectorListerExpansion interface{}
 // MdaiCollectorNamespaceLister.
 type MdaiCollectorNamespaceListerExpansion interface{}
 
+// MdaiDalListerExpansion allows custom methods to be added to
+// MdaiDalLister.
+type MdaiDalListerExpansion interface{}
+
+// MdaiDalNamespaceListerExpansion allows custom methods to be added to
+// MdaiDalNamespaceLister.
+type MdaiDalNamespaceListerExpansion interface{}
+
 // MdaiHubListerExpansion allows custom methods to be added to
 // MdaiHubLister.
 type MdaiHubListerExpansion interface{}

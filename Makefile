@@ -17,7 +17,7 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 # Update this version to match new release tag and run helm targets
-VERSION = 0.2.9
+VERSION = 0.2.10
 
 # Image URL to use all building/pushing image targets
 IMG ?= public.ecr.aws/p3k6k6h3/mdai-operator:${VERSION}
@@ -67,7 +67,9 @@ vet: ## Run go vet against code.
 
 .PHONY: test-coverage
 test-coverage: manifests generate fmt vet envtest ## Run tests and generate code coverage.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v -E "/e2e|/test/utils|cmd") -coverprofile=coverage.txt
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v -E "/e2e|/test/utils|cmd|pkg/generated") -coverprofile=coverage.txt 
+	@sed '/zz_generated.deepcopy.go/d' coverage.txt > coverage.tmp
+	@mv coverage.tmp coverage.txt
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests and generate code coverage.
@@ -204,8 +206,8 @@ YQ ?= $(LOCALBIN)/yq
 UNAME := $(shell uname -s)
 
 ## Tool Versions
-KUSTOMIZE_VERSION ?= v5.6.0
-CONTROLLER_TOOLS_VERSION ?= v0.17.2
+KUSTOMIZE_VERSION ?= v5.8.0
+CONTROLLER_TOOLS_VERSION ?= v0.19.0
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)

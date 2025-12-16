@@ -39,6 +39,8 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 	// Group=hub.mydecisive.ai, Version=v1
 	case v1.SchemeGroupVersion.WithResource("mdaicollectors"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Hub().V1().MdaiCollectors().Informer()}, nil
+	case v1.SchemeGroupVersion.WithResource("mdaidals"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Hub().V1().MdaiDals().Informer()}, nil
 	case v1.SchemeGroupVersion.WithResource("mdaihubs"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Hub().V1().MdaiHubs().Informer()}, nil
 	case v1.SchemeGroupVersion.WithResource("mdaiingresses"):

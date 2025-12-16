@@ -2,7 +2,7 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: mdaireplays.hub.mydecisive.ai
+  name: mdaidals.hub.mydecisive.ai
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
   labels:
@@ -10,16 +10,16 @@ metadata:
 spec:
   group: hub.mydecisive.ai
   names:
-    kind: MdaiReplay
-    listKind: MdaiReplayList
-    plural: mdaireplays
-    singular: mdaireplay
+    kind: MdaiDal
+    listKind: MdaiDalList
+    plural: mdaidals
+    singular: mdaidal
   scope: Namespaced
   versions:
   - name: v1
     schema:
       openAPIV3Schema:
-        description: MdaiReplay is the Schema for the mdaireplays API.
+        description: MdaiDal is the Schema for the mdaidals API
         properties:
           apiVersion:
             description: |-
@@ -39,86 +39,83 @@ spec:
           metadata:
             type: object
           spec:
-            description: MdaiReplaySpec defines the desired state of MdaiReplay.
+            description: spec defines the desired state of MdaiDal
             properties:
-              destination:
+              aws:
                 properties:
-                  otlpHttp:
+                  credentials:
                     properties:
-                      endpoint:
+                      accessKeyField:
+                        default: AWS_ACCESS_KEY_ID
+                        description: |-
+                          AccessKeyField is the key of the AWS credentials secret
+                          that holds the value for `AWS_ACCESS_KEY_ID`
+                        minLength: 1
                         type: string
-                    required:
-                    - endpoint
+                      secretKeyField:
+                        default: AWS_SECRET_ACCESS_KEY
+                        description: |-
+                          SecretKeyField is the key of the AWS credentials secret
+                          that holds the value for `AWS_SECRET_ACCESS_KEY`
+                        minLength: 1
+                        type: string
+                      secretName:
+                        default: aws-credentials
+                        description: |-
+                          SecretName is the name of the kubernetes secret that holds
+                          the AWS credentials
+                        minLength: 1
+                        type: string
                     type: object
-                type: object
-              endTime:
-                type: string
-              hubName:
-                type: string
-              ignoreSendingQueue:
-                default: false
-                description: 'IgnoreSendingQueue: Bypass checking the OTEL sending queue
-                  metric when finalizing the replay resource'
-                type: boolean
-              opampEndpoint:
-                type: string
-              resource:
-                properties:
-                  image:
+                  region:
+                    description: Region is the AWS Region
+                    pattern: ^[a-z]{2}(-[a-z]+)+-\d+$
                     type: string
+                required:
+                - region
                 type: object
-              source:
-                properties:
-                  aws:
-                    properties:
-                      awsAccessKeySecret:
-                        type: string
-                    type: object
-                  s3:
-                    properties:
-                      filePrefix:
-                        type: string
-                      s3Bucket:
-                        type: string
-                      s3Partition:
-                        enum:
-                        - minute
-                        - hour
-                        type: string
-                      s3Path:
-                        type: string
-                      s3Region:
-                        type: string
-                    required:
-                    - filePrefix
-                    - s3Bucket
-                    - s3Partition
-                    - s3Path
-                    - s3Region
-                    type: object
-                type: object
-              startTime:
-                type: string
-              statusVariableRef:
-                description: |-
-                  StatusVariableRef a variable that will be updated with the result of this replay upon success or failure.
-                  Should be referenced in a When VariableUpdated rule so that a CleanUpReplayAction can be triggered
-                type: string
-              telemetryType:
+              granularity:
+                description: Granularity is how often to partition the data
                 enum:
-                - logs
-                - metrics
-                - traces
+                - weekly
+                - daily
+                - hourly
+                - minutely
                 type: string
+              marshaler:
+                default: json
+                description: Marshaler of payload data
+                type: string
+              s3:
+                properties:
+                  bucket:
+                    description: Bucket is the name of the S3 bucket to write to
+                    maxLength: 63
+                    minLength: 3
+                    pattern: ^[a-z0-9][a-z0-9.-]*[a-z0-9]$
+                    type: string
+                  prefix:
+                    description: Prefix is the S3 bucket prefix (path)
+                    pattern: ^[A-Za-z0-9._/\-]*$
+                    type: string
+                required:
+                - bucket
+                type: object
+              usePayloadTs:
+                default: false
+                description: |-
+                  UsePayloadTS determines whether to partition by earliest payload
+                  timestamp instead of ingest time
+                type: boolean
             required:
-            - opampEndpoint
-            - statusVariableRef
+            - aws
+            - granularity
+            - s3
             type: object
           status:
-            description: MdaiReplayStatus defines the observed state of MdaiReplay.
+            description: status defines the observed state of MdaiDal
             properties:
               conditions:
-                description: Conditions store the status conditions of the Replay instances
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -174,13 +171,35 @@ spec:
                   - type
                   type: object
                 type: array
-              lastUpdatedTime:
-                description: |-
-                  Time when last Replay Configuration change was detected
-                  Right now it's updated on each reconcile, we have to skip when reconciliation detects no changes
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              endpoint:
+                description: Endpoint is the in-cluster address for the DAL service.
+                type: string
+              lastSyncedTime:
+                description: LastSyncedTime is the last time the controller successfully
+                  reconciled.
                 format: date-time
                 type: string
+              observedGeneration:
+                description: ObservedGeneration is the last generation the controller
+                  processed.
+                format: int64
+                type: integer
+              readyReplicas:
+                description: ReadyReplicas is the number of ready replicas for the DAL
+                  deployment.
+                format: int32
+                type: integer
+              replicas:
+                description: Replicas is the desired number of replicas for the DAL
+                  deployment.
+                format: int32
+                type: integer
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

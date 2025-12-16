@@ -4,6 +4,8 @@ package v1
 
 type MdaiCollectorExpansion interface{}
 
+type MdaiDalExpansion interface{}
+
 type MdaiHubExpansion interface{}
 
 type MdaiIngressExpansion interface{}
