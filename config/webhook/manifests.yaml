@@ -108,7 +108,7 @@ webhooks:
     - CREATE
     - UPDATE
     resources:
-    - mdaingresses
+    - mdaiingresses
   sideEffects: None
 - admissionReviewVersions:
   - v1
