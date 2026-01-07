@@ -5,8 +5,16 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
+	"github.com/decisiveai/mdai-data-core/helpers"
+	"golang.org/x/sync/errgroup"
+	"k8s.io/apimachinery/pkg/types"
+	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sigs.k8s.io/yaml"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -45,6 +53,8 @@ const (
 	useConsoleLogEncoderEnvVar     = "USE_CONSOLE_LOG_ENCODER"
 	otelSdkDisabledEnvVar          = "OTEL_SDK_DISABLED"
 	otelExporterOtlpEndpointEnvVar = "OTEL_EXPORTER_OTLP_ENDPOINT"
+
+	regexEnvVar = "\\${env:%s}"
 )
 
 var (
@@ -342,10 +352,50 @@ func main() {
 		gracefullyShutdownWithCode(1)
 	}
 
-	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		gracefullyShutdownWithCode(1)
+	g, ctx := errgroup.WithContext(ctx)
+
+	// Start servers
+	g.Go(func() error {
+		httpPort := helpers.GetEnvVariableWithDefault("HTTP_PORT", "8765")
+		setupLog.Info("Starting http server", "address", ":"+httpPort)
+
+		router := http.NewServeMux()
+
+		collectorHandler := CollectorHandler{
+			logger:    zapLogger,
+			k8sClient: mgr.GetClient(),
+		}
+		router.HandleFunc("GET /collectorConfig", collectorHandler.getConfig)
+
+		httpServer := &http.Server{
+			Addr:              ":" + httpPort,
+			Handler:           router,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       10 * time.Second,
+			WriteTimeout:      10 * time.Second,
+			IdleTimeout:       120 * time.Second,
+		}
+
+		if serverErr := httpServer.ListenAndServe(); serverErr != nil {
+			setupLog.Error(serverErr, "unable to start server")
+			return serverErr
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		setupLog.Info("starting manager")
+		if startErr := mgr.Start(ctrl.SetupSignalHandler()); startErr != nil {
+			setupLog.Error(startErr, "problem running manager")
+			gracefullyShutdownWithCode(1)
+			return startErr
+		}
+		return nil
+	})
+
+	if waitErr := g.Wait(); waitErr != nil {
+		setupLog.Error(waitErr, "problem running manager")
+		os.Exit(1)
 	}
 }
 
@@ -369,6 +419,75 @@ func setupWebhooksOrExplode(mgr manager.Manager, gracefullyShutdownWithCode func
 	if err := webhookmdaiv1.SetupMdaiReplayWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "MdaiReplay")
 		gracefullyShutdownWithCode(1)
+	}
+}
+
+type CollectorHandler struct {
+	logger    *zap.Logger
+	k8sClient client.Client
+}
+
+func (ch *CollectorHandler) getConfig(w http.ResponseWriter, r *http.Request) {
+	queryParams := r.URL.Query()
+	hubName := queryParams.Get("hubName")
+	collectorName := queryParams.Get("collectorName")
+	namespace := queryParams.Get("namespace")
+	// TODO: validate query params
+	ch.logger.Info("query params", zap.String("hubName", hubName), zap.String("collectorName", collectorName), zap.String("namespace", namespace))
+
+	collectorConfigmap := corev1.ConfigMap{}
+	collectorConfigmapName := types.NamespacedName{
+		Namespace: namespace,
+		Name:      collectorName,
+	}
+	err := ch.k8sClient.Get(r.Context(), collectorConfigmapName, &collectorConfigmap)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		ch.logger.Error("retrieving collector configmap", zap.Error(err))
+		return
+	}
+
+	hubVariablesConfigmap := corev1.ConfigMap{}
+	hubVariablesConfigmapName := types.NamespacedName{
+		Namespace: namespace,
+		Name:      hubName + "-variables",
+	}
+	err = ch.k8sClient.Get(r.Context(), hubVariablesConfigmapName, &hubVariablesConfigmap)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		ch.logger.Error("retrieving hub variables configmap", zap.Error(err))
+		return
+	}
+
+	// TODO: figure out how to update collector CR since config isn't coming from configmap anymore...
+	collectorConfigYAML := collectorConfigmap.Data["collector.yaml"]
+	for varName, value := range hubVariablesConfigmap.Data {
+		regex, compileErr := regexp.Compile(fmt.Sprintf(regexEnvVar, varName))
+		if compileErr != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			ch.logger.Error("compiling regex", zap.Error(compileErr))
+			return
+		}
+
+		// TODO: validate the varName exists in the collector config before attempting the replace
+		collectorConfigYAML = regex.ReplaceAllString(collectorConfigYAML, value)
+	}
+	// TODO: validate there are no more env vars to substitute in the collector config
+
+	yamlData, err := yaml.Marshal(collectorConfigYAML)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		ch.logger.Error("marshalling configmap data", zap.Error(err))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/x-yaml")
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(yamlData)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		ch.logger.Error("unable to write response", zap.Error(err))
+		return
 	}
 }
 
