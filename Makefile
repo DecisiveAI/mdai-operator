@@ -202,6 +202,9 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 HELMIFY ?= $(LOCALBIN)/helmify
 HELM_DOCS = $(LOCALBIN)/helm-docs
+HELM ?= $(LOCALBIN)/helm
+HELM_PLUGINS ?= $(LOCALBIN)/helm-plugins
+export HELM_PLUGINS
 YQ ?= $(LOCALBIN)/yq
 UNAME := $(shell uname -s)
 
@@ -215,6 +218,7 @@ ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -
 GOLANGCI_LINT_VERSION ?= v2.4
 HELMIFY_VERSION ?= v0.4.19
 HELM_DOCS_VERSION ?= v1.14.2
+HELM_VERSION ?= v3.19.4
 YQ_VERSION ?= v4.45.4
 
 YQ_VERSIONED := $(YQ)-$(YQ_VERSION)
@@ -257,13 +261,14 @@ helm-docs: $(HELM_DOCS) ## Download helm-docs locally if necessary.
 $(HELM_DOCS): $(LOCALBIN)
 	$(call go-install-tool,$(HELM_DOCS),github.com/norwoodj/helm-docs/cmd/helm-docs,$(HELM_DOCS_VERSION))
 
-PLUGIN_HELM_VALUES_SCHEMA_FOUND = $(shell helm plugin list | grep ^schema -c)
+$(HELM): $(LOCALBIN)
+	$(call go-install-tool,$(HELM),helm.sh/helm/v3/cmd/helm,$(HELM_VERSION))
 
 .PHONY: helm-values-schema-json-plugin
-helm-values-schema-json-plugin:
-ifeq ($(PLUGIN_HELM_VALUES_SCHEMA_FOUND), 0)
-	helm plugin install https://github.com/losisin/helm-values-schema-json.git
-endif
+helm-values-schema-json-plugin: $(HELM)
+	@mkdir -p $(HELM_PLUGINS)
+	@$(HELM) plugin list | grep -q '^schema' || \
+		$(HELM) plugin install https://github.com/losisin/helm-values-schema-json.git
 
 .PHONY: yq
 yq:
@@ -341,12 +346,12 @@ helm-update: manifests kustomize helmify helm-docs helm-values-schema-json-plugi
 	$(call vecho,"📝 Updating Helm chart docs...")
 	@$(HELM_DOCS) --skip-version-footer $(CHART_PATH) -f values.yaml -l warning
 	$(call vecho,"📐 Updating Helm chart JSON schema...")
-	@helm schema --values $(CHART_PATH)/values.yaml --output $(CHART_PATH)/values.schema.json
+	@$(HELM) schema --values $(CHART_PATH)/values.yaml --output $(CHART_PATH)/values.schema.json
 
 .PHONY: helm-package
 helm-package: helm-update
 	$(call vecho, "📦 Packaging Helm chart...")
-	@helm package -u --version $(CHART_VERSION) --app-version $(CHART_VERSION) $(CHART_DIR) > /dev/null
+	@$(HELM) package -u --version $(CHART_VERSION) --app-version $(CHART_VERSION) $(CHART_DIR) > /dev/null
 
 .PHONY: helm-publish
 helm-publish: helm-package
@@ -359,7 +364,7 @@ helm-publish: helm-package
 
 	$(call vecho,"📤 Copying and indexing chart...")
 	@cd $(CLONE_DIR) && \
-		helm repo index $(REPO_DIR) --merge index.yaml && \
+		$(HELM) repo index $(REPO_DIR) --merge index.yaml && \
 		mv $(REPO_DIR)/$(CHART_PACKAGE) $(CLONE_DIR)/ && \
 		mv $(REPO_DIR)/index.yaml $(CLONE_DIR)/
 
