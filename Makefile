@@ -218,7 +218,7 @@ ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -
 GOLANGCI_LINT_VERSION ?= v2.4
 HELMIFY_VERSION ?= v0.4.19
 HELM_DOCS_VERSION ?= v1.14.2
-HELM_VERSION ?= v3.19.0
+HELM_VERSION ?= v3.19.4
 YQ_VERSION ?= v4.45.4
 
 YQ_VERSIONED := $(YQ)-$(YQ_VERSION)
