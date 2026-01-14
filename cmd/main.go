@@ -361,9 +361,15 @@ func main() {
 
 		router := http.NewServeMux()
 
+		k8sClient, clientErr := client.New(ctrl.GetConfigOrDie(), client.Options{Scheme: scheme})
+		if clientErr != nil {
+			setupLog.Error(clientErr, "unable to create k8s client")
+			return clientErr
+		}
+
 		collectorHandler := CollectorHandler{
 			logger:    zapLogger,
-			k8sClient: mgr.GetClient(),
+			k8sClient: k8sClient,
 		}
 		router.HandleFunc("GET /collectorConfig", collectorHandler.getConfig)
 
