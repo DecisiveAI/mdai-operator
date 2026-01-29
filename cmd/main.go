@@ -7,6 +7,9 @@ import (
 	"flag"
 	"fmt"
 	"github.com/decisiveai/mdai-data-core/helpers"
+	"github.com/decisiveai/mdai-data-core/opamp"
+	"github.com/google/uuid"
+	"github.com/open-telemetry/opamp-go/protobufs"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/types"
 	"net/http"
@@ -29,6 +32,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+
+	opampserver "github.com/open-telemetry/opamp-go/server"
+	opamptypes "github.com/open-telemetry/opamp-go/server/types"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/mdai-operator/internal/controller"
@@ -274,9 +280,10 @@ func main() {
 	}
 
 	if err = (&controller.MdaiHubReconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		ZapLogger: zapLogger,
+		Client:                 mgr.GetClient(),
+		Scheme:                 mgr.GetScheme(),
+		ZapLogger:              zapLogger,
+		AgentConnectionManager: opamp.NewAgentConnectionManager(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MdaiHub")
 		gracefullyShutdownWithCode(1)
@@ -390,6 +397,52 @@ func main() {
 	})
 
 	g.Go(func() error {
+		opampServer := opampserver.New(opamp.NewLoggerFromZap(zapLogger, "opamp-server"))
+		opampConnectionManager := opamp.NewAgentConnectionManager()
+
+		settings := opampserver.StartSettings{
+			ListenEndpoint: "0.0.0.0:4320",
+			Settings: opampserver.Settings{
+				Callbacks: opamptypes.Callbacks{
+					OnConnecting: func(request *http.Request) opamptypes.ConnectionResponse {
+						return opamptypes.ConnectionResponse{
+							Accept: true,
+							ConnectionCallbacks: opamptypes.ConnectionCallbacks{
+								OnConnected: func(ctx context.Context, conn opamptypes.Connection) {
+									// TODO: switch to debug
+									setupLog.Info("Connected to Opamp Agent (collector)")
+								},
+								OnMessage: func(ctx context.Context, conn opamptypes.Connection, message *protobufs.AgentToServer) *protobufs.ServerToAgent {
+									// TODO: switch to debug
+									instanceID, uuidErr := uuid.FromBytes(message.GetInstanceUid())
+									if uuidErr != nil {
+										setupLog.Error(uuidErr, "Failed to parse instance uuid")
+									}
+									setupLog.Info("Message from collector agent", "ID", instanceID.String())
+
+									opampConnectionManager.AddConnection(conn, string(message.GetInstanceUid()))
+									// TODO: handle message from agent
+									return &protobufs.ServerToAgent{
+										InstanceUid: message.GetInstanceUid(),
+									}
+								},
+								OnConnectionClose: func(conn opamptypes.Connection) {
+									// TODO: switch to debug
+									setupLog.Info("Disconnected from Opamp Server")
+									opampConnectionManager.RemoveConnection(conn)
+								},
+							},
+						}
+					},
+				},
+			},
+		}
+
+		if err = opampServer.Start(settings); err != nil {
+			setupLog.Error(err, "failed to start opamp server")
+		}
+		setupLog.Info("opamp server started")
+
 		setupLog.Info("starting manager")
 		if startErr := mgr.Start(ctrl.SetupSignalHandler()); startErr != nil {
 			setupLog.Error(startErr, "problem running manager")
