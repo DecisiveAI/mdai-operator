@@ -5,8 +5,19 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
+	"github.com/decisiveai/mdai-data-core/helpers"
+	"github.com/decisiveai/mdai-data-core/opamp"
+	"github.com/google/uuid"
+	"github.com/open-telemetry/opamp-go/protobufs"
+	"golang.org/x/sync/errgroup"
+	"k8s.io/apimachinery/pkg/types"
+	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sigs.k8s.io/yaml"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -21,6 +32,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+
+	opampserver "github.com/open-telemetry/opamp-go/server"
+	opamptypes "github.com/open-telemetry/opamp-go/server/types"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/mdai-operator/internal/controller"
@@ -45,6 +59,8 @@ const (
 	useConsoleLogEncoderEnvVar     = "USE_CONSOLE_LOG_ENCODER"
 	otelSdkDisabledEnvVar          = "OTEL_SDK_DISABLED"
 	otelExporterOtlpEndpointEnvVar = "OTEL_EXPORTER_OTLP_ENDPOINT"
+
+	regexEnvVar = "\\${env:%s}"
 )
 
 var (
@@ -264,9 +280,10 @@ func main() {
 	}
 
 	if err = (&controller.MdaiHubReconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		ZapLogger: zapLogger,
+		Client:                 mgr.GetClient(),
+		Scheme:                 mgr.GetScheme(),
+		ZapLogger:              zapLogger,
+		AgentConnectionManager: opamp.NewAgentConnectionManager(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "MdaiHub")
 		gracefullyShutdownWithCode(1)
@@ -349,10 +366,102 @@ func main() {
 		gracefullyShutdownWithCode(1)
 	}
 
-	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		gracefullyShutdownWithCode(1)
+	g, ctx := errgroup.WithContext(ctx)
+
+	// Start servers
+	g.Go(func() error {
+		httpPort := helpers.GetEnvVariableWithDefault("HTTP_PORT", "8765")
+		setupLog.Info("Starting http server", "address", ":"+httpPort)
+
+		router := http.NewServeMux()
+
+		k8sClient, clientErr := client.New(ctrl.GetConfigOrDie(), client.Options{Scheme: scheme})
+		if clientErr != nil {
+			setupLog.Error(clientErr, "unable to create k8s client")
+			return clientErr
+		}
+
+		collectorHandler := CollectorHandler{
+			logger:    zapLogger,
+			k8sClient: k8sClient,
+		}
+		router.HandleFunc("GET /collectorConfig", collectorHandler.getConfig)
+
+		httpServer := &http.Server{
+			Addr:              ":" + httpPort,
+			Handler:           router,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       10 * time.Second,
+			WriteTimeout:      10 * time.Second,
+			IdleTimeout:       120 * time.Second,
+		}
+
+		if serverErr := httpServer.ListenAndServe(); serverErr != nil {
+			setupLog.Error(serverErr, "unable to start server")
+			return serverErr
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		opampServer := opampserver.New(opamp.NewLoggerFromZap(zapLogger, "opamp-server"))
+		opampConnectionManager := opamp.NewAgentConnectionManager()
+
+		settings := opampserver.StartSettings{
+			ListenEndpoint: "0.0.0.0:4320",
+			Settings: opampserver.Settings{
+				Callbacks: opamptypes.Callbacks{
+					OnConnecting: func(request *http.Request) opamptypes.ConnectionResponse {
+						return opamptypes.ConnectionResponse{
+							Accept: true,
+							ConnectionCallbacks: opamptypes.ConnectionCallbacks{
+								OnConnected: func(ctx context.Context, conn opamptypes.Connection) {
+									// TODO: switch to debug
+									setupLog.Info("Connected to Opamp Agent (collector)")
+								},
+								OnMessage: func(ctx context.Context, conn opamptypes.Connection, message *protobufs.AgentToServer) *protobufs.ServerToAgent {
+									// TODO: switch to debug
+									instanceID, uuidErr := uuid.FromBytes(message.GetInstanceUid())
+									if uuidErr != nil {
+										setupLog.Error(uuidErr, "Failed to parse instance uuid")
+									}
+									setupLog.Info("Message from collector agent", "ID", instanceID.String())
+
+									opampConnectionManager.AddConnection(conn, string(message.GetInstanceUid()))
+									// TODO: handle message from agent
+									return &protobufs.ServerToAgent{
+										InstanceUid: message.GetInstanceUid(),
+									}
+								},
+								OnConnectionClose: func(conn opamptypes.Connection) {
+									// TODO: switch to debug
+									setupLog.Info("Disconnected from Opamp Server")
+									opampConnectionManager.RemoveConnection(conn)
+								},
+							},
+						}
+					},
+				},
+			},
+		}
+
+		if err = opampServer.Start(settings); err != nil {
+			setupLog.Error(err, "failed to start opamp server")
+		}
+		setupLog.Info("opamp server started")
+
+		setupLog.Info("starting manager")
+		if startErr := mgr.Start(ctrl.SetupSignalHandler()); startErr != nil {
+			setupLog.Error(startErr, "problem running manager")
+			gracefullyShutdownWithCode(1)
+			return startErr
+		}
+		return nil
+	})
+
+	if waitErr := g.Wait(); waitErr != nil {
+		setupLog.Error(waitErr, "problem running manager")
+		os.Exit(1)
 	}
 }
 
@@ -376,6 +485,75 @@ func setupWebhooksOrExplode(mgr manager.Manager, gracefullyShutdownWithCode func
 	if err := webhookmdaiv1.SetupMdaiReplayWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "MdaiReplay")
 		gracefullyShutdownWithCode(1)
+	}
+}
+
+type CollectorHandler struct {
+	logger    *zap.Logger
+	k8sClient client.Client
+}
+
+func (ch *CollectorHandler) getConfig(w http.ResponseWriter, r *http.Request) {
+	queryParams := r.URL.Query()
+	hubName := queryParams.Get("hubName")
+	collectorName := queryParams.Get("collectorName")
+	namespace := queryParams.Get("namespace")
+	// TODO: validate query params
+	ch.logger.Info("query params", zap.String("hubName", hubName), zap.String("collectorName", collectorName), zap.String("namespace", namespace))
+
+	collectorConfigmap := corev1.ConfigMap{}
+	collectorConfigmapName := types.NamespacedName{
+		Namespace: namespace,
+		Name:      collectorName,
+	}
+	err := ch.k8sClient.Get(r.Context(), collectorConfigmapName, &collectorConfigmap)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		ch.logger.Error("retrieving collector configmap", zap.Error(err))
+		return
+	}
+
+	hubVariablesConfigmap := corev1.ConfigMap{}
+	hubVariablesConfigmapName := types.NamespacedName{
+		Namespace: namespace,
+		Name:      hubName + "-variables",
+	}
+	err = ch.k8sClient.Get(r.Context(), hubVariablesConfigmapName, &hubVariablesConfigmap)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		ch.logger.Error("retrieving hub variables configmap", zap.Error(err))
+		return
+	}
+
+	// TODO: figure out how to update collector CR since config isn't coming from configmap anymore...
+	collectorConfigYAML := collectorConfigmap.Data["collector.yaml"]
+	for varName, value := range hubVariablesConfigmap.Data {
+		regex, compileErr := regexp.Compile(fmt.Sprintf(regexEnvVar, varName))
+		if compileErr != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			ch.logger.Error("compiling regex", zap.Error(compileErr))
+			return
+		}
+
+		// TODO: validate the varName exists in the collector config before attempting the replace
+		collectorConfigYAML = regex.ReplaceAllString(collectorConfigYAML, value)
+	}
+	// TODO: validate there are no more env vars to substitute in the collector config
+
+	yamlData, err := yaml.Marshal(collectorConfigYAML)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		ch.logger.Error("marshalling configmap data", zap.Error(err))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/x-yaml")
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(yamlData)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		ch.logger.Error("unable to write response", zap.Error(err))
+		return
 	}
 }
 
