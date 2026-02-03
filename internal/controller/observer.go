@@ -253,61 +253,21 @@ func (c ObserverAdapter) getObserverCollectorConfig(observers []mdaiv1.Observer,
 			Set("max_recv_msg_size_mib", *grpcReceiverMaxMsgSize)
 	}
 
-	dataVolumeReceivers := make([]string, 0)
+	receivers := make([]string, 0)
 
 	processors := config.MustMap("processors")
 	connectors := config.MustMap("connectors")
 	pipelines := config.MustMap("service").MustMap("pipelines")
 	telemetry := config.MustMap("service").MustMap("telemetry")
 
-	for _, obs := range observers {
-		observerName := obs.Name
-
-		groupByKey := "groupbyattrs/" + observerName
-		processors.Set(groupByKey, map[string]any{
-			"keys": obs.LabelResourceAttributes,
-		})
-
-		dvKey := "datavolume/" + observerName
-		dvSpec := map[string]any{
-			"label_resource_attributes": obs.LabelResourceAttributes,
-		}
-		if obs.CountMetricName != nil {
-			dvSpec["count_metric_name"] = *obs.CountMetricName
-		}
-		if obs.BytesMetricName != nil {
-			dvSpec["bytes_metric_name"] = *obs.BytesMetricName
-		}
-		connectors.Set(dvKey, dvSpec)
-
-		filterName := ""
-		if obs.Filter != nil {
-			filterName = "filter/" + observerName
-			config.MustMap("processors").Set(filterName, getObserverFilterProcessorConfig(obs.Filter))
-		}
-
-		var pipelineProcessors []string
-		if filterName != "" {
-			pipelineProcessors = append(pipelineProcessors, filterName)
-		}
-		pipelineProcessors = append(pipelineProcessors, "batch", groupByKey)
-
-		pipeline := map[string]any{
-			"receivers":  []string{"otlp"},
-			"processors": pipelineProcessors,
-			"exporters":  []string{dvKey},
-		}
-
-		pipelines.Set("logs/"+observerName, pipeline)
-		pipelines.Set("traces/"+observerName, pipeline)
-
-		dataVolumeReceivers = append(dataVolumeReceivers, dvKey)
-	}
+	getObserverCollectorConfigDataVolume(config, observers, receivers, processors, connectors, pipelines)
+	getObserverCollectorConfigSpanMetrics(config, observers, receivers, processors, connectors, pipelines)
 
 	pipelines.
 		Set("metrics/observeroutput",
 			map[string]any{
-				"receivers":  dataVolumeReceivers,
+				"receivers": receivers,
+				// SOBODMI: might be not needed for traces ?
 				"processors": []string{"deltatocumulative"},
 				"exporters":  []string{"prometheus"},
 			},
@@ -349,4 +309,115 @@ func getObserverFilterProcessorConfig(filter *mdaiv1.ObserverFilter) map[string]
 	// TODO: Add metrics and trace filters
 
 	return filterMap
+}
+
+func getObserverCollectorConfigDataVolume(
+	config builder.ConfigBlock,
+	observers []mdaiv1.Observer,
+	receivers []string,
+	processors builder.ConfigBlock,
+	connectors builder.ConfigBlock,
+	pipelines builder.ConfigBlock,
+) {
+	for _, obs := range observers {
+		if obs.Type != mdaiv1.DATA_VOLUME {
+			continue
+		}
+		observerName := obs.Name
+
+		groupByKey := "groupbyattrs/" + observerName
+		processors.Set(groupByKey, map[string]any{
+			"keys": obs.LabelResourceAttributes,
+		})
+
+		dvKey := "datavolume/" + observerName
+		dvSpec := map[string]any{
+			"label_resource_attributes": obs.LabelResourceAttributes,
+		}
+		if obs.CountMetricName != nil {
+			dvSpec["count_metric_name"] = *obs.CountMetricName
+		}
+		if obs.BytesMetricName != nil {
+			dvSpec["bytes_metric_name"] = *obs.BytesMetricName
+		}
+		connectors.Set(dvKey, dvSpec)
+
+		filterName := ""
+		if obs.Filter != nil {
+			filterName = "filter/" + observerName
+			config.MustMap("processors").Set(filterName, getObserverFilterProcessorConfig(obs.Filter))
+		}
+
+		var pipelineProcessors []string
+		if filterName != "" {
+			pipelineProcessors = append(pipelineProcessors, filterName)
+		}
+		pipelineProcessors = append(pipelineProcessors, "batch", groupByKey)
+
+		pipeline := map[string]any{
+			"receivers":  []string{"otlp"},
+			"processors": pipelineProcessors,
+			"exporters":  []string{dvKey},
+		}
+
+		pipelines.Set("logs/"+observerName, pipeline)
+		pipelines.Set("traces/"+observerName, pipeline)
+
+		receivers = append(receivers, dvKey)
+	}
+}
+
+func getObserverCollectorConfigSpanMetrics(
+	config builder.ConfigBlock,
+	observers []mdaiv1.Observer,
+	receivers []string,
+	processors builder.ConfigBlock,
+	connectors builder.ConfigBlock,
+	pipelines builder.ConfigBlock,
+) {
+
+	for _, obs := range observers {
+		if obs.Type != mdaiv1.SPAN_METRICS {
+			continue
+		}
+
+		observerName := obs.Name
+
+		groupByKey := "groupbyattrs/" + observerName
+		processors.Set(groupByKey, map[string]any{
+			"keys": obs.LabelResourceAttributes,
+		})
+
+		var dvKey string
+		var dvSpec map[string]any
+
+		dvKey = "spanmetrics/" + observerName
+		dvSpec = map[string]any{
+			"label_resource_attributes": obs.LabelResourceAttributes,
+		}
+		connectors.Set(dvKey, dvSpec)
+
+		receivers = append(receivers, dvKey)
+
+		filterName := ""
+		if obs.Filter != nil {
+			filterName = "filter/" + observerName
+			config.MustMap("processors").Set(filterName, getObserverFilterProcessorConfig(obs.Filter))
+		}
+
+		var pipelineProcessors []string
+		if filterName != "" {
+			pipelineProcessors = append(pipelineProcessors, filterName)
+		}
+		pipelineProcessors = append(pipelineProcessors, "batch", groupByKey)
+
+		pipeline := map[string]any{
+			"receivers":  []string{"otlp"},
+			"processors": pipelineProcessors,
+			"exporters":  []string{dvKey},
+		}
+
+		pipelines.Set("traces/"+observerName, pipeline)
+
+	}
 }

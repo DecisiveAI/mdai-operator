@@ -181,9 +181,15 @@ spec:
                       type: array
                     name:
                       type: string
+                    type:
+                      enum:
+                      - dataVolume
+                      - spanMetrics
+                      type: string
                   required:
                   - labelResourceAttributes
                   - name
+                  - type
                   type: object
                 type: array
             type: object

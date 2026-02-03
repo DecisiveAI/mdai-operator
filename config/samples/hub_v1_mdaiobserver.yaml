@@ -9,21 +9,25 @@ metadata:
 spec:
   observers:
     - name: watcher1
+      type: dataVolume
       labelResourceAttributes:
         - service.name
       countMetricName: mdai_watcher_one_count_total
       bytesMetricName: mdai_watcher_one_bytes_total
     - name: watcher2
+      type: dataVolume
       labelResourceAttributes:
         - team
         - log_level
       countMetricName: mdai_watcher_two_count_total
     - name: watcher3
+      type: dataVolume
       labelResourceAttributes:
         - region
         - log_level
       bytesMetricName: mdai_watcher_three_count_total
     - name: watcher4
+      type: dataVolume
       labelResourceAttributes:
         - service.name
         - team

@@ -5,9 +5,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type ObserverType string
+
+const (
+	DATA_VOLUME  ObserverType = "dataVolume"
+	SPAN_METRICS ObserverType = "spanMetrics"
+)
+
 type Observer struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
+	// +kubebuilder:validation:Required
+	Type ObserverType `json:"type" yaml:"type"`
 	// +kubebuilder:validation:Required
 	LabelResourceAttributes []string `json:"labelResourceAttributes" yaml:"labelResourceAttributes"`
 	// +optional

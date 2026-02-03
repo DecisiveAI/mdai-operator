@@ -88,8 +88,10 @@ func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiob
 		return append(newWarnings, "Observers are not specified"), nil
 	}
 	for _, observer := range observers {
-		if observer.BytesMetricName == nil && observer.CountMetricName == nil {
-			return newWarnings, fmt.Errorf("observer %s must have either a bytesMetricName or countMetricName", observer.Name)
+		if observer.Type == mdaiv1.DATA_VOLUME {
+			if observer.BytesMetricName == nil && observer.CountMetricName == nil {
+				return newWarnings, fmt.Errorf("observer %s must have either a bytesMetricName or countMetricName", observer.Name)
+			}
 		}
 		if len(observer.LabelResourceAttributes) == 0 {
 			newWarnings = append(newWarnings, "observer "+observer.Name+" does not define any labels to apply to counts")
