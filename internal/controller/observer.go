@@ -260,8 +260,8 @@ func (c ObserverAdapter) getObserverCollectorConfig(observers []mdaiv1.Observer,
 	pipelines := config.MustMap("service").MustMap("pipelines")
 	telemetry := config.MustMap("service").MustMap("telemetry")
 
-	getObserverCollectorConfigDataVolume(config, observers, receivers, processors, connectors, pipelines)
-	getObserverCollectorConfigSpanMetrics(config, observers, receivers, processors, connectors, pipelines)
+	getObserverCollectorConfigDataVolume(config, observers, &receivers, processors, connectors, pipelines)
+	getObserverCollectorConfigSpanMetrics(config, observers, &receivers, processors, connectors, pipelines)
 
 	pipelines.
 		Set("metrics/observeroutput",
@@ -314,7 +314,7 @@ func getObserverFilterProcessorConfig(filter *mdaiv1.ObserverFilter) map[string]
 func getObserverCollectorConfigDataVolume(
 	config builder.ConfigBlock,
 	observers []mdaiv1.Observer,
-	receivers []string,
+	receivers *[]string,
 	processors builder.ConfigBlock,
 	connectors builder.ConfigBlock,
 	pipelines builder.ConfigBlock,
@@ -363,14 +363,14 @@ func getObserverCollectorConfigDataVolume(
 		pipelines.Set("logs/"+observerName, pipeline)
 		pipelines.Set("traces/"+observerName, pipeline)
 
-		receivers = append(receivers, dvKey)
+		*receivers = append(*receivers, dvKey)
 	}
 }
 
 func getObserverCollectorConfigSpanMetrics(
 	config builder.ConfigBlock,
 	observers []mdaiv1.Observer,
-	receivers []string,
+	receivers *[]string,
 	processors builder.ConfigBlock,
 	connectors builder.ConfigBlock,
 	pipelines builder.ConfigBlock,
@@ -397,7 +397,7 @@ func getObserverCollectorConfigSpanMetrics(
 		}
 		connectors.Set(dvKey, dvSpec)
 
-		receivers = append(receivers, dvKey)
+		*receivers = append(*receivers, dvKey)
 
 		filterName := ""
 		if obs.Filter != nil {
