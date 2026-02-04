@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "deployment.fullname" . }}-controller-manager-opamp
+  name: {{ include "deployment.fullname" . }}-opamp
   labels:
     control-plane: controller-manager
   {{- include "deployment.labels" . | nindent 4 }}
