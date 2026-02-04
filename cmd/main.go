@@ -50,8 +50,6 @@ const (
 	useConsoleLogEncoderEnvVar     = "USE_CONSOLE_LOG_ENCODER"
 	otelSdkDisabledEnvVar          = "OTEL_SDK_DISABLED"
 	otelExporterOtlpEndpointEnvVar = "OTEL_EXPORTER_OTLP_ENDPOINT"
-
-	regexEnvVar = "\\${env:%s}"
 )
 
 var (
