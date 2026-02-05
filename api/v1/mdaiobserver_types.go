@@ -2,6 +2,7 @@ package v1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,6 +26,9 @@ type Observer struct {
 	BytesMetricName *string `json:"bytesMetricName,omitempty" yaml:"bytesMetricName,omitempty"`
 	// +optional
 	Filter *ObserverFilter `json:"filter,omitempty" yaml:"filter,omitempty"`
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	SpanMetricsConnectorConfig *apiextensionsv1.JSON `json:"spanMetricsConnectorConfig,omitempty" yaml:"spanMetricsConnectorConfig,omitempty"`
 }
 
 type ObserverLogsFilter struct {

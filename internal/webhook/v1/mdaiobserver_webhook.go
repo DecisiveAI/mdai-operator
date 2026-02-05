@@ -2,8 +2,11 @@ package v1
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
+	"github.com/go-viper/mapstructure/v2"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/connector/spanmetricsconnector"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -88,13 +91,57 @@ func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiob
 		return append(newWarnings, "Observers are not specified"), nil
 	}
 	for _, observer := range observers {
-		if observer.Type == mdaiv1.DATA_VOLUME {
-			if observer.BytesMetricName == nil && observer.CountMetricName == nil {
-				return newWarnings, fmt.Errorf("observer %s must have either a bytesMetricName or countMetricName", observer.Name)
+
+		switch observer.Type {
+		case mdaiv1.SPAN_METRICS:
+			{
+				var configJsonData map[string]any
+				if err := json.Unmarshal(observer.SpanMetricsConnectorConfig.Raw, &configJsonData); err != nil {
+					return newWarnings, fmt.Errorf("can not marshall observer %s SpanMetricsConnectorConfig to json", observer.Name)
+				}
+
+				var spanmetricsConfig spanmetricsconnector.Config
+
+				var md mapstructure.Metadata
+
+				dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+					TagName:          "mapstructure",
+					Result:           &spanmetricsConfig,
+					Metadata:         &md,
+					ErrorUnused:      true,
+					WeaklyTypedInput: true,
+					DecodeHook: mapstructure.ComposeDecodeHookFunc(
+						mapstructure.StringToTimeDurationHookFunc(),
+					),
+				})
+				if err != nil {
+					return newWarnings, fmt.Errorf("failed to build mapstructure decoder for %s", observer.Name)
+				}
+
+				if err := dec.Decode(configJsonData); err != nil {
+					if len(md.Unused) > 0 {
+						return newWarnings, fmt.Errorf("unknown spanMetricsConnectorConfig fields: %v: %w", md.Unused, err)
+					}
+					return newWarnings, fmt.Errorf("invalid spanMetricsConnectorConfig: %w", err)
+				}
+
+				if err := spanmetricsConfig.Validate(); err != nil {
+					return newWarnings, fmt.Errorf("validate SpanMetricsConnectorConfig for observer %s failed, Error: %s", observer.Name, err.Error())
+				}
+
 			}
-		}
-		if len(observer.LabelResourceAttributes) == 0 {
-			newWarnings = append(newWarnings, "observer "+observer.Name+" does not define any labels to apply to counts")
+		case mdaiv1.DATA_VOLUME:
+			{
+				if observer.BytesMetricName == nil && observer.CountMetricName == nil {
+					return newWarnings, fmt.Errorf("observer %s must have either a bytesMetricName or countMetricName", observer.Name)
+				}
+				if len(observer.LabelResourceAttributes) == 0 {
+					newWarnings = append(newWarnings, "observer "+observer.Name+" does not define any labels to apply to counts")
+				}
+				if observer.SpanMetricsConnectorConfig != nil {
+					return newWarnings, fmt.Errorf("observer %s of type %s can not have spanMetricsConnectorConfig section", observer.Name, observer.Type)
+				}
+			}
 		}
 	}
 	return newWarnings, nil

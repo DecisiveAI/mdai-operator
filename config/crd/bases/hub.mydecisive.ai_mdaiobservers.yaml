@@ -181,10 +181,9 @@ spec:
                       type: array
                     name:
                       type: string
+                    spanMetricsConnectorConfig:
+                      x-kubernetes-preserve-unknown-fields: true
                     type:
-                      enum:
-                      - dataVolume
-                      - spanMetrics
                       type: string
                   required:
                   - labelResourceAttributes
