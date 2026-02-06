@@ -3,10 +3,13 @@ package controller
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/mdai-operator/internal/builder"
+	"github.com/go-viper/mapstructure/v2"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/connector/spanmetricsconnector"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -261,13 +264,14 @@ func (c ObserverAdapter) getObserverCollectorConfig(observers []mdaiv1.Observer,
 	telemetry := config.MustMap("service").MustMap("telemetry")
 
 	getObserverCollectorConfigDataVolume(observers, &receivers, processors, connectors, pipelines)
-	getObserverCollectorConfigSpanMetrics(observers, &receivers, processors, connectors, pipelines)
+	if err := getObserverCollectorConfigSpanMetrics(observers, &receivers, processors, connectors, pipelines); err != nil {
+		return "", err
+	}
 
 	pipelines.
 		Set("metrics/observeroutput",
 			map[string]any{
-				"receivers": receivers,
-				// SOBODMI: might be not needed for traces ?
+				"receivers":  receivers,
 				"processors": []string{"deltatocumulative"},
 				"exporters":  []string{"prometheus"},
 			},
@@ -380,7 +384,7 @@ func getObserverCollectorConfigSpanMetrics(
 	processors builder.ConfigBlock,
 	connectors builder.ConfigBlock,
 	pipelines builder.ConfigBlock,
-) {
+) error {
 
 	for _, obs := range observers {
 		if obs.Type != mdaiv1.SPAN_METRICS {
@@ -395,8 +399,9 @@ func getObserverCollectorConfigSpanMetrics(
 		})
 
 		dvKey := "spanmetrics/" + observerName
-		dvSpec := map[string]any{
-			"label_resource_attributes": obs.LabelResourceAttributes,
+		dvSpec, err := ParseSpanMetricsConfig(&obs)
+		if err != nil {
+			return err
 		}
 		connectors.Set(dvKey, dvSpec)
 
@@ -408,4 +413,43 @@ func getObserverCollectorConfigSpanMetrics(
 		pipelines.Set("traces/"+observerName, pipeline)
 
 	}
+	return nil
+}
+
+func ParseSpanMetricsConfig(observer *mdaiv1.Observer) (spanmetricsconnector.Config, error) {
+	var configJsonData map[string]any
+	if err := json.Unmarshal(observer.SpanMetricsConnectorConfig.Raw, &configJsonData); err != nil {
+		return spanmetricsconnector.Config{}, fmt.Errorf("can not marshall observer %s SpanMetricsConnectorConfig to json", observer.Name)
+	}
+
+	var spanmetricsConfig spanmetricsconnector.Config
+
+	var md mapstructure.Metadata
+
+	dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		TagName:          "mapstructure",
+		Result:           &spanmetricsConfig,
+		Metadata:         &md,
+		ErrorUnused:      true,
+		WeaklyTypedInput: true,
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+		),
+	})
+	if err != nil {
+		return spanmetricsconnector.Config{}, fmt.Errorf("failed to build mapstructure decoder for %s", observer.Name)
+	}
+
+	if err := dec.Decode(configJsonData); err != nil {
+		if len(md.Unused) > 0 {
+			return spanmetricsconnector.Config{}, fmt.Errorf("unknown spanMetricsConnectorConfig fields: %v: %w", md.Unused, err)
+		}
+		return spanmetricsconnector.Config{}, fmt.Errorf("invalid spanMetricsConnectorConfig: %w", err)
+	}
+
+	if err := spanmetricsConfig.Validate(); err != nil {
+		return spanmetricsconnector.Config{}, fmt.Errorf("validate SpanMetricsConnectorConfig for observer %s failed, Error: %s", observer.Name, err.Error())
+	}
+
+	return spanmetricsConfig, nil
 }

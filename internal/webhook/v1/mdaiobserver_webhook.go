@@ -95,40 +95,7 @@ func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiob
 		switch observer.Type {
 		case mdaiv1.SPAN_METRICS:
 			{
-				var configJsonData map[string]any
-				if err := json.Unmarshal(observer.SpanMetricsConnectorConfig.Raw, &configJsonData); err != nil {
-					return newWarnings, fmt.Errorf("can not marshall observer %s SpanMetricsConnectorConfig to json", observer.Name)
-				}
-
-				var spanmetricsConfig spanmetricsconnector.Config
-
-				var md mapstructure.Metadata
-
-				dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-					TagName:          "mapstructure",
-					Result:           &spanmetricsConfig,
-					Metadata:         &md,
-					ErrorUnused:      true,
-					WeaklyTypedInput: true,
-					DecodeHook: mapstructure.ComposeDecodeHookFunc(
-						mapstructure.StringToTimeDurationHookFunc(),
-					),
-				})
-				if err != nil {
-					return newWarnings, fmt.Errorf("failed to build mapstructure decoder for %s", observer.Name)
-				}
-
-				if err := dec.Decode(configJsonData); err != nil {
-					if len(md.Unused) > 0 {
-						return newWarnings, fmt.Errorf("unknown spanMetricsConnectorConfig fields: %v: %w", md.Unused, err)
-					}
-					return newWarnings, fmt.Errorf("invalid spanMetricsConnectorConfig: %w", err)
-				}
-
-				if err := spanmetricsConfig.Validate(); err != nil {
-					return newWarnings, fmt.Errorf("validate SpanMetricsConnectorConfig for observer %s failed, Error: %s", observer.Name, err.Error())
-				}
-
+				return newWarnings, ParseSpanMetricsConfig(&observer)
 			}
 		case mdaiv1.DATA_VOLUME:
 			{
@@ -145,4 +112,42 @@ func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiob
 		}
 	}
 	return newWarnings, nil
+}
+
+func ParseSpanMetricsConfig(observer *mdaiv1.Observer) error {
+	var configJsonData map[string]any
+	if err := json.Unmarshal(observer.SpanMetricsConnectorConfig.Raw, &configJsonData); err != nil {
+		return fmt.Errorf("can not marshall observer %s SpanMetricsConnectorConfig to json", observer.Name)
+	}
+
+	var spanmetricsConfig spanmetricsconnector.Config
+
+	var md mapstructure.Metadata
+
+	dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		TagName:          "mapstructure",
+		Result:           &spanmetricsConfig,
+		Metadata:         &md,
+		ErrorUnused:      true,
+		WeaklyTypedInput: true,
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+		),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to build mapstructure decoder for %s", observer.Name)
+	}
+
+	if err := dec.Decode(configJsonData); err != nil {
+		if len(md.Unused) > 0 {
+			return fmt.Errorf("unknown spanMetricsConnectorConfig fields: %v: %w", md.Unused, err)
+		}
+		return fmt.Errorf("invalid spanMetricsConnectorConfig: %w", err)
+	}
+
+	if err := spanmetricsConfig.Validate(); err != nil {
+		return fmt.Errorf("validate SpanMetricsConnectorConfig for observer %s failed, Error: %s", observer.Name, err.Error())
+	}
+
+	return nil
 }
