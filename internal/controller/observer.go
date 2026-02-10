@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/decisiveai/mdai-operator/internal/builder"
@@ -416,10 +417,10 @@ func getObserverCollectorConfigSpanMetrics(
 	return nil
 }
 
-func ParseSpanMetricsConfig(observer *mdaiv1.Observer) (spanmetricsconnector.Config, error) {
+func ParseSpanMetricsConfig(observer *mdaiv1.Observer) (map[string]any, error) {
 	var configJsonData map[string]any
 	if err := json.Unmarshal(observer.SpanMetricsConnectorConfig.Raw, &configJsonData); err != nil {
-		return spanmetricsconnector.Config{}, fmt.Errorf("can not marshall observer %s SpanMetricsConnectorConfig to json", observer.Name)
+		return nil, fmt.Errorf("can not marshall observer %s SpanMetricsConnectorConfig to json", observer.Name)
 	}
 
 	var spanmetricsConfig spanmetricsconnector.Config
@@ -432,24 +433,29 @@ func ParseSpanMetricsConfig(observer *mdaiv1.Observer) (spanmetricsconnector.Con
 		Metadata:         &md,
 		ErrorUnused:      true,
 		WeaklyTypedInput: true,
+		MatchName: func(mapKey, fieldName string) bool {
+			// Only allow exact (case-insensitive) matches so underscores are preserved.
+			return strings.EqualFold(mapKey, fieldName)
+		},
 		DecodeHook: mapstructure.ComposeDecodeHookFunc(
 			mapstructure.StringToTimeDurationHookFunc(),
 		),
 	})
 	if err != nil {
-		return spanmetricsconnector.Config{}, fmt.Errorf("failed to build mapstructure decoder for %s", observer.Name)
+		return nil, fmt.Errorf("failed to build mapstructure decoder for %s", observer.Name)
 	}
 
 	if err := dec.Decode(configJsonData); err != nil {
 		if len(md.Unused) > 0 {
-			return spanmetricsconnector.Config{}, fmt.Errorf("unknown spanMetricsConnectorConfig fields: %v: %w", md.Unused, err)
+			return nil, fmt.Errorf("unknown spanMetricsConnectorConfig fields: %v: %w", md.Unused, err)
 		}
-		return spanmetricsconnector.Config{}, fmt.Errorf("invalid spanMetricsConnectorConfig: %w", err)
+		return nil, fmt.Errorf("invalid spanMetricsConnectorConfig: %w", err)
 	}
 
 	if err := spanmetricsConfig.Validate(); err != nil {
-		return spanmetricsconnector.Config{}, fmt.Errorf("validate SpanMetricsConnectorConfig for observer %s failed, Error: %s", observer.Name, err.Error())
+		return nil, fmt.Errorf("validate SpanMetricsConnectorConfig for observer %s failed, Error: %s", observer.Name, err.Error())
 	}
 
-	return spanmetricsConfig, nil
+	// Return the original map so YAML marshaling preserves underscore keys.
+	return configJsonData, nil
 }
