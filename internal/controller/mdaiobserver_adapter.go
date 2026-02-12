@@ -155,6 +155,7 @@ func (c ObserverAdapter) deleteFinalizer(ctx context.Context, object client.Obje
 	return nil
 }
 
+// TODO: refactor the whole synchronization logic
 func (c ObserverAdapter) ensureSynchronized(ctx context.Context) (OperationResult, error) {
 	observers := c.observerCR.Spec.Observers
 	observerResource := c.observerCR.Spec.ObserverResource
@@ -164,12 +165,12 @@ func (c ObserverAdapter) ensureSynchronized(ctx context.Context) (OperationResul
 		return ContinueProcessing()
 	}
 
-	hash, err := c.createOrUpdateObserverResourceConfigMap(ctx, observerResource, observers)
-	if err != nil {
-		return RequeueWithError(err)
-	}
+	observersOtel := ObserversForProvider(observers, mdaiv1.OTEL_COLLECTOR)
+	observersGreptime := ObserversForProvider(observers, mdaiv1.GREPTIME_FLOW)
 
-	if err := c.createOrUpdateObserverResourceDeployment(ctx, c.observerCR.Namespace, hash, observerResource); err != nil {
+	// TODO: it will requeue even if Otel observes sync failed
+	err := c.ensureSynchronizedOtelObservers(ctx, observerResource, observersOtel)
+	if err != nil {
 		if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
 			c.logger.Info("re-queuing due to resource conflict")
 			return Requeue()
@@ -177,11 +178,59 @@ func (c ObserverAdapter) ensureSynchronized(ctx context.Context) (OperationResul
 		return RequeueWithError(err)
 	}
 
-	if err := c.createOrUpdateObserverResourceService(ctx, c.observerCR.Namespace); err != nil {
+	err = c.ensureSynchronizedGreptimeObservers(ctx, observerResource, observersGreptime)
+	if err != nil {
 		return RequeueWithError(err)
 	}
 
 	return ContinueProcessing()
+}
+
+func (c ObserverAdapter) ensureSynchronizedOtelObservers(
+	ctx context.Context,
+	observerResource mdaiv1.ObserverResource,
+	observers []mdaiv1.Observer,
+) error {
+	if len(observers) == 0 {
+		return nil
+	}
+
+	hash, err := c.createOrUpdateObserverResourceConfigMap(ctx, observerResource, observers)
+	if err != nil {
+		return err
+	}
+
+	if err := c.createOrUpdateObserverResourceDeployment(ctx, c.observerCR.Namespace, hash, observerResource); err != nil {
+		return err
+	}
+
+	if err := c.createOrUpdateObserverResourceService(ctx, c.observerCR.Namespace); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c ObserverAdapter) ensureSynchronizedGreptimeObservers(
+	ctx context.Context,
+	observerResource mdaiv1.ObserverResource,
+	observers []mdaiv1.Observer,
+) error {
+	if len(observers) == 0 {
+		return nil
+	}
+
+	return nil
+}
+
+func ObserversForProvider(observers []mdaiv1.Observer, provider mdaiv1.ObserverProvider) []mdaiv1.Observer {
+	result := make([]mdaiv1.Observer, 0)
+	for _, obs := range observers {
+		if obs.Provider == provider {
+			result = append(result, obs)
+		}
+	}
+	return result
 }
 
 func (c ObserverAdapter) ensureStatusSetToDone(ctx context.Context) (OperationResult, error) {

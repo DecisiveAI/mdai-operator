@@ -13,9 +13,18 @@ const (
 	SPAN_METRICS ObserverType = "spanMetrics"
 )
 
+type ObserverProvider string
+
+const (
+	OTEL_COLLECTOR ObserverProvider = "otelCollector"
+	GREPTIME_FLOW  ObserverProvider = "greptimeFlow"
+)
+
 type Observer struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
+	// +kubebuilder:validation:Required
+	Provider ObserverProvider `json:"provider" yaml:"provider"`
 	// +kubebuilder:validation:Required
 	Type ObserverType `json:"type" yaml:"type"`
 	// +kubebuilder:validation:Required

@@ -95,7 +95,12 @@ func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiob
 		switch observer.Type {
 		case mdaiv1.SPAN_METRICS:
 			{
-				return newWarnings, ParseSpanMetricsConfig(&observer)
+				// TODO: refactor
+				if observer.Provider == mdaiv1.OTEL_COLLECTOR {
+					return newWarnings, ParseSpanMetricsConfig(&observer)
+				} else {
+					return newWarnings, nil
+				}
 			}
 		case mdaiv1.DATA_VOLUME:
 			{

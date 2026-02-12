@@ -181,6 +181,8 @@ spec:
                       type: array
                     name:
                       type: string
+                    provider:
+                      type: string
                     spanMetricsConnectorConfig:
                       x-kubernetes-preserve-unknown-fields: true
                     type:
@@ -188,6 +190,7 @@ spec:
                   required:
                   - labelResourceAttributes
                   - name
+                  - provider
                   - type
                   type: object
                 type: array

@@ -2,9 +2,15 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"time"
 
+	"github.com/cenkalti/backoff/v5"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -19,8 +25,9 @@ var _ Controller = (*MdaiObserverReconciler)(nil)
 type MdaiObserverReconciler struct {
 	client.Client
 
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme     *runtime.Scheme
+	Recorder   record.EventRecorder
+	greptimeDb gorm.DB
 }
 
 // +kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaiobservers,verbs=get;list;watch;create;update;patch;delete
@@ -91,4 +98,54 @@ func (r *MdaiObserverReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&mdaiv1.MdaiObserver{}).
 		Named("mdaiobserver").
 		Complete(r)
+}
+
+func (r *MdaiObserverReconciler) initializeGreptimeDb() error {
+	ctx := context.Background()
+	log := logger.FromContext(ctx)
+	retryCount := 0
+
+	greptimeHost := os.Getenv("GREPTIME_HOST")
+	greptimePort := ""
+	if greptimePort = os.Getenv("GREPTIME_PORT"); greptimePort != "" {
+		greptimePort = "4003"
+	}
+	greptimePassword := os.Getenv("GREPTIME_PASSWORD")
+	if greptimeHost == "" || greptimePassword == "" {
+		return errors.New("GREPTIME_ENDPOINT and GREPTIME_PASSWORD environment variables must be set to enable GreptimeDB client")
+	}
+	log.Info("Initializing GreptimeDB  client", "host", greptimeHost, "port", greptimePort)
+	operation := func() (string, error) {
+		// TODO: unhardcode
+		dsn := "host=127.0.0.1 port=4003 dbname=public sslmode=disable"
+		greptimeDb, err := gorm.Open(postgres.New(postgres.Config{
+			DSN:              dsn,
+			WithoutReturning: true,
+		}), &gorm.Config{
+			DisableAutomaticPing: true,
+		})
+		if err != nil {
+			retryCount++
+			log.Error(err, "Failed to initialize Greptime  client. Retrying...")
+			return "", err
+		}
+		r.greptimeDb = *greptimeDb
+		return "", nil
+	}
+
+	exponentialBackoff := backoff.NewExponentialBackOff()
+	exponentialBackoff.InitialInterval = 5 * time.Second //nolint:mnd
+
+	notifyFunc := func(err error, duration time.Duration) {
+		log.Error(err, "Failed to initialize Greptime client. Retrying...", "retry_count", retryCount, "duration", duration.String())
+	}
+
+	if _, err := backoff.Retry(context.TODO(), operation,
+		backoff.WithBackOff(exponentialBackoff),
+		backoff.WithMaxElapsedTime(3*time.Minute), //nolint:mnd
+		backoff.WithNotify(notifyFunc),
+	); err != nil {
+		return fmt.Errorf("failed to initialize Greptime client after retries: %w", err)
+	}
+	return nil
 }

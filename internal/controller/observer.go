@@ -388,6 +388,10 @@ func getObserverCollectorConfigSpanMetrics(
 ) error {
 
 	for _, obs := range observers {
+		// TODO: refactor!!!
+		if obs.Provider != mdaiv1.OTEL_COLLECTOR {
+			continue
+		}
 		if obs.Type != mdaiv1.SPAN_METRICS {
 			continue
 		}
