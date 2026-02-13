@@ -3,7 +3,7 @@
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/mdai-operator)](https://artifacthub.io/packages/search?repo=mdai-operator)
 
 # MDAI K8s Operator
-manages MDAI Hubs
+Manages MDAI Hubs
 ## Description
 MDAI k8s operator: 
 
