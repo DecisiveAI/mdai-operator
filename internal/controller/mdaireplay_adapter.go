@@ -253,7 +253,7 @@ func augmentCollectorConfigPerSpec(replayId string, hubName string, config build
 	// Add otlphttp exporter if otlphttp destination is set
 	destinationConfig := replayCRSpec.Destination
 	oltpHttpConfig := destinationConfig.OtlpHttp
-	if oltpHttpConfig != nil {
+	if oltpHttpConfig != nil { // nolint:nestif
 		otlpEndpoint := oltpHttpConfig.Endpoint
 		if otlpEndpoint != "" {
 			exporters := config.MustMap("exporters")
