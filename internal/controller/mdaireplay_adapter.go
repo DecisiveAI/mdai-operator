@@ -229,12 +229,15 @@ func (c MdaiReplayAdapter) getReplayCollectorConfigYAML(replayId string, hubName
 		return "", fmt.Errorf(`unmarshal base collector config: %w`, err)
 	}
 
-	augmentCollectorConfigPerSpec(replayId, hubName, config, replayCRSpec)
+	if err := augmentCollectorConfigPerSpec(replayId, hubName, config, replayCRSpec); err != nil {
+		c.logger.Error(err, "Failed to build collector config from replay CR")
+		return "", fmt.Errorf(`failed to build replay config with error: %w`, err)
+	}
 
 	return config.YAML()
 }
 
-func augmentCollectorConfigPerSpec(replayId string, hubName string, config builder.ConfigBlock, replayCRSpec mdaiv1.MdaiReplaySpec) {
+func augmentCollectorConfigPerSpec(replayId string, hubName string, config builder.ConfigBlock, replayCRSpec mdaiv1.MdaiReplaySpec) error {
 	// Add replayId insert processor.
 	// Assumed to already be in service.pipelines.logs/replay.processors slice as it is not optional!
 	attrProcessor := config.MustMap("processors").MustMap("attributes")
@@ -250,7 +253,7 @@ func augmentCollectorConfigPerSpec(replayId string, hubName string, config build
 	// Add otlphttp exporter if otlphttp destination is set
 	destinationConfig := replayCRSpec.Destination
 	oltpHttpConfig := destinationConfig.OtlpHttp
-	if oltpHttpConfig != nil {
+	if oltpHttpConfig != nil { // nolint:nestif
 		otlpEndpoint := oltpHttpConfig.Endpoint
 		if otlpEndpoint != "" {
 			exporters := config.MustMap("exporters")
@@ -258,9 +261,22 @@ func augmentCollectorConfigPerSpec(replayId string, hubName string, config build
 				"endpoint": otlpEndpoint,
 			})
 			config.Set("exporters", exporters)
-			logsReplayPipeline := config.MustMap("service").MustMap("pipelines").MustMap("logs/replay")
-			logsReplayExporters := append(logsReplayPipeline.MustSlice("exporters"), "otlphttp")
-			logsReplayPipeline.Set("exporters", logsReplayExporters)
+			if replayCRSpec.TelemetryType == "" {
+				return errors.New("telemetry type is missing in replay spec")
+			}
+			pipelineName := fmt.Sprintf("%s/replay", replayCRSpec.TelemetryType)
+			serviceBlock := config.MustMap("service")
+			pipelinesRaw := serviceBlock["pipelines"]
+			pipelines, ok := pipelinesRaw.(map[string]any)
+			if !ok {
+				return errors.New("pipelines is not a map[string]any")
+			}
+			pipelineMap := map[string]any{
+				"receivers":  []string{"awss3"},
+				"processors": []string{"attributes"},
+				"exporters":  []string{"otlphttp"},
+			}
+			pipelines[pipelineName] = pipelineMap
 		}
 	}
 
@@ -286,6 +302,8 @@ func augmentCollectorConfigPerSpec(replayId string, hubName string, config build
 	opampServer := opampExtension.MustMap("server")
 	opampServer.MustMap("http").Set("endpoint", replayCRSpec.OpAMPEndpoint)
 	opampExtension.Set("server", opampServer)
+
+	return nil
 }
 
 func (c MdaiReplayAdapter) createOrUpdateReplayerDeployment(ctx context.Context, configHash string) error {
