@@ -425,7 +425,7 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 				service := config.MustMap("service")
 				pipelines := service.MustMap("pipelines")
 				logsReplay := pipelines.MustMap("logs/replay")
-				exportersList := logsReplay["exporters"].([]string)
+				exportersList := logsReplay["exporters"].([]string) // nolint:forcetypeassert
 
 				found := false
 				for _, exp := range exportersList {
@@ -469,7 +469,7 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 				},
 			}
 
-			augmentCollectorConfigPerSpec(tt.replayId, tt.hubName, config, tt.spec)
+			require.NoError(t, augmentCollectorConfigPerSpec(tt.replayId, tt.hubName, config, tt.spec))
 			tt.validate(t, config)
 		})
 	}
