@@ -261,6 +261,9 @@ func augmentCollectorConfigPerSpec(replayId string, hubName string, config build
 				"endpoint": otlpEndpoint,
 			})
 			config.Set("exporters", exporters)
+			if replayCRSpec.TelemetryType == "" {
+				return errors.New("telemetry type is missing in replay spec")
+			}
 			pipelineName := fmt.Sprintf("%s/replay", replayCRSpec.TelemetryType)
 			serviceBlock := config.MustMap("service")
 			pipelinesRaw := serviceBlock["pipelines"]
