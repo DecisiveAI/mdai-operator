@@ -35,9 +35,7 @@ var _ = Describe("MdaiReplay Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					Spec: hubv1.MdaiReplaySpec{
-						TelemetryType: "traces",
-					},
+					// TODO(user): Specify other spec details if needed.
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}

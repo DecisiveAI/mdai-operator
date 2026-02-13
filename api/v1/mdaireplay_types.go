@@ -59,8 +59,9 @@ type MdaiReplaySpec struct {
 	StartTime string `json:"startTime,omitempty" yaml:"startTime,omitempty"`
 	// +optional
 	EndTime string `json:"endTime,omitempty" yaml:"endTime,omitempty"`
+	// +optional
 	// +kubebuilder:validation:Enum=logs;metrics;traces
-	TelemetryType MdaiReplayTelemetryType `json:"telemetryType" yaml:"telemetryType"`
+	TelemetryType MdaiReplayTelemetryType `json:"telemetryType,omitempty" yaml:"telemetryType,omitempty"`
 	// +optional
 	HubName string `json:"hubName,omitempty" yaml:"hubName,omitempty"`
 
