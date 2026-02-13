@@ -328,6 +328,7 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 				StartTime:         "2024-01-01T00:00:00Z",
 				EndTime:           "2024-01-02T00:00:00Z",
 				StatusVariableRef: "test-var",
+				TelemetryType:     mdaiv1.LogsReplayTelemetryType,
 				OpAMPEndpoint:     "http://opamp:4320",
 				Source: mdaiv1.MdaiReplaySourceConfiguration{
 					S3: &mdaiv1.MdaiReplayS3Configuration{
@@ -391,6 +392,7 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 			spec: mdaiv1.MdaiReplaySpec{
 				StartTime:         "2024-01-01T00:00:00Z",
 				EndTime:           "2024-01-02T00:00:00Z",
+				TelemetryType:     mdaiv1.LogsReplayTelemetryType,
 				StatusVariableRef: "test-var",
 				OpAMPEndpoint:     "http://opamp:4320",
 				Destination: mdaiv1.MdaiReplayDestinationConfiguration{
@@ -423,11 +425,11 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 				service := config.MustMap("service")
 				pipelines := service.MustMap("pipelines")
 				logsReplay := pipelines.MustMap("logs/replay")
-				exportersList := logsReplay.MustSlice("exporters")
+				exportersList := logsReplay["exporters"].([]string)
 
 				found := false
 				for _, exp := range exportersList {
-					if exp.(string) == "otlphttp" { // nolint:forcetypeassert
+					if exp == "otlphttp" {
 						found = true
 						break
 					}
@@ -463,11 +465,7 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 					},
 				},
 				"service": map[string]any{
-					"pipelines": map[string]any{
-						"logs/replay": map[string]any{
-							"exporters": []any{},
-						},
-					},
+					"pipelines": map[string]any{},
 				},
 			}
 

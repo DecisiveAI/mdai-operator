@@ -258,9 +258,15 @@ func augmentCollectorConfigPerSpec(replayId string, hubName string, config build
 				"endpoint": otlpEndpoint,
 			})
 			config.Set("exporters", exporters)
-			logsReplayPipeline := config.MustMap("service").MustMap("pipelines").MustMap("logs/replay")
-			logsReplayExporters := append(logsReplayPipeline.MustSlice("exporters"), "otlphttp")
-			logsReplayPipeline.Set("exporters", logsReplayExporters)
+			pipelineName := fmt.Sprintf("%s/replay", replayCRSpec.TelemetryType)
+			serviceBlock := config.MustMap("service")
+			pipelines := serviceBlock["pipelines"].(map[string]any)
+			pipelineMap := map[string]any{
+				"receivers":  []string{"awss3"},
+				"processors": []string{"attributes"},
+				"exporters":  []string{"otlphttp"},
+			}
+			pipelines[pipelineName] = pipelineMap
 		}
 	}
 

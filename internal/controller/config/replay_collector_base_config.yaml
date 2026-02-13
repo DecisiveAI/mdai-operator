@@ -48,10 +48,22 @@ service:
                 port: 8888
   extensions:
     - opamp
-  pipelines:
-    logs/replay:
-      receivers:
-        - awss3
-      processors:
-        - attributes
-      exporters: []
+  pipelines: {}
+#    logs/replay:
+#      receivers:
+#        - awss3
+#      processors:
+#        - attributes
+#      exporters: []
+#    metrics/replay:
+#      receivers:
+#        - awss3
+#      processors:
+#        - attributes
+#      exporters: []
+#    traces/replay:
+#      receivers:
+#        - awss3
+#      processors:
+#        - attributes
+#      exporters: []
