@@ -28,6 +28,7 @@ type ObserverAdapter struct {
 	recorder    record.EventRecorder
 	scheme      *runtime.Scheme
 	releaseName string
+	greptime    Greptime
 }
 
 func NewObserverAdapter(
@@ -36,6 +37,7 @@ func NewObserverAdapter(
 	k8sClient client.Client,
 	recorder record.EventRecorder,
 	scheme *runtime.Scheme,
+	greptime Greptime,
 ) *ObserverAdapter {
 	return &ObserverAdapter{
 		observerCR:  cr,
@@ -44,6 +46,7 @@ func NewObserverAdapter(
 		recorder:    recorder,
 		scheme:      scheme,
 		releaseName: os.Getenv("RELEASE_NAME"),
+		greptime:    greptime,
 	}
 }
 
@@ -168,8 +171,8 @@ func (c ObserverAdapter) ensureSynchronized(ctx context.Context) (OperationResul
 	observersOtel := ObserversForProvider(observers, mdaiv1.OTEL_COLLECTOR)
 	observersGreptime := ObserversForProvider(observers, mdaiv1.GREPTIME_FLOW)
 
-	// TODO: it will requeue even if Otel observes sync failed
-	err := c.ensureSynchronizedOtelObservers(ctx, observerResource, observersOtel)
+	// TODO: FIX(?): it wll requeue even if Otel observes sync failed
+	err := c.synchronizeOtelObservers(ctx, observerResource, observersOtel)
 	if err != nil {
 		if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
 			c.logger.Info("re-queuing due to resource conflict")
@@ -178,7 +181,7 @@ func (c ObserverAdapter) ensureSynchronized(ctx context.Context) (OperationResul
 		return RequeueWithError(err)
 	}
 
-	err = c.ensureSynchronizedGreptimeObservers(ctx, observerResource, observersGreptime)
+	err = c.synchronizeGreptimeObservers(observersGreptime)
 	if err != nil {
 		return RequeueWithError(err)
 	}
@@ -186,7 +189,7 @@ func (c ObserverAdapter) ensureSynchronized(ctx context.Context) (OperationResul
 	return ContinueProcessing()
 }
 
-func (c ObserverAdapter) ensureSynchronizedOtelObservers(
+func (c ObserverAdapter) synchronizeOtelObservers(
 	ctx context.Context,
 	observerResource mdaiv1.ObserverResource,
 	observers []mdaiv1.Observer,
@@ -211,14 +214,21 @@ func (c ObserverAdapter) ensureSynchronizedOtelObservers(
 	return nil
 }
 
-func (c ObserverAdapter) ensureSynchronizedGreptimeObservers(
-	ctx context.Context,
-	observerResource mdaiv1.ObserverResource,
+func (c ObserverAdapter) synchronizeGreptimeObservers(
 	observers []mdaiv1.Observer,
 ) error {
 	if len(observers) == 0 {
 		return nil
 	}
+	for _, obs := range observers {
+		if obs.Provider != mdaiv1.GREPTIME_FLOW {
+			continue
+		}
+		// TODO: compose real Dimensions for Greptime Observer
+		dimensions := Dimensions{}
+		return doGreptime(c.greptime, dimensions)
+	}
+	// TODO: delete Greptime resources (sink table and flow) when observers are deleted
 
 	return nil
 }

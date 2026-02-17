@@ -25,9 +25,9 @@ var _ Controller = (*MdaiObserverReconciler)(nil)
 type MdaiObserverReconciler struct {
 	client.Client
 
-	Scheme     *runtime.Scheme
-	Recorder   record.EventRecorder
-	greptimeDb gorm.DB
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
+	greptime Greptime
 }
 
 // +kubebuilder:rbac:groups=hub.mydecisive.ai,resources=mdaiobservers,verbs=get;list;watch;create;update;patch;delete
@@ -55,7 +55,7 @@ func (r *MdaiObserverReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	_, err := r.ReconcileHandler(ctx, *NewObserverAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme))
+	_, err := r.ReconcileHandler(ctx, *NewObserverAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme, r.greptime))
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -94,6 +94,9 @@ func (*MdaiObserverReconciler) ReconcileHandler(ctx context.Context, adapter Ada
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MdaiObserverReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := r.initializeGreptimeDb(); err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&mdaiv1.MdaiObserver{}).
 		Named("mdaiobserver").
@@ -112,12 +115,12 @@ func (r *MdaiObserverReconciler) initializeGreptimeDb() error {
 	}
 	greptimePassword := os.Getenv("GREPTIME_PASSWORD")
 	if greptimeHost == "" || greptimePassword == "" {
-		return errors.New("GREPTIME_ENDPOINT and GREPTIME_PASSWORD environment variables must be set to enable GreptimeDB client")
+		return errors.New("GREPTIME_HOST and GREPTIME_PASSWORD environment variables must be set to enable GreptimeDB client")
 	}
 	log.Info("Initializing GreptimeDB  client", "host", greptimeHost, "port", greptimePort)
 	operation := func() (string, error) {
-		// TODO: unhardcode
-		dsn := "host=127.0.0.1 port=4003 dbname=public sslmode=disable"
+		// TODO: add password
+		dsn := fmt.Sprintf("host=%s port=%s dbname=public sslmode=disable", greptimeHost, greptimePort)
 		greptimeDb, err := gorm.Open(postgres.New(postgres.Config{
 			DSN:              dsn,
 			WithoutReturning: true,
@@ -129,7 +132,7 @@ func (r *MdaiObserverReconciler) initializeGreptimeDb() error {
 			log.Error(err, "Failed to initialize Greptime  client. Retrying...")
 			return "", err
 		}
-		r.greptimeDb = *greptimeDb
+		r.greptime = Greptime{greptimeDb: *greptimeDb, greptimeTemplates: loadTemplates()}
 		return "", nil
 	}
 
