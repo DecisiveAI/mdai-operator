@@ -28,7 +28,7 @@ type MdaiDalSpec struct {
 	// +kubebuilder:validation:Required
 	AWS MdaiDalAWSConfig `json:"aws"`
 	// +optional
-	// +kubebuilder:default:={repository:"public.ecr.aws/mydecisive/mdai-dal",tag:"0.0.1",pullPolicy:"IfNotPresent"}
+	// +kubebuilder:default:={repository:"public.ecr.aws/decisiveai/mdai-dal",tag:"0.0.1",pullPolicy:"IfNotPresent"}
 	ImageSpec *MdaiDalImageSpec `json:"imageSpec,omitempty"`
 }
 
@@ -80,8 +80,8 @@ type MdaiDalAWSCredentials struct {
 }
 
 type MdaiDalImageSpec struct {
-	// Repository, e.g. public.ecr.aws/mydecisive/mdai-dal
-	// +kubebuilder:default="public.ecr.aws/mydecisive/mdai-dal"
+	// Repository, e.g. public.ecr.aws/decisiveai/mdai-dal
+	// +kubebuilder:default="public.ecr.aws/decisiveai/mdai-dal"
 	Repository string `json:"repository,omitempty"`
 
 	// Tag, e.g. v0.0.1

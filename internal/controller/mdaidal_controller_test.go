@@ -89,7 +89,7 @@ var _ = Describe("MdaiDal Controller", func() {
 			Eventually(func() error {
 				return k8sClient.Get(ctx, typeNamespacedName, deployment)
 			}, "10s", "1s").Should(Succeed())
-			Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("public.ecr.aws/mydecisive/mdai-dal"))
+			Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("public.ecr.aws/decisiveai/mdai-dal"))
 
 			By("Checking if the Service was created")
 			service := &corev1.Service{}

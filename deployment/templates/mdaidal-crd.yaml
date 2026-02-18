@@ -85,7 +85,7 @@ spec:
               imageSpec:
                 default:
                   pullPolicy: IfNotPresent
-                  repository: public.ecr.aws/mydecisive/mdai-dal
+                  repository: public.ecr.aws/decisiveai/mdai-dal
                   tag: 0.0.1
                 properties:
                   pullPolicy:
@@ -97,8 +97,8 @@ spec:
                     - Never
                     type: string
                   repository:
-                    default: public.ecr.aws/mydecisive/mdai-dal
-                    description: Repository, e.g. public.ecr.aws/mydecisive/mdai-dal
+                    default: public.ecr.aws/decisiveai/mdai-dal
+                    description: Repository, e.g. public.ecr.aws/decisiveai/mdai-dal
                     type: string
                   tag:
                     default: 0.0.1

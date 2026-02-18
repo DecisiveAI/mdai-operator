@@ -46,7 +46,7 @@ func envFromKey(e corev1.EnvFromSource) string {
 func wantContainerBase() corev1.Container {
 	return corev1.Container{
 		Name:    mdaiCollectorDeploymentName,
-		Image:   "public.ecr.aws/mydecisive/mdai-collector:0.1.6",
+		Image:   "public.ecr.aws/decisiveai/mdai-collector:0.1.6",
 		Command: []string{"/mdai-collector", "--config=/conf/collector.yaml"},
 		Ports: []corev1.ContainerPort{
 			{ContainerPort: 4317, Name: "otlp-grpc"},
@@ -80,7 +80,7 @@ func wantContainerWithSecret(a corev1.Container, name string) corev1.Container {
 }
 
 func buildContainerWithBuilder(awsSecret *string) corev1.Container {
-	c := Container(mdaiCollectorDeploymentName, "public.ecr.aws/mydecisive/mdai-collector:0.1.6").
+	c := Container(mdaiCollectorDeploymentName, "public.ecr.aws/decisiveai/mdai-collector:0.1.6").
 		WithCommand("/mdai-collector", "--config=/conf/collector.yaml").
 		WithPorts(
 			corev1.ContainerPort{ContainerPort: otlpGRPCPort, Name: "otlp-grpc"},

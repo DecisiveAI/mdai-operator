@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	observerDefaultImage         = "public.ecr.aws/mydecisive/observer-collector:0.1"
+	observerDefaultImage         = "public.ecr.aws/decisiveai/observer-collector:0.1"
 	mdaiObserverHubComponent     = "mdai-observer"
 	mdaiObserverResourceBaseName = "mdai-observer"
 )

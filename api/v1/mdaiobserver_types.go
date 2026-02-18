@@ -33,7 +33,7 @@ type ObserverFilter struct {
 // TODO: Add metrics and trace filters
 
 type ObserverResource struct {
-	// +kubebuilder:default="public.ecr.aws/mydecisive/observer-collector:0.1.6"
+	// +kubebuilder:default="public.ecr.aws/decisiveai/observer-collector:0.1.6"
 	// +optional
 	Image string `json:"image,omitempty"`
 	// +kubebuilder:default=1
