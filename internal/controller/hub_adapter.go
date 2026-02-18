@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mydecisive/mdai-data-core/opamp"
+
 	events "github.com/mydecisive/mdai-data-core/eventing/rule"
 	"go.uber.org/zap"
 
@@ -66,6 +68,7 @@ type HubAdapter struct {
 	valkeyAuditStreamExpiry time.Duration
 	releaseName             string
 	zapLogger               *zap.Logger
+	opampConnectionManager  opamp.ConnectionManager
 }
 
 func NewHubAdapter(
@@ -77,6 +80,7 @@ func NewHubAdapter(
 	scheme *runtime.Scheme,
 	valkeyClient valkey.Client,
 	valkeyAuditStreamExpiry time.Duration,
+	opampConnectionManager opamp.ConnectionManager,
 ) *HubAdapter {
 	return &HubAdapter{
 		mdaiCR:                  cr,
@@ -88,6 +92,7 @@ func NewHubAdapter(
 		valkeyAuditStreamExpiry: valkeyAuditStreamExpiry,
 		releaseName:             os.Getenv("RELEASE_NAME"),
 		zapLogger:               zapLogger,
+		opampConnectionManager:  opampConnectionManager,
 	}
 }
 
@@ -407,20 +412,10 @@ func (c HubAdapter) syncValkeyVariables(ctx context.Context, envMap, manualEnvMa
 	return nil
 }
 
-func (c HubAdapter) restartCollectorAndAudit(ctx context.Context, collector v1beta1.OpenTelemetryCollector, envMap map[string]string) error {
-	c.logger.Info("Triggering restart of OpenTelemetry Collector", "name", collector.Name)
+func (c HubAdapter) restartCollectorAndAudit(ctx context.Context, envMap map[string]string) error {
+	c.logger.Info("Triggering restart of OpenTelemetry Collector(s)")
 
-	collectorCopy := collector.DeepCopy()
-	if collectorCopy.Annotations == nil {
-		collectorCopy.Annotations = make(map[string]string)
-	}
-	collectorCopy.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
-
-	if err := c.client.Update(ctx, collectorCopy); err != nil {
-		if apierrors.IsConflict(err) {
-			c.logger.Info("Conflict while updating OpenTelemetry Collector, will retry", "name", collectorCopy.Name)
-			return nil // let controller requeue naturally
-		}
+	if err := c.opampConnectionManager.DispatchRestartCommand(ctx); err != nil {
 		return err
 	}
 
@@ -455,7 +450,7 @@ func (c HubAdapter) syncComputedConfigMapsAndRestart(ctx context.Context, envMap
 	// trigger restarts
 	for _, collector := range collectors {
 		if _, shouldRestart := namespaceToRestart[collector.Namespace]; shouldRestart {
-			if err := c.restartCollectorAndAudit(ctx, collector, envMap); err != nil {
+			if err := c.restartCollectorAndAudit(ctx, envMap); err != nil {
 				return RequeueWithError(err)
 			}
 		}
