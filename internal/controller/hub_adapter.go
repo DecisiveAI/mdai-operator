@@ -7,19 +7,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/decisiveai/mdai-data-core/opamp"
+	"github.com/mydecisive/mdai-data-core/opamp"
 	"os"
 	"slices"
 	"strings"
 	"time"
 
-	events "github.com/decisiveai/mdai-data-core/eventing/rule"
+	events "github.com/mydecisive/mdai-data-core/eventing/rule"
 	"go.uber.org/zap"
 
-	"github.com/decisiveai/mdai-data-core/audit"
-	vars "github.com/decisiveai/mdai-data-core/variables"
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
+	"github.com/mydecisive/mdai-data-core/audit"
+	vars "github.com/mydecisive/mdai-data-core/variables"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/valkey-io/valkey-go"
@@ -411,10 +411,9 @@ func (c HubAdapter) syncValkeyVariables(ctx context.Context, envMap, manualEnvMa
 	return nil
 }
 
-func (c HubAdapter) restartCollectorAndAudit(ctx context.Context, collector v1beta1.OpenTelemetryCollector, envMap map[string]string) error {
-	c.logger.Info("Triggering restart of OpenTelemetry Collector", "name", collector.Name)
+func (c HubAdapter) restartCollectorAndAudit(ctx context.Context, envMap map[string]string) error {
+	c.logger.Info("Triggering restart of OpenTelemetry Collector(s)")
 
-	// TODO: dispatch restart ONLY for the collector affected by the variable update....
 	if err := c.opampConnectionManager.DispatchRestartCommand(ctx); err != nil {
 		return err
 	}
@@ -450,7 +449,7 @@ func (c HubAdapter) syncComputedConfigMapsAndRestart(ctx context.Context, envMap
 	// trigger restarts
 	for _, collector := range collectors {
 		if _, shouldRestart := namespaceToRestart[collector.Namespace]; shouldRestart {
-			if err := c.restartCollectorAndAudit(ctx, collector, envMap); err != nil {
+			if err := c.restartCollectorAndAudit(ctx, envMap); err != nil {
 				return RequeueWithError(err)
 			}
 		}

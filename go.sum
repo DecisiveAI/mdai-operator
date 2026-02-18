@@ -51,8 +51,10 @@ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/decisiveai/mdai-data-core v0.2.10-0.20260115193028-b0cc7848230a h1:1nYIRbbxu7j0+HiOLA5naeS8bAg+2R11ys4v71I3JTk=
-github.com/decisiveai/mdai-data-core v0.2.10-0.20260115193028-b0cc7848230a/go.mod h1:o40VxhMGPOVuIQZw8MPH3Zv//OIvMGa1n/0nlz6Rt88=
+github.com/mydecisive/mdai-data-core v0.2.9 h1:dFveDVpOTWRgI0W6I4kxQ9qjrXgYUX+d9nTukhmj82E=
+github.com/mydecisive/mdai-data-core v0.2.9/go.mod h1:t79Oo87yO6pZ8bp5WKZMnzvi6Y/65EDsT9dlj0v+RgY=
+github.com/mydecisive/mdai-data-core v0.2.10-0.20260115193028-b0cc7848230a h1:1nYIRbbxu7j0+HiOLA5naeS8bAg+2R11ys4v71I3JTk=
+github.com/mydecisive/mdai-data-core v0.2.10-0.20260115193028-b0cc7848230a/go.mod h1:o40VxhMGPOVuIQZw8MPH3Zv//OIvMGa1n/0nlz6Rt88=
 github.com/dennwc/varint v1.0.0 h1:kGNFFSSw8ToIy3obO/kKr8U9GZYUAxQEVuix4zfDWzE=
 github.com/dennwc/varint v1.0.0/go.mod h1:hnItb35rvZvJrbTALZtY/iQfDs48JKRG1RPpgziApxA=
 github.com/digitalocean/godo v1.132.0 h1:n0x6+ZkwbyQBtIU1wwBhv26EINqHg0wWQiBXlwYg/HQ=
@@ -222,6 +224,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f h1:KUppIJq7/+SVif2QVs3tOP0zanoHgBEVAwHxUSIzRqU=
 github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
+github.com/mydecisive/mdai-data-core v0.3.0 h1:gnFdr+ntTrbK68NRWBEuou4n9EiaY+8RCOkv4QHtI1c=
+github.com/mydecisive/mdai-data-core v0.3.0/go.mod h1:g3qwKbaPm3p+zTVtjsl2rAqdy5lAwsmn4WerCNWu2Bo=
 github.com/oklog/ulid v1.3.1 h1:EGfNDEx6MqHz8B3uNV6QAib1UR2Lm97sHi3ocA6ESJ4=
 github.com/oklog/ulid v1.3.1/go.mod h1:CirwcVhetQ6Lv90oh/F+FBtV6XMibvdAFo93nm5qn4U=
 github.com/onsi/ginkgo/v2 v2.23.4 h1:ktYTpKJAVZnDT4VjxSbiBenUjmlL/5QkBEocaWXiQus=
@@ -276,6 +280,7 @@ github.com/rogpeppe/go-internal v1.13.1/go.mod h1:uMEvuHeurkdAXX61udpOXGD/AzZDWN
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/samber/lo v1.51.0 h1:kysRYLbHy/MB7kQZf5DSN50JHmMsNEdeY24VzJFu7wI=
 github.com/samber/lo v1.51.0/go.mod h1:4+MXEGsJzbKGaUEQFKBq2xtfuznW9oz/WrgyzMzRoM0=
+github.com/samber/lo v1.52.0/go.mod h1:4+MXEGsJzbKGaUEQFKBq2xtfuznW9oz/WrgyzMzRoM0=
 github.com/scaleway/scaleway-sdk-go v1.0.0-beta.30 h1:yoKAVkEVwAqbGbR8n87rHQ1dulL25rKloGadb3vm770=
 github.com/scaleway/scaleway-sdk-go v1.0.0-beta.30/go.mod h1:sH0u6fq6x4R5M7WxkoQFY/o7UaiItec0o1LinLCJNq8=
 github.com/shurcooL/httpfs v0.0.0-20230704072500-f1e31cf0ba5c h1:aqg5Vm5dwtvL+YgDpBcK1ITf3o96N/K7/wsRXQnUTEs=
