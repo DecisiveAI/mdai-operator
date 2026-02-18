@@ -17,11 +17,6 @@ type Greptime struct {
 	greptimeTemplates map[string]string
 }
 
-type Dimension struct {
-	Name string
-	Expr string
-}
-
 type Pipeline struct {
 	Name         string
 	Schema       string
@@ -33,6 +28,7 @@ type Pipeline struct {
 	ValueColumn  string
 	ValueType    string
 	ValueExpr    string
+	PrimaryKeys  []string
 	TimeInterval string
 	WhereClause  string
 }
@@ -42,7 +38,8 @@ type TemplateData struct {
 	SourceTable    string
 	SinkTable      string
 	FlowName       string
-	Dimensions     []Dimension
+	Dimensions     []string
+	PrimaryKeys    []string
 	ValueColumn    string
 	ValueType      string
 	ValueExpr      string
@@ -51,21 +48,13 @@ type TemplateData struct {
 	WhereClause    string
 }
 
-type Dimensions []Dimension
-
 var identPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+var columnPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`)
 var intervalPattern = regexp.MustCompile(`^[0-9]+\s+(millisecond|milliseconds|second|seconds|minute|minutes|hour|hours)$`)
 
-func doGreptime(greptime Greptime, dimensions Dimensions) error {
+func doGreptime(greptime Greptime, dimensions []string) error {
 	db := greptime.greptimeDb
 	templates := greptime.greptimeTemplates
-
-	// TODO: dimensions to be passed in
-	dimensions = Dimensions{
-		{Name: "service_name", Expr: "service_name"},
-		{Name: "status_code", Expr: "span_status_code"},
-		{Name: "server_address", Expr: `"span_attributes.server.address"`},
-	}
 
 	pipelines := []Pipeline{
 		{
@@ -79,6 +68,7 @@ func doGreptime(greptime Greptime, dimensions Dimensions) error {
 			ValueColumn:  "total_count",
 			ValueType:    "INT64",
 			ValueExpr:    "COUNT(service_name)",
+			PrimaryKeys:  []string{"service_name"},
 			TimeInterval: "5 seconds",
 			WhereClause:  "span_status_code = 'STATUS_CODE_UNSET'",
 		},
@@ -93,6 +83,7 @@ func doGreptime(greptime Greptime, dimensions Dimensions) error {
 			ValueColumn:  "latency_sketch",
 			ValueType:    "BINARY",
 			ValueExpr:    "uddsketch_state(128, 0.01, duration_nano)",
+			PrimaryKeys:  []string{"service_name"},
 			TimeInterval: "5 seconds",
 			WhereClause:  "span_status_code = 'STATUS_CODE_UNSET'",
 		},
@@ -107,6 +98,7 @@ func doGreptime(greptime Greptime, dimensions Dimensions) error {
 			ValueColumn:  "total_count",
 			ValueType:    "INT64",
 			ValueExpr:    "COUNT(service_name)",
+			PrimaryKeys:  []string{"service_name"},
 			TimeInterval: "5 seconds",
 			WhereClause:  "span_status_code = 'STATUS_CODE_ERROR'",
 		},
@@ -119,6 +111,7 @@ func doGreptime(greptime Greptime, dimensions Dimensions) error {
 			SinkTable:      p.SinkTable,
 			FlowName:       p.FlowName,
 			Dimensions:     dimensions,
+			PrimaryKeys:    p.PrimaryKeys,
 			ValueColumn:    p.ValueColumn,
 			ValueType:      p.ValueType,
 			ValueExpr:      p.ValueExpr,
@@ -162,7 +155,12 @@ func reconcileDimensionColumns(db *gorm.DB, d TemplateData) error {
 
 	desired := make(map[string]struct{}, len(d.Dimensions))
 	for _, dim := range d.Dimensions {
-		desired[dim.Name] = struct{}{}
+		desired[dim] = struct{}{}
+	}
+
+	primaryKeys := make(map[string]struct{}, len(d.PrimaryKeys))
+	for _, c := range d.PrimaryKeys {
+		primaryKeys[c] = struct{}{}
 	}
 
 	managedNonDimension := map[string]struct{}{
@@ -176,6 +174,9 @@ func reconcileDimensionColumns(db *gorm.DB, d TemplateData) error {
 		if _, ok := managedNonDimension[c]; ok {
 			continue
 		}
+		//if _, ok := primaryKeys[c]; ok {
+		//	continue
+		//}
 		existingDimensions[c] = struct{}{}
 	}
 
@@ -197,15 +198,23 @@ func reconcileDimensionColumns(db *gorm.DB, d TemplateData) error {
 	sort.Strings(toDrop)
 
 	for _, c := range toAdd {
-		stmt := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s STRING", d.SinkTable, c)
-		if err := db.Exec(stmt).Error; err != nil {
+		addStmt := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s STRING", quoteIdentifier(d.SinkTable), quoteIdentifier(c))
+		if err := db.Exec(addStmt).Error; err != nil {
 			return fmt.Errorf("add column %s: %w", c, err)
+		}
+		indexStmt := fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s SET INVERTED INDEX", quoteIdentifier(d.SinkTable), quoteIdentifier(c))
+		if err := db.Exec(indexStmt).Error; err != nil {
+			return fmt.Errorf("set inverted index for column %s: %w", c, err)
 		}
 	}
 
 	for _, c := range toDrop {
-		stmt := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", d.SinkTable, c)
-		if err := db.Exec(stmt).Error; err != nil {
+		unsetStmt := fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s UNSET INVERTED INDEX", quoteIdentifier(d.SinkTable), quoteIdentifier(c))
+		if err := db.Exec(unsetStmt).Error; err != nil {
+			return fmt.Errorf("unset inverted index for column %s: %w", c, err)
+		}
+		dropStmt := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", quoteIdentifier(d.SinkTable), quoteIdentifier(c))
+		if err := db.Exec(dropStmt).Error; err != nil {
 			return fmt.Errorf("drop column %s: %w", c, err)
 		}
 	}
@@ -244,16 +253,21 @@ func validatePipeline(p Pipeline, d TemplateData) error {
 		}
 	}
 
-	if len(d.Dimensions) == 0 {
-		return fmt.Errorf("at least one dimension is required")
+	//if len(d.Dimensions) == 0 {
+	//	return fmt.Errorf("at least one dimension is required")
+	//}
+	if len(d.PrimaryKeys) == 0 {
+		return fmt.Errorf("at least one primary key column is required")
 	}
 
 	for _, dim := range d.Dimensions {
-		if !identPattern.MatchString(dim.Name) {
-			return fmt.Errorf("invalid dimension name: %s", dim.Name)
+		if !columnPattern.MatchString(dim) {
+			return fmt.Errorf("invalid dimension name: %s", dim)
 		}
-		if strings.TrimSpace(dim.Expr) == "" {
-			return fmt.Errorf("empty dimension expr for %s", dim.Name)
+	}
+	for _, pk := range d.PrimaryKeys {
+		if !columnPattern.MatchString(pk) {
+			return fmt.Errorf("invalid primary key name: %s", pk)
 		}
 	}
 
@@ -307,16 +321,18 @@ func renderSQLTemplate(templates map[string]string, templateName string, data Te
 	}
 
 	tmpl, err := template.New(templateName).Funcs(template.FuncMap{
-		"dimensionSelect": func(d Dimension) string {
-			if d.Expr == d.Name {
-				return d.Name
-			}
-			return fmt.Sprintf("%s AS %s", d.Expr, d.Name)
-		},
-		"joinDimensionNames": func(dimensions []Dimension) string {
+		"quoteIdentifier": quoteIdentifier,
+		"joinDimensionNames": func(dimensions []string) string {
 			names := make([]string, 0, len(dimensions))
 			for _, d := range dimensions {
-				names = append(names, d.Name)
+				names = append(names, quoteIdentifier(d))
+			}
+			return strings.Join(names, ", ")
+		},
+		"joinPrimaryKeys": func(keys []string) string {
+			names := make([]string, 0, len(keys))
+			for _, k := range keys {
+				names = append(names, quoteIdentifier(k))
 			}
 			return strings.Join(names, ", ")
 		},
@@ -335,12 +351,12 @@ func renderSQLTemplate(templates map[string]string, templateName string, data Te
 const sinkTrafficTemplate = `
 CREATE TABLE IF NOT EXISTS {{ .SinkTable }} (
 {{- range .Dimensions }}
-  {{ .Name }} STRING,
+  {{ quoteIdentifier . }} STRING INVERTED INDEX,
 {{- end }}
   {{ .ValueColumn }} {{ .ValueType }},
   time_window TIMESTAMP TIME INDEX,
   update_at TIMESTAMP,
-  PRIMARY KEY ({{ joinDimensionNames .Dimensions }})
+  PRIMARY KEY ({{ joinPrimaryKeys .PrimaryKeys }})
 );`
 
 const flowTrafficTemplate = `
@@ -349,7 +365,7 @@ SINK TO {{ .SinkTable }}
 AS
 SELECT
 {{- range .Dimensions }}
-  {{ dimensionSelect . }},
+  {{ quoteIdentifier . }},
 {{- end }}
   {{ .ValueExpr }} AS {{ .ValueColumn }},
   {{ .TimeSelectExpr }}
@@ -357,19 +373,19 @@ FROM {{ .SourceTable }}
 WHERE {{ .WhereClause }}
 GROUP BY
 {{- range .Dimensions }}
-  {{ .Expr }},
+  {{ quoteIdentifier . }},
 {{- end }}
   {{ .TimeGroupExpr }};`
 
 const sinkLatencyTemplate = `
 CREATE TABLE IF NOT EXISTS {{ .SinkTable }} (
 {{- range .Dimensions }}
-  {{ .Name }} STRING,
+  {{ quoteIdentifier . }} STRING INVERTED INDEX,
 {{- end }}
   {{ .ValueColumn }} {{ .ValueType }},
   time_window TIMESTAMP TIME INDEX,
   update_at TIMESTAMP,
-  PRIMARY KEY ({{ joinDimensionNames .Dimensions }})
+  PRIMARY KEY ({{ joinPrimaryKeys .PrimaryKeys }})
 );`
 
 const flowLatencyTemplate = `
@@ -378,7 +394,7 @@ SINK TO {{ .SinkTable }}
 AS
 SELECT
 {{- range .Dimensions }}
-  {{ dimensionSelect . }},
+  {{ quoteIdentifier . }},
 {{- end }}
   {{ .ValueExpr }} AS {{ .ValueColumn }},
   {{ .TimeSelectExpr }}
@@ -386,19 +402,19 @@ FROM {{ .SourceTable }}
 WHERE {{ .WhereClause }}
 GROUP BY
 {{- range .Dimensions }}
-  {{ .Expr }},
+  {{ quoteIdentifier . }},
 {{- end }}
   {{ .TimeGroupExpr }};`
 
 const sinkErrorsTemplate = `
 CREATE TABLE IF NOT EXISTS {{ .SinkTable }} (
 {{- range .Dimensions }}
-  {{ .Name }} STRING,
+  {{ quoteIdentifier . }} STRING INVERTED INDEX,
 {{- end }}
   {{ .ValueColumn }} {{ .ValueType }},
   time_window TIMESTAMP TIME INDEX,
   update_at TIMESTAMP,
-  PRIMARY KEY ({{ joinDimensionNames .Dimensions }})
+  PRIMARY KEY ({{ joinPrimaryKeys .PrimaryKeys }})
 );`
 
 const flowErrorsTemplate = `
@@ -407,7 +423,7 @@ SINK TO {{ .SinkTable }}
 AS
 SELECT
 {{- range .Dimensions }}
-  {{ dimensionSelect . }},
+  {{ quoteIdentifier . }},
 {{- end }}
   {{ .ValueExpr }} AS {{ .ValueColumn }},
   {{ .TimeSelectExpr }}
@@ -415,6 +431,10 @@ FROM {{ .SourceTable }}
 WHERE {{ .WhereClause }}
 GROUP BY
 {{- range .Dimensions }}
-  {{ .Expr }},
+  {{ quoteIdentifier . }},
 {{- end }}
   {{ .TimeGroupExpr }};`
+
+func quoteIdentifier(s string) string {
+	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+}
