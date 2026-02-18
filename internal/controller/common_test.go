@@ -15,8 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	"github.com/decisiveai/mdai-operator/internal/manifests"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
+	"github.com/mydecisive/mdai-operator/internal/manifests"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 )
 

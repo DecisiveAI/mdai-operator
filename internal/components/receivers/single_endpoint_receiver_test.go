@@ -12,8 +12,8 @@ import (
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/decisiveai/mdai-operator/internal/components/receivers"
-	"github.com/decisiveai/mdai-operator/internal/naming"
+	"github.com/mydecisive/mdai-operator/internal/components/receivers"
+	"github.com/mydecisive/mdai-operator/internal/naming"
 )
 
 var logger = zap.NewNop()

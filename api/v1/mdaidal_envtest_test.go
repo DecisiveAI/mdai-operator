@@ -49,7 +49,7 @@ func TestMdaiDalDefaultsAndValidation(t *testing.T) {
 		require.False(t, created.Spec.UsePayloadTS)
 
 		require.NotNil(t, created.Spec.ImageSpec)
-		require.Equal(t, "public.ecr.aws/decisiveai/mdai-dal", created.Spec.ImageSpec.Repository)
+		require.Equal(t, "public.ecr.aws/mydecisive/mdai-dal", created.Spec.ImageSpec.Repository)
 		require.Equal(t, "0.0.1", created.Spec.ImageSpec.Tag)
 		require.Equal(t, ImagePullPolicy("IfNotPresent"), created.Spec.ImageSpec.PullPolicy)
 

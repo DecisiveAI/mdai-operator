@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/decisiveai/mdai-data-core/eventing/rule"
-	"github.com/decisiveai/mdai-data-core/eventing/triggers"
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"github.com/mydecisive/mdai-data-core/eventing/rule"
+	"github.com/mydecisive/mdai-data-core/eventing/triggers"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/utils/ptr"

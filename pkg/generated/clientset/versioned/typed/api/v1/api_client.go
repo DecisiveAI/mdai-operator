@@ -5,8 +5,8 @@ package v1
 import (
 	http "net/http"
 
-	apiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	scheme "github.com/decisiveai/mdai-operator/pkg/generated/clientset/versioned/scheme"
+	apiv1 "github.com/mydecisive/mdai-operator/api/v1"
+	scheme "github.com/mydecisive/mdai-operator/pkg/generated/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
 )
 

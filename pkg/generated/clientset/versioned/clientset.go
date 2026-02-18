@@ -6,7 +6,7 @@ import (
 	fmt "fmt"
 	http "net/http"
 
-	hubv1 "github.com/decisiveai/mdai-operator/pkg/generated/clientset/versioned/typed/api/v1"
+	hubv1 "github.com/mydecisive/mdai-operator/pkg/generated/clientset/versioned/typed/api/v1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"

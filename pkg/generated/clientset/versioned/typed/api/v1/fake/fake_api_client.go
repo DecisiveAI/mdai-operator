@@ -3,7 +3,7 @@
 package fake
 
 import (
-	v1 "github.com/decisiveai/mdai-operator/pkg/generated/clientset/versioned/typed/api/v1"
+	v1 "github.com/mydecisive/mdai-operator/pkg/generated/clientset/versioned/typed/api/v1"
 	rest "k8s.io/client-go/rest"
 	testing "k8s.io/client-go/testing"
 )

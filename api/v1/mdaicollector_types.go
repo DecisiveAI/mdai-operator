@@ -80,7 +80,7 @@ type MdaiCollectorSpec struct {
 	AWSConfig *AWSConfig `json:"aws,omitempty"`
 	// +optional
 	Logs *LogsConfig `json:"logs,omitempty"`
-	// +kubebuilder:default="public.ecr.aws/decisiveai/mdai-collector:0.1.6"
+	// +kubebuilder:default="public.ecr.aws/mydecisive/mdai-collector:0.1.6"
 	// +optional
 	Image string `json:"image,omitempty"`
 	// +kubebuilder:default=1

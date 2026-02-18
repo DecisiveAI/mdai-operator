@@ -194,7 +194,7 @@ func InstallValkey() error {
 		"oci://registry-1.docker.io/bitnamicharts/valkey",
 		"--set", "auth.password=abc",
 		"--set", "image.registry=public.ecr.aws",
-		"--set", "image.repository=decisiveai/valkey",
+		"--set", "image.repository=mydecisive/valkey",
 		"--set", "image.tag=latest",
 		"-f", "test/test-samples/valkey-values.yaml",
 	)

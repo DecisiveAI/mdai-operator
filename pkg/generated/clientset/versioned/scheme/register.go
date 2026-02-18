@@ -3,7 +3,7 @@
 package scheme
 
 import (
-	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
+	hubv1 "github.com/mydecisive/mdai-operator/api/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

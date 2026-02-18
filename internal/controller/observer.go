@@ -5,8 +5,8 @@ import (
 	_ "embed"
 	"fmt"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	"github.com/decisiveai/mdai-operator/internal/builder"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
+	"github.com/mydecisive/mdai-operator/internal/builder"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	observerDefaultImage         = "public.ecr.aws/decisiveai/observer-collector:0.1"
+	observerDefaultImage         = "public.ecr.aws/mydecisive/observer-collector:0.1"
 	mdaiObserverHubComponent     = "mdai-observer"
 	mdaiObserverResourceBaseName = "mdai-observer"
 )

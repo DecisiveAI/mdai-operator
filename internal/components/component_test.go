@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/decisiveai/mdai-operator/internal/components"
+	"github.com/mydecisive/mdai-operator/internal/components"
 )
 
 func TestComponentType(t *testing.T) {

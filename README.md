@@ -1,5 +1,5 @@
-[![Chores](https://github.com/DecisiveAI/mdai-operator/actions/workflows/chores.yml/badge.svg)](https://github.com/DecisiveAI/mdai-operator/actions/workflows/chores.yml)
-[![codecov](https://codecov.io/gh/DecisiveAI/mdai-operator/branch/main/graph/badge.svg?token=AO9MG6SCO7)](https://codecov.io/gh/DecisiveAI/mdai-operator)
+[![Chores](https://github.com/MyDecisive/mdai-operator/actions/workflows/chores.yml/badge.svg)](https://github.com/MyDecisive/mdai-operator/actions/workflows/chores.yml)
+[![codecov](https://codecov.io/gh/MyDecisive/mdai-operator/branch/main/graph/badge.svg?token=AO9MG6SCO7)](https://codecov.io/gh/MyDecisive/mdai-operator)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/mdai-operator)](https://artifacthub.io/packages/search?repo=mdai-operator)
 
 # MDAI K8s Operator
@@ -49,7 +49,7 @@ kubectl wait --for=condition=available --timeout=600s deployment --all -n cert-m
 kubectl apply -f https://github.com/open-telemetry/opentelemetry-operator/releases/latest/download/opentelemetry-operator.yaml
 helm install valkey oci://registry-1.docker.io/bitnamicharts/valkey --set auth.password=abc \
   --set image.registry="" \
-  --set image.repository=public.ecr.aws/decisiveai/valkey \
+  --set image.repository=public.ecr.aws/mydecisive/valkey \
   --set image.tag=latest \
   -f test/test-samples/valkey-values.yaml
 helm install prometheus prometheus-community/kube-prometheus-stack

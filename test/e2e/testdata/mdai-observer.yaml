@@ -36,7 +36,7 @@ spec:
           log_record:
             - 'attributes["log_level"] == "INFO"'
   observerResource:
-    image: public.ecr.aws/decisiveai/observer-collector:0.1.6
+    image: public.ecr.aws/mydecisive/observer-collector:0.1.6
     replicas: 2
     tolerations:
       - key: "dedicated"

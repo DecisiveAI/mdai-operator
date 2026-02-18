@@ -5,8 +5,8 @@ import (
 	"errors"
 	"reflect"
 
-	"github.com/decisiveai/mdai-operator/internal/manifests"
-	"github.com/decisiveai/mdai-operator/internal/manifests/collector"
+	"github.com/mydecisive/mdai-operator/internal/manifests"
+	"github.com/mydecisive/mdai-operator/internal/manifests/collector"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
+	hubv1 "github.com/mydecisive/mdai-operator/api/v1"
 )
 
 const (

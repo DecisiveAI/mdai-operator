@@ -8,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/decisiveai/mdai-operator/internal/manifests"
 	"github.com/go-logr/logr"
+	"github.com/mydecisive/mdai-operator/internal/manifests"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

@@ -11,7 +11,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
+	hubv1 "github.com/mydecisive/mdai-operator/api/v1"
 )
 
 var _ = Describe("MdaiReplay Controller", func() {

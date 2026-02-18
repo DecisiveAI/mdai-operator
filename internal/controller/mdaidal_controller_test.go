@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
+	hubv1 "github.com/mydecisive/mdai-operator/api/v1"
 )
 
 var _ = Describe("MdaiDal Controller", func() {
@@ -89,7 +89,7 @@ var _ = Describe("MdaiDal Controller", func() {
 			Eventually(func() error {
 				return k8sClient.Get(ctx, typeNamespacedName, deployment)
 			}, "10s", "1s").Should(Succeed())
-			Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("public.ecr.aws/decisiveai/mdai-dal"))
+			Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("public.ecr.aws/mydecisive/mdai-dal"))
 
 			By("Checking if the Service was created")
 			service := &corev1.Service{}

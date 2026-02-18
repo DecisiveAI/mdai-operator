@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/decisiveai/mdai-operator/internal/manifests/collector/adapters"
+	"github.com/mydecisive/mdai-operator/internal/manifests/collector/adapters"
 )
 
 func TestInvalidYAML(t *testing.T) {

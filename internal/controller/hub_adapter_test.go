@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/stretchr/testify/assert"

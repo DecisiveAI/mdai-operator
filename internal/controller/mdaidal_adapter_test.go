@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"

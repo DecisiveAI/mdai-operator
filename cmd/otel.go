@@ -95,7 +95,7 @@ func attachOtelLogger(logger logr.Logger) logr.Logger {
 	// Bootstrap OTEL's own error handling with this logger, so we're not attempting to log OTEL's errors to itself
 	otel.SetErrorHandler(&LogrLogHandler{logger})
 	mainSink := logger.GetSink()
-	var otelSink logr.LogSink = otellogr.NewLogSink("github.com/decisiveai/mdai-operator")
+	var otelSink logr.LogSink = otellogr.NewLogSink("github.com/mydecisive/mdai-operator")
 	otelifiedLogger := logger.WithSink(otelMirrorSink{mainSink, otelSink})
 	return otelifiedLogger
 }

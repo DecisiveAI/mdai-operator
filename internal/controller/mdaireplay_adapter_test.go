@@ -7,11 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/decisiveai/mdai-operator/internal/builder"
+	"github.com/mydecisive/mdai-operator/internal/builder"
 	"k8s.io/utils/ptr"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

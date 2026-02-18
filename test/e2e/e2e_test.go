@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/decisiveai/mdai-operator/internal/controller"
-	"github.com/decisiveai/mdai-operator/test/utils"
+	"github.com/mydecisive/mdai-operator/internal/controller"
+	"github.com/mydecisive/mdai-operator/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/valkey-io/valkey-go"

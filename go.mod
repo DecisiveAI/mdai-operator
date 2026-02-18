@@ -1,4 +1,4 @@
-module github.com/decisiveai/mdai-operator
+module github.com/mydecisive/mdai-operator
 
 go 1.24.0
 
@@ -7,19 +7,19 @@ godebug default=go1.24
 require (
 	dario.cat/mergo v1.0.2
 	github.com/cenkalti/backoff/v5 v5.0.3
-	github.com/decisiveai/mdai-data-core v0.2.9
 	github.com/go-logr/logr v1.4.3
 	github.com/go-logr/zapr v1.3.0
 	github.com/goccy/go-yaml v1.18.0
 	github.com/google/go-cmp v0.7.0
 	github.com/mitchellh/mapstructure v1.5.0
+	github.com/mydecisive/mdai-data-core v0.3.0
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
 	github.com/open-telemetry/opentelemetry-operator v0.131.0
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.81.0
 	github.com/prometheus/common v0.65.0
 	github.com/prometheus/prometheus v0.301.0
-	github.com/samber/lo v1.51.0
+	github.com/samber/lo v1.52.0
 	github.com/stretchr/testify v1.11.1
 	github.com/valkey-io/valkey-go v1.0.62
 	github.com/valkey-io/valkey-go/mock v1.0.62

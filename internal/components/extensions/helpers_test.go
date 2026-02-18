@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/decisiveai/mdai-operator/internal/components"
-	"github.com/decisiveai/mdai-operator/internal/naming"
+	"github.com/mydecisive/mdai-operator/internal/components"
+	"github.com/mydecisive/mdai-operator/internal/naming"
 )
 
 func TestParserForReturns(t *testing.T) {

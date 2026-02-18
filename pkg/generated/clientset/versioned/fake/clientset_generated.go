@@ -3,9 +3,9 @@
 package fake
 
 import (
-	clientset "github.com/decisiveai/mdai-operator/pkg/generated/clientset/versioned"
-	hubv1 "github.com/decisiveai/mdai-operator/pkg/generated/clientset/versioned/typed/api/v1"
-	fakehubv1 "github.com/decisiveai/mdai-operator/pkg/generated/clientset/versioned/typed/api/v1/fake"
+	clientset "github.com/mydecisive/mdai-operator/pkg/generated/clientset/versioned"
+	hubv1 "github.com/mydecisive/mdai-operator/pkg/generated/clientset/versioned/typed/api/v1"
+	fakehubv1 "github.com/mydecisive/mdai-operator/pkg/generated/clientset/versioned/typed/api/v1/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"

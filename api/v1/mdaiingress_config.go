@@ -1,9 +1,9 @@
 package v1
 
 import (
-	"github.com/decisiveai/mdai-operator/internal/components"
-	"github.com/decisiveai/mdai-operator/internal/components/exporters"
-	"github.com/decisiveai/mdai-operator/internal/components/receivers"
+	"github.com/mydecisive/mdai-operator/internal/components"
+	"github.com/mydecisive/mdai-operator/internal/components/exporters"
+	"github.com/mydecisive/mdai-operator/internal/components/receivers"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	"go.uber.org/zap"
 )

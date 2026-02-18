@@ -1,7 +1,7 @@
 package v1
 
 import (
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	prometheusv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"

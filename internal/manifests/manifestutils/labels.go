@@ -10,7 +10,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/decisiveai/mdai-operator/internal/naming"
+	"github.com/mydecisive/mdai-operator/internal/naming"
 )
 
 func IsFilteredSet(sourceSet string, filterSet []string) bool {

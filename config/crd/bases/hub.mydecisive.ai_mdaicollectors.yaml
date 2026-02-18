@@ -45,7 +45,7 @@ spec:
                     type: string
                 type: object
               image:
-                default: public.ecr.aws/decisiveai/mdai-collector:0.1.6
+                default: public.ecr.aws/mydecisive/mdai-collector:0.1.6
                 type: string
               logs:
                 properties:

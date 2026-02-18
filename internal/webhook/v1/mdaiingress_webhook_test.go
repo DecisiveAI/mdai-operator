@@ -3,7 +3,7 @@ package v1
 import (
 	"context"
 
-	"github.com/decisiveai/mdai-operator/internal/controller"
+	"github.com/mydecisive/mdai-operator/internal/controller"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,7 +13,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
 )
 
 var _ = Describe("MdaiIngress Webhook", func() {

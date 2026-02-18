@@ -22,5 +22,5 @@ spec:
             - 'attributes["log_level"] == "INFO"'
 
   observerResource:
-    image: public.ecr.aws/decisiveai/observer-collector:0.1
+    image: public.ecr.aws/mydecisive/observer-collector:0.1
     tolerations: []
