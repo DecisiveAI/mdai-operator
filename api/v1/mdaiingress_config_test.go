@@ -4,8 +4,8 @@ package v1
 import (
 	"testing"
 
-	"github.com/decisiveai/mdai-operator/internal/components"
 	goyaml "github.com/goccy/go-yaml"
+	"github.com/mydecisive/mdai-operator/internal/components"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

@@ -3,13 +3,15 @@
 package v1
 
 import (
-	internalinterfaces "github.com/decisiveai/mdai-operator/pkg/generated/informers/externalversions/internalinterfaces"
+	internalinterfaces "github.com/mydecisive/mdai-operator/pkg/generated/informers/externalversions/internalinterfaces"
 )
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
 	// MdaiCollectors returns a MdaiCollectorInformer.
 	MdaiCollectors() MdaiCollectorInformer
+	// MdaiDals returns a MdaiDalInformer.
+	MdaiDals() MdaiDalInformer
 	// MdaiHubs returns a MdaiHubInformer.
 	MdaiHubs() MdaiHubInformer
 	// MdaiIngresses returns a MdaiIngressInformer.
@@ -34,6 +36,11 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 // MdaiCollectors returns a MdaiCollectorInformer.
 func (v *version) MdaiCollectors() MdaiCollectorInformer {
 	return &mdaiCollectorInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// MdaiDals returns a MdaiDalInformer.
+func (v *version) MdaiDals() MdaiDalInformer {
+	return &mdaiDalInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // MdaiHubs returns a MdaiHubInformer.

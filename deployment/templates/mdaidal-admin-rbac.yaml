@@ -1,0 +1,19 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "deployment.fullname" . }}-mdaidal-admin-role
+  labels:
+  {{- include "deployment.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - hub.mydecisive.ai
+  resources:
+  - mdaidals
+  verbs:
+  - '*'
+- apiGroups:
+  - hub.mydecisive.ai
+  resources:
+  - mdaidals/status
+  verbs:
+  - get

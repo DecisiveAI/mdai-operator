@@ -3,7 +3,7 @@
 package v1
 
 import (
-	apiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	apiv1 "github.com/mydecisive/mdai-operator/api/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
 	listers "k8s.io/client-go/listers"
 	cache "k8s.io/client-go/tools/cache"

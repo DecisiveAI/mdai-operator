@@ -14,7 +14,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/decisiveai/mdai-operator/internal/components"
+	"github.com/mydecisive/mdai-operator/internal/components"
 )
 
 func TestGenericParser_GetPorts(t *testing.T) {

@@ -17,7 +17,7 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 # Update this version to match new release tag and run helm targets
-VERSION = 0.2.9
+VERSION = 0.2.11
 
 # Image URL to use all building/pushing image targets
 IMG ?= public.ecr.aws/p3k6k6h3/mdai-operator:${VERSION}
@@ -67,7 +67,9 @@ vet: ## Run go vet against code.
 
 .PHONY: test-coverage
 test-coverage: manifests generate fmt vet envtest ## Run tests and generate code coverage.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v -E "/e2e|/test/utils|cmd") -coverprofile=coverage.txt
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v -E "/e2e|/test/utils|cmd|pkg/generated") -coverprofile=coverage.txt 
+	@sed '/zz_generated.deepcopy.go/d' coverage.txt > coverage.tmp
+	@mv coverage.tmp coverage.txt
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests and generate code coverage.
@@ -200,12 +202,15 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
 HELMIFY ?= $(LOCALBIN)/helmify
 HELM_DOCS = $(LOCALBIN)/helm-docs
+HELM ?= $(LOCALBIN)/helm
+HELM_PLUGINS ?= $(LOCALBIN)/helm-plugins
+export HELM_PLUGINS
 YQ ?= $(LOCALBIN)/yq
 UNAME := $(shell uname -s)
 
 ## Tool Versions
-KUSTOMIZE_VERSION ?= v5.6.0
-CONTROLLER_TOOLS_VERSION ?= v0.17.2
+KUSTOMIZE_VERSION ?= v5.8.0
+CONTROLLER_TOOLS_VERSION ?= v0.19.0
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime | awk -F'[v.]' '{printf "release-%d.%d", $$2, $$3}')
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
@@ -213,6 +218,7 @@ ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -
 GOLANGCI_LINT_VERSION ?= v2.4
 HELMIFY_VERSION ?= v0.4.19
 HELM_DOCS_VERSION ?= v1.14.2
+HELM_VERSION ?= v3.19.4
 YQ_VERSION ?= v4.45.4
 
 YQ_VERSIONED := $(YQ)-$(YQ_VERSION)
@@ -255,13 +261,14 @@ helm-docs: $(HELM_DOCS) ## Download helm-docs locally if necessary.
 $(HELM_DOCS): $(LOCALBIN)
 	$(call go-install-tool,$(HELM_DOCS),github.com/norwoodj/helm-docs/cmd/helm-docs,$(HELM_DOCS_VERSION))
 
-PLUGIN_HELM_VALUES_SCHEMA_FOUND = $(shell helm plugin list | grep ^schema -c)
+$(HELM): $(LOCALBIN)
+	$(call go-install-tool,$(HELM),helm.sh/helm/v3/cmd/helm,$(HELM_VERSION))
 
 .PHONY: helm-values-schema-json-plugin
-helm-values-schema-json-plugin:
-ifeq ($(PLUGIN_HELM_VALUES_SCHEMA_FOUND), 0)
-	helm plugin install https://github.com/losisin/helm-values-schema-json.git
-endif
+helm-values-schema-json-plugin: $(HELM)
+	@mkdir -p $(HELM_PLUGINS)
+	@$(HELM) plugin list | grep -q '^schema' || \
+		$(HELM) plugin install https://github.com/losisin/helm-values-schema-json.git
 
 .PHONY: yq
 yq:
@@ -308,7 +315,7 @@ CHART_VERSION ?= $(LATEST_TAG)
 CHART_DIR := ./deployment
 CHART_NAME := mdai-operator
 CHART_PACKAGE := $(CHART_NAME)-$(CHART_VERSION).tgz
-CHART_REPO := git@github.com:DecisiveAI/mdai-helm-charts.git
+CHART_REPO := git@github.com:MyDecisive/mdai-helm-charts.git
 BASE_BRANCH := gh-pages
 TARGET_BRANCH := $(CHART_NAME)-v$(CHART_VERSION)
 CLONE_DIR := $(shell mktemp -d /tmp/mdai-helm-charts.XXXXXX)
@@ -339,12 +346,12 @@ helm-update: manifests kustomize helmify helm-docs helm-values-schema-json-plugi
 	$(call vecho,"📝 Updating Helm chart docs...")
 	@$(HELM_DOCS) --skip-version-footer $(CHART_PATH) -f values.yaml -l warning
 	$(call vecho,"📐 Updating Helm chart JSON schema...")
-	@helm schema --values $(CHART_PATH)/values.yaml --output $(CHART_PATH)/values.schema.json
+	@$(HELM) schema --values $(CHART_PATH)/values.yaml --output $(CHART_PATH)/values.schema.json
 
 .PHONY: helm-package
 helm-package: helm-update
 	$(call vecho, "📦 Packaging Helm chart...")
-	@helm package -u --version $(CHART_VERSION) --app-version $(CHART_VERSION) $(CHART_DIR) > /dev/null
+	@$(HELM) package -u --version $(CHART_VERSION) --app-version $(CHART_VERSION) $(CHART_DIR) > /dev/null
 
 .PHONY: helm-publish
 helm-publish: helm-package
@@ -357,7 +364,7 @@ helm-publish: helm-package
 
 	$(call vecho,"📤 Copying and indexing chart...")
 	@cd $(CLONE_DIR) && \
-		helm repo index $(REPO_DIR) --merge index.yaml && \
+		$(HELM) repo index $(REPO_DIR) --merge index.yaml && \
 		mv $(REPO_DIR)/$(CHART_PACKAGE) $(CLONE_DIR)/ && \
 		mv $(REPO_DIR)/index.yaml $(CLONE_DIR)/
 

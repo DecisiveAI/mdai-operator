@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	otelv1beta1 "github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
@@ -15,6 +14,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to

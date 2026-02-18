@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
+	hubv1 "github.com/mydecisive/mdai-operator/api/v1"
 )
 
 var (

@@ -3,8 +3,8 @@
 package fake
 
 import (
-	v1 "github.com/decisiveai/mdai-operator/api/v1"
-	apiv1 "github.com/decisiveai/mdai-operator/pkg/generated/clientset/versioned/typed/api/v1"
+	v1 "github.com/mydecisive/mdai-operator/api/v1"
+	apiv1 "github.com/mydecisive/mdai-operator/pkg/generated/clientset/versioned/typed/api/v1"
 	gentype "k8s.io/client-go/gentype"
 )
 

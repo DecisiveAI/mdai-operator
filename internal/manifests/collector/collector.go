@@ -6,7 +6,7 @@ package collector
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/decisiveai/mdai-operator/internal/manifests"
+	"github.com/mydecisive/mdai-operator/internal/manifests"
 )
 
 const (

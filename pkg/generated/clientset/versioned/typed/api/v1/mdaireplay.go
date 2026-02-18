@@ -5,8 +5,8 @@ package v1
 import (
 	context "context"
 
-	apiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	scheme "github.com/decisiveai/mdai-operator/pkg/generated/clientset/versioned/scheme"
+	apiv1 "github.com/mydecisive/mdai-operator/api/v1"
+	scheme "github.com/mydecisive/mdai-operator/pkg/generated/clientset/versioned/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"

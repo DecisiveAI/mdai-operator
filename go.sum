@@ -51,10 +51,6 @@ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/mydecisive/mdai-data-core v0.2.9 h1:dFveDVpOTWRgI0W6I4kxQ9qjrXgYUX+d9nTukhmj82E=
-github.com/mydecisive/mdai-data-core v0.2.9/go.mod h1:t79Oo87yO6pZ8bp5WKZMnzvi6Y/65EDsT9dlj0v+RgY=
-github.com/mydecisive/mdai-data-core v0.2.10-0.20260115193028-b0cc7848230a h1:1nYIRbbxu7j0+HiOLA5naeS8bAg+2R11ys4v71I3JTk=
-github.com/mydecisive/mdai-data-core v0.2.10-0.20260115193028-b0cc7848230a/go.mod h1:o40VxhMGPOVuIQZw8MPH3Zv//OIvMGa1n/0nlz6Rt88=
 github.com/dennwc/varint v1.0.0 h1:kGNFFSSw8ToIy3obO/kKr8U9GZYUAxQEVuix4zfDWzE=
 github.com/dennwc/varint v1.0.0/go.mod h1:hnItb35rvZvJrbTALZtY/iQfDs48JKRG1RPpgziApxA=
 github.com/digitalocean/godo v1.132.0 h1:n0x6+ZkwbyQBtIU1wwBhv26EINqHg0wWQiBXlwYg/HQ=
@@ -278,8 +274,7 @@ github.com/prometheus/sigv4 v0.1.0/go.mod h1:doosPW9dOitMzYe2I2BN0jZqUuBrGPbXrNs
 github.com/rogpeppe/go-internal v1.13.1 h1:KvO1DLK/DRN07sQ1LQKScxyZJuNnedQ5/wKSR38lUII=
 github.com/rogpeppe/go-internal v1.13.1/go.mod h1:uMEvuHeurkdAXX61udpOXGD/AzZDWNMNyH2VO9fmH0o=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
-github.com/samber/lo v1.51.0 h1:kysRYLbHy/MB7kQZf5DSN50JHmMsNEdeY24VzJFu7wI=
-github.com/samber/lo v1.51.0/go.mod h1:4+MXEGsJzbKGaUEQFKBq2xtfuznW9oz/WrgyzMzRoM0=
+github.com/samber/lo v1.52.0 h1:Rvi+3BFHES3A8meP33VPAxiBZX/Aws5RxrschYGjomw=
 github.com/samber/lo v1.52.0/go.mod h1:4+MXEGsJzbKGaUEQFKBq2xtfuznW9oz/WrgyzMzRoM0=
 github.com/scaleway/scaleway-sdk-go v1.0.0-beta.30 h1:yoKAVkEVwAqbGbR8n87rHQ1dulL25rKloGadb3vm770=
 github.com/scaleway/scaleway-sdk-go v1.0.0-beta.30/go.mod h1:sH0u6fq6x4R5M7WxkoQFY/o7UaiItec0o1LinLCJNq8=

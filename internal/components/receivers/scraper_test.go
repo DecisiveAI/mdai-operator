@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/decisiveai/mdai-operator/internal/components/receivers"
+	"github.com/mydecisive/mdai-operator/internal/components/receivers"
 )
 
 func TestScraperParsers(t *testing.T) {

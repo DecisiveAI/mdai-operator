@@ -89,6 +89,7 @@ rules:
   - hub.mydecisive.ai
   resources:
   - mdaicollectors
+  - mdaidals
   - mdaihubs
   - mdaiingresses
   - mdaiobservers
@@ -105,6 +106,7 @@ rules:
   - hub.mydecisive.ai
   resources:
   - mdaicollectors/finalizers
+  - mdaidals/finalizers
   - mdaihubs/finalizers
   - mdaiingresses/finalizers
   - mdaiobservers/finalizers
@@ -115,6 +117,7 @@ rules:
   - hub.mydecisive.ai
   resources:
   - mdaicollectors/status
+  - mdaidals/status
   - mdaihubs/status
   - mdaiingresses/status
   - mdaiobservers/status

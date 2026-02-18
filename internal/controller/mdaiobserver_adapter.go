@@ -7,8 +7,8 @@ import (
 	"os"
 	"slices"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

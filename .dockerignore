@@ -1,3 +1,21 @@
-# More info: https://docs.docker.com/engine/reference/builder/#dockerignore-file
-# Ignore build and test binaries.
-bin/
+codecov.yml
+deployment/
+docs/
+grafana/
+hack/
+LICENSE
+Makefile
+PROJECT
+README.md
+
+test/
+vendor/
+
+**/.git
+**/.vscode
+**/*.swp
+**/tmp
+
+**/*.log
+**/*.bak
+**/bin/

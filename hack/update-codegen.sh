@@ -12,6 +12,6 @@ source "${SCRIPT_ROOT}/vendor/k8s.io/code-generator/kube_codegen.sh"
 kube::codegen::gen_client \
     --with-watch \
     --output-dir "${SCRIPT_ROOT}/pkg/generated" \
-    --output-pkg "github.com/decisiveai/mdai-operator/pkg/generated" \
+    --output-pkg "github.com/mydecisive/mdai-operator/pkg/generated" \
     --boilerplate "${SCRIPT_ROOT}/hack/boilerplate.go.txt" \
     "${SCRIPT_ROOT}"

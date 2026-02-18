@@ -7,9 +7,9 @@ import (
 	sync "sync"
 	time "time"
 
-	versioned "github.com/decisiveai/mdai-operator/pkg/generated/clientset/versioned"
-	api "github.com/decisiveai/mdai-operator/pkg/generated/informers/externalversions/api"
-	internalinterfaces "github.com/decisiveai/mdai-operator/pkg/generated/informers/externalversions/internalinterfaces"
+	versioned "github.com/mydecisive/mdai-operator/pkg/generated/clientset/versioned"
+	api "github.com/mydecisive/mdai-operator/pkg/generated/informers/externalversions/api"
+	internalinterfaces "github.com/mydecisive/mdai-operator/pkg/generated/informers/externalversions/internalinterfaces"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
 )
 
 var _ Controller = (*MdaiReplayReconciler)(nil)

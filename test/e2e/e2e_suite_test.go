@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/decisiveai/mdai-operator/test/utils"
+	"github.com/mydecisive/mdai-operator/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )

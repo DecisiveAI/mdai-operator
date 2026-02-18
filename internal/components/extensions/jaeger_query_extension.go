@@ -12,8 +12,8 @@ import (
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/decisiveai/mdai-operator/internal/components"
-	"github.com/decisiveai/mdai-operator/internal/naming"
+	"github.com/mydecisive/mdai-operator/internal/components"
+	"github.com/mydecisive/mdai-operator/internal/naming"
 )
 
 const (

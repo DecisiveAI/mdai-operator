@@ -8,15 +8,15 @@ import (
 	"fmt"
 	"os"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	goyaml "github.com/goccy/go-yaml"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
 	"go.uber.org/zap"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/uuid"
 
-	"github.com/decisiveai/mdai-operator/internal/manifests"
+	"github.com/mydecisive/mdai-operator/internal/manifests"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 )
 

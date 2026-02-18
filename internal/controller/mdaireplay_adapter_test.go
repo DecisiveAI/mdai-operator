@@ -7,11 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/decisiveai/mdai-operator/internal/builder"
+	"github.com/mydecisive/mdai-operator/internal/builder"
 	"k8s.io/utils/ptr"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -328,6 +328,7 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 				StartTime:         "2024-01-01T00:00:00Z",
 				EndTime:           "2024-01-02T00:00:00Z",
 				StatusVariableRef: "test-var",
+				TelemetryType:     mdaiv1.LogsReplayTelemetryType,
 				OpAMPEndpoint:     "http://opamp:4320",
 				Source: mdaiv1.MdaiReplaySourceConfiguration{
 					S3: &mdaiv1.MdaiReplayS3Configuration{
@@ -385,12 +386,13 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 			},
 		},
 		{
-			name:     "configuration with otlp http destination",
+			name:     "configuration with log otlp http destination",
 			replayId: "replay-456",
 			hubName:  "hub-789",
 			spec: mdaiv1.MdaiReplaySpec{
 				StartTime:         "2024-01-01T00:00:00Z",
 				EndTime:           "2024-01-02T00:00:00Z",
+				TelemetryType:     mdaiv1.LogsReplayTelemetryType,
 				StatusVariableRef: "test-var",
 				OpAMPEndpoint:     "http://opamp:4320",
 				Destination: mdaiv1.MdaiReplayDestinationConfiguration{
@@ -423,11 +425,115 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 				service := config.MustMap("service")
 				pipelines := service.MustMap("pipelines")
 				logsReplay := pipelines.MustMap("logs/replay")
-				exportersList := logsReplay.MustSlice("exporters")
+				exportersList := logsReplay["exporters"].([]string) // nolint:forcetypeassert
 
 				found := false
 				for _, exp := range exportersList {
-					if exp.(string) == "otlphttp" { // nolint:forcetypeassert
+					if exp == "otlphttp" { // nolint:goconst
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "otlphttp should be in exporters list")
+			},
+		},
+		{
+			name:     "configuration with traces otlp http destination",
+			replayId: "replay-456",
+			hubName:  "hub-789",
+			spec: mdaiv1.MdaiReplaySpec{
+				StartTime:         "2024-01-01T00:00:00Z",
+				EndTime:           "2024-01-02T00:00:00Z",
+				TelemetryType:     mdaiv1.TracesReplayTelemetryType,
+				StatusVariableRef: "test-var",
+				OpAMPEndpoint:     "http://opamp:4320",
+				Destination: mdaiv1.MdaiReplayDestinationConfiguration{
+					OtlpHttp: &mdaiv1.MdaiReplayOtlpHttpDestinationConfiguration{
+						Endpoint: "http://otlp:4318",
+					},
+				},
+				Source: mdaiv1.MdaiReplaySourceConfiguration{
+					S3: &mdaiv1.MdaiReplayS3Configuration{
+						FilePrefix:  "logs/",
+						S3Region:    "us-west-2",
+						S3Bucket:    "test-bucket",
+						S3Path:      "test/path",
+						S3Partition: "year=2024",
+					},
+				},
+			},
+			validate: func(t *testing.T, config builder.ConfigBlock) {
+				t.Helper()
+				// Check otlphttp exporter is configured
+				// FIXME: Can't use MustMap here because .Set used in the impl makes it a map[string]any instead of ConfigBlock
+				exporters, ok := config["exporters"].(builder.ConfigBlock)
+				assert.True(t, ok)
+				otlpHttp, exists := exporters.GetMap("otlphttp")
+				assert.True(t, exists, "otlphttp exporter should exist")
+
+				assert.Equal(t, "http://otlp:4318", otlpHttp.MustString("endpoint"))
+
+				// Check pipeline includes otlphttp exporter
+				service := config.MustMap("service")
+				pipelines := service.MustMap("pipelines")
+				tracesPipeline := pipelines.MustMap("traces/replay")
+				exportersList := tracesPipeline["exporters"].([]string) // nolint:forcetypeassert
+
+				found := false
+				for _, exp := range exportersList {
+					if exp == "otlphttp" { // nolint:goconst
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "otlphttp should be in exporters list")
+			},
+		},
+		{
+			name:     "configuration with metrics otlp http destination",
+			replayId: "replay-456",
+			hubName:  "hub-789",
+			spec: mdaiv1.MdaiReplaySpec{
+				StartTime:         "2024-01-01T00:00:00Z",
+				EndTime:           "2024-01-02T00:00:00Z",
+				TelemetryType:     mdaiv1.MetricsReplayTelemetryType,
+				StatusVariableRef: "test-var",
+				OpAMPEndpoint:     "http://opamp:4320",
+				Destination: mdaiv1.MdaiReplayDestinationConfiguration{
+					OtlpHttp: &mdaiv1.MdaiReplayOtlpHttpDestinationConfiguration{
+						Endpoint: "http://otlp:4318",
+					},
+				},
+				Source: mdaiv1.MdaiReplaySourceConfiguration{
+					S3: &mdaiv1.MdaiReplayS3Configuration{
+						FilePrefix:  "logs/",
+						S3Region:    "us-west-2",
+						S3Bucket:    "test-bucket",
+						S3Path:      "test/path",
+						S3Partition: "year=2024",
+					},
+				},
+			},
+			validate: func(t *testing.T, config builder.ConfigBlock) {
+				t.Helper()
+				// Check otlphttp exporter is configured
+				// FIXME: Can't use MustMap here because .Set used in the impl makes it a map[string]any instead of ConfigBlock
+				exporters, ok := config["exporters"].(builder.ConfigBlock)
+				assert.True(t, ok)
+				otlpHttp, exists := exporters.GetMap("otlphttp")
+				assert.True(t, exists, "otlphttp exporter should exist")
+
+				assert.Equal(t, "http://otlp:4318", otlpHttp.MustString("endpoint"))
+
+				// Check pipeline includes otlphttp exporter
+				service := config.MustMap("service")
+				pipelines := service.MustMap("pipelines")
+				metricsPipeline := pipelines.MustMap("metrics/replay")
+				exportersList := metricsPipeline["exporters"].([]string) // nolint:forcetypeassert
+
+				found := false
+				for _, exp := range exportersList {
+					if exp == "otlphttp" { // nolint:goconst
 						found = true
 						break
 					}
@@ -463,15 +569,11 @@ func TestAugmentCollectorConfigPerSpec(t *testing.T) {
 					},
 				},
 				"service": map[string]any{
-					"pipelines": map[string]any{
-						"logs/replay": map[string]any{
-							"exporters": []any{},
-						},
-					},
+					"pipelines": map[string]any{},
 				},
 			}
 
-			augmentCollectorConfigPerSpec(tt.replayId, tt.hubName, config, tt.spec)
+			require.NoError(t, augmentCollectorConfigPerSpec(tt.replayId, tt.hubName, config, tt.spec))
 			tt.validate(t, config)
 		})
 	}
@@ -1212,6 +1314,7 @@ func TestGetReplayCollectorConfigYAML(t *testing.T) {
 					HubName:           "test-hub",
 					StartTime:         "2024-01-01T00:00:00Z",
 					EndTime:           "2024-01-02T00:00:00Z",
+					TelemetryType:     mdaiv1.LogsReplayTelemetryType,
 					StatusVariableRef: "test-var",
 					OpAMPEndpoint:     "http://opamp:4320",
 					Source: mdaiv1.MdaiReplaySourceConfiguration{

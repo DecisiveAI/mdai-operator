@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
 )
 
 // Params holds the reconciliation-specific parameters.
