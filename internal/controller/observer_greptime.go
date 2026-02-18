@@ -52,7 +52,7 @@ var identPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 var columnPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`)
 var intervalPattern = regexp.MustCompile(`^[0-9]+\s+(millisecond|milliseconds|second|seconds|minute|minutes|hour|hours)$`)
 
-func doGreptime(greptime Greptime, dimensions []string) error {
+func doGreptime(greptime Greptime, dimensions []string, primaryKey string) error {
 	db := greptime.greptimeDb
 	templates := greptime.greptimeTemplates
 
@@ -67,8 +67,8 @@ func doGreptime(greptime Greptime, dimensions []string) error {
 			FlowTemplate: "flow_traffic",
 			ValueColumn:  "total_count",
 			ValueType:    "INT64",
-			ValueExpr:    "COUNT(service_name)",
-			PrimaryKeys:  []string{"service_name"},
+			ValueExpr:    fmt.Sprintf("COUNT(%s)", primaryKey),
+			PrimaryKeys:  []string{primaryKey},
 			TimeInterval: "5 seconds",
 			WhereClause:  "span_status_code = 'STATUS_CODE_UNSET'",
 		},
@@ -83,7 +83,7 @@ func doGreptime(greptime Greptime, dimensions []string) error {
 			ValueColumn:  "latency_sketch",
 			ValueType:    "BINARY",
 			ValueExpr:    "uddsketch_state(128, 0.01, duration_nano)",
-			PrimaryKeys:  []string{"service_name"},
+			PrimaryKeys:  []string{primaryKey},
 			TimeInterval: "5 seconds",
 			WhereClause:  "span_status_code = 'STATUS_CODE_UNSET'",
 		},
@@ -97,8 +97,8 @@ func doGreptime(greptime Greptime, dimensions []string) error {
 			FlowTemplate: "flow_errors",
 			ValueColumn:  "total_count",
 			ValueType:    "INT64",
-			ValueExpr:    "COUNT(service_name)",
-			PrimaryKeys:  []string{"service_name"},
+			ValueExpr:    fmt.Sprintf("COUNT(%s)", primaryKey),
+			PrimaryKeys:  []string{primaryKey},
 			TimeInterval: "5 seconds",
 			WhereClause:  "span_status_code = 'STATUS_CODE_ERROR'",
 		},

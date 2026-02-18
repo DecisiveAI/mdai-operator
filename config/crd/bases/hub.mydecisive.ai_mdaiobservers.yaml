@@ -185,6 +185,12 @@ spec:
                       type: string
                     spanMetricsConnectorConfig:
                       x-kubernetes-preserve-unknown-fields: true
+                    spanMetricsDimensions:
+                      items:
+                        type: string
+                      type: array
+                    spanMetricsPrimaryKey:
+                      type: string
                     type:
                       type: string
                   required:

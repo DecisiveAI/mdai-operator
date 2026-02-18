@@ -7,6 +7,7 @@ package v1
 import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -1187,6 +1188,11 @@ func (in *Observer) DeepCopyInto(out *Observer) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.SpanMetricsDimensions != nil {
+		in, out := &in.SpanMetricsDimensions, &out.SpanMetricsDimensions
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.CountMetricName != nil {
 		in, out := &in.CountMetricName, &out.CountMetricName
 		*out = new(string)
@@ -1200,6 +1206,11 @@ func (in *Observer) DeepCopyInto(out *Observer) {
 	if in.Filter != nil {
 		in, out := &in.Filter, &out.Filter
 		*out = new(ObserverFilter)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.SpanMetricsConnectorConfig != nil {
+		in, out := &in.SpanMetricsConnectorConfig, &out.SpanMetricsConnectorConfig
+		*out = new(apiextensionsv1.JSON)
 		(*in).DeepCopyInto(*out)
 	}
 }

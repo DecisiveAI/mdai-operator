@@ -224,10 +224,9 @@ func (c ObserverAdapter) synchronizeGreptimeObservers(
 		if obs.Provider != mdaiv1.GREPTIME_FLOW {
 			continue
 		}
-		// TODO: compose real Dimensions for Greptime Observer
-		dimensions := obs.LabelResourceAttributes
-		//dimensions := make([]string, 0)
-		return doGreptime(c.greptime, dimensions)
+		dimensions := obs.SpanMetricsDimensions
+		primaryKey := obs.SpanMetricsPrimaryKey
+		return doGreptime(c.greptime, dimensions, primaryKey)
 	}
 	// TODO: delete Greptime resources (sink table and flow) when observers are deleted
 

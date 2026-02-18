@@ -30,6 +30,10 @@ type Observer struct {
 	// +kubebuilder:validation:Required
 	LabelResourceAttributes []string `json:"labelResourceAttributes" yaml:"labelResourceAttributes"`
 	// +optional
+	SpanMetricsDimensions []string `json:"spanMetricsDimensions" yaml:"spanMetricsDimensions"`
+	// +optional
+	SpanMetricsPrimaryKey string `json:"spanMetricsPrimaryKey" yaml:"spanMetricsPrimaryKey"`
+	// +optional
 	CountMetricName *string `json:"countMetricName,omitempty" yaml:"countMetricName,omitempty"`
 	// +optional
 	BytesMetricName *string `json:"bytesMetricName,omitempty" yaml:"bytesMetricName,omitempty"`
