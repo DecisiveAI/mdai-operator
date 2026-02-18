@@ -7,11 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/mydecisive/mdai-data-core/opamp"
 	"os"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/mydecisive/mdai-data-core/opamp"
 
 	events "github.com/mydecisive/mdai-data-core/eventing/rule"
 	"go.uber.org/zap"

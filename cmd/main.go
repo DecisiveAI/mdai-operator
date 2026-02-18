@@ -5,6 +5,10 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"net/http"
+	"os"
+	"path/filepath"
+
 	"github.com/go-logr/zapr"
 	"github.com/google/uuid"
 	"github.com/mydecisive/mdai-data-core/opamp"
@@ -19,9 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"net/http"
-	"os"
-	"path/filepath"
+
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	opampserver "github.com/open-telemetry/opamp-go/server"

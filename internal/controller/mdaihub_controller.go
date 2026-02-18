@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/mydecisive/mdai-data-core/opamp"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mydecisive/mdai-data-core/opamp"
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/go-logr/logr"

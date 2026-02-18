@@ -5,10 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	opampmock "github.com/mydecisive/mdai-data-core/mock/opamp"
 	"slices"
 	"testing"
 	"time"
+
+	opampmock "github.com/mydecisive/mdai-data-core/mock/opamp"
 
 	"github.com/go-logr/logr"
 	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
