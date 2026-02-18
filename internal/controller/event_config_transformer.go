@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	events "github.com/decisiveai/mdai-data-core/eventing/rule"
-	"github.com/decisiveai/mdai-data-core/eventing/triggers"
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	events "github.com/mydecisive/mdai-data-core/eventing/rule"
+	"github.com/mydecisive/mdai-data-core/eventing/triggers"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
 	"k8s.io/utils/ptr"
 )
 

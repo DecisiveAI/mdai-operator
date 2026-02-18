@@ -8,7 +8,7 @@ layout:
 plugins:
   grafana.kubebuilder.io/v1-alpha: {}
 projectName: mdai-operator
-repo: github.com/decisiveai/mdai-operator
+repo: github.com/mydecisive/mdai-operator
 resources:
 - api:
     crdVersion: v1
@@ -17,7 +17,7 @@ resources:
   domain: mydecisive.ai
   group: hub
   kind: MdaiHub
-  path: github.com/decisiveai/mdai-operator/api/v1
+  path: github.com/mydecisive/mdai-operator/api/v1
   version: v1
   webhooks:
     defaulting: true
@@ -30,7 +30,7 @@ resources:
   domain: mydecisive.ai
   group: hub
   kind: MdaiCollector
-  path: github.com/decisiveai/mdai-operator/api/v1
+  path: github.com/mydecisive/mdai-operator/api/v1
   version: v1
   webhooks:
     validation: true
@@ -42,7 +42,7 @@ resources:
   domain: mydecisive.ai
   group: hub
   kind: MdaiObserver
-  path: github.com/decisiveai/mdai-operator/api/v1
+  path: github.com/mydecisive/mdai-operator/api/v1
   version: v1
   webhooks:
     validation: true
@@ -54,7 +54,7 @@ resources:
   domain: mydecisive.ai
   group: hub
   kind: MdaiIngress
-  path: github.com/decisiveai/mdai-operator/api/v1
+  path: github.com/mydecisive/mdai-operator/api/v1
   version: v1
   webhooks:
     defaulting: true
@@ -66,7 +66,7 @@ resources:
   domain: mydecisive.ai
   group: hub
   kind: MdaiReplay
-  path: github.com/decisiveai/mdai-operator/api/v1
+  path: github.com/mydecisive/mdai-operator/api/v1
   version: v1
   webhooks:
     validation: true
@@ -78,6 +78,6 @@ resources:
   domain: mydecisive.ai
   group: hub
   kind: MdaiDal
-  path: github.com/decisiveai/mdai-operator/api/v1
+  path: github.com/mydecisive/mdai-operator/api/v1
   version: v1
 version: "3"

@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"slices"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	"github.com/decisiveai/mdai-operator/internal/builder"
 	"github.com/go-logr/logr"
+	mdaiv1 "github.com/mydecisive/mdai-operator/api/v1"
+	"github.com/mydecisive/mdai-operator/internal/builder"
 	"github.com/prometheus/common/expfmt"
 
 	appsv1 "k8s.io/api/apps/v1"

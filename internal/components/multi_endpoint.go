@@ -12,7 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 
-	"github.com/decisiveai/mdai-operator/internal/naming"
+	"github.com/mydecisive/mdai-operator/internal/naming"
 )
 
 var _ Parser = &MultiPortReceiver{}

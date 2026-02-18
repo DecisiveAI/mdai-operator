@@ -13,7 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/decisiveai/mdai-operator/internal/components"
+	"github.com/mydecisive/mdai-operator/internal/components"
 )
 
 func TestSingleEndpointConfig_GetPortNumOrDefault(t *testing.T) {

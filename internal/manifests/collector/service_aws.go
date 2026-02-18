@@ -4,11 +4,11 @@ package collector
 import (
 	"maps"
 
-	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
-	"github.com/decisiveai/mdai-operator/internal/manifests"
-	"github.com/decisiveai/mdai-operator/internal/manifests/manifestutils"
-	"github.com/decisiveai/mdai-operator/internal/naming"
 	"github.com/go-logr/zapr"
+	hubv1 "github.com/mydecisive/mdai-operator/api/v1"
+	"github.com/mydecisive/mdai-operator/internal/manifests"
+	"github.com/mydecisive/mdai-operator/internal/manifests/manifestutils"
+	"github.com/mydecisive/mdai-operator/internal/naming"
 	"github.com/open-telemetry/opentelemetry-operator/apis/v1beta1"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"

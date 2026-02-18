@@ -3,8 +3,8 @@
 package api
 
 import (
-	v1 "github.com/decisiveai/mdai-operator/pkg/generated/informers/externalversions/api/v1"
-	internalinterfaces "github.com/decisiveai/mdai-operator/pkg/generated/informers/externalversions/internalinterfaces"
+	v1 "github.com/mydecisive/mdai-operator/pkg/generated/informers/externalversions/api/v1"
+	internalinterfaces "github.com/mydecisive/mdai-operator/pkg/generated/informers/externalversions/internalinterfaces"
 )
 
 // Interface provides access to each of this group's versions.
