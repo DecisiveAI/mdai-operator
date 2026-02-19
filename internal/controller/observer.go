@@ -423,6 +423,10 @@ func getObserverCollectorConfigSpanMetrics(
 
 func ParseSpanMetricsConfig(observer *mdaiv1.Observer) (map[string]any, error) {
 	var configJsonData map[string]any
+	// TODO: figure out if it's ok if there is no SpanMetricsConnectorConfig section
+	if observer.SpanMetricsConnectorConfig == nil {
+		return nil, nil
+	}
 	if err := json.Unmarshal(observer.SpanMetricsConnectorConfig.Raw, &configJsonData); err != nil {
 		return nil, fmt.Errorf("can not marshall observer %s SpanMetricsConnectorConfig to json", observer.Name)
 	}

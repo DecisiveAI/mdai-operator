@@ -69,6 +69,7 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string) error
 			ValueType:    "INT64",
 			ValueExpr:    fmt.Sprintf("COUNT(%s)", primaryKey),
 			PrimaryKeys:  []string{primaryKey},
+			// TODO: parametrize
 			TimeInterval: "5 seconds",
 			WhereClause:  "span_status_code = 'STATUS_CODE_UNSET'",
 		},
@@ -84,6 +85,7 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string) error
 			ValueType:    "BINARY",
 			ValueExpr:    "uddsketch_state(128, 0.01, duration_nano)",
 			PrimaryKeys:  []string{primaryKey},
+			// TODO: parametrize
 			TimeInterval: "5 seconds",
 			WhereClause:  "span_status_code = 'STATUS_CODE_UNSET'",
 		},
@@ -99,6 +101,7 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string) error
 			ValueType:    "INT64",
 			ValueExpr:    fmt.Sprintf("COUNT(%s)", primaryKey),
 			PrimaryKeys:  []string{primaryKey},
+			// TODO: parametrize
 			TimeInterval: "5 seconds",
 			WhereClause:  "span_status_code = 'STATUS_CODE_ERROR'",
 		},
@@ -322,6 +325,10 @@ func renderSQLTemplate(templates map[string]string, templateName string, data Te
 
 	tmpl, err := template.New(templateName).Funcs(template.FuncMap{
 		"quoteIdentifier": quoteIdentifier,
+		"dimensionProjection": func(col string) string {
+			q := quoteIdentifier(col)
+			return fmt.Sprintf("%s AS %s", q, q)
+		},
 		"joinDimensionNames": func(dimensions []string) string {
 			names := make([]string, 0, len(dimensions))
 			for _, d := range dimensions {
@@ -365,7 +372,7 @@ SINK TO {{ .SinkTable }}
 AS
 SELECT
 {{- range .Dimensions }}
-  {{ quoteIdentifier . }},
+  {{ dimensionProjection . }},
 {{- end }}
   {{ .ValueExpr }} AS {{ .ValueColumn }},
   {{ .TimeSelectExpr }}
@@ -375,7 +382,7 @@ GROUP BY
 {{- range .Dimensions }}
   {{ quoteIdentifier . }},
 {{- end }}
-  {{ .TimeGroupExpr }};`
+  time_window;`
 
 const sinkLatencyTemplate = `
 CREATE TABLE IF NOT EXISTS {{ .SinkTable }} (
@@ -394,7 +401,7 @@ SINK TO {{ .SinkTable }}
 AS
 SELECT
 {{- range .Dimensions }}
-  {{ quoteIdentifier . }},
+  {{ dimensionProjection . }},
 {{- end }}
   {{ .ValueExpr }} AS {{ .ValueColumn }},
   {{ .TimeSelectExpr }}
@@ -404,7 +411,7 @@ GROUP BY
 {{- range .Dimensions }}
   {{ quoteIdentifier . }},
 {{- end }}
-  {{ .TimeGroupExpr }};`
+  time_window;`
 
 const sinkErrorsTemplate = `
 CREATE TABLE IF NOT EXISTS {{ .SinkTable }} (
@@ -423,7 +430,7 @@ SINK TO {{ .SinkTable }}
 AS
 SELECT
 {{- range .Dimensions }}
-  {{ quoteIdentifier . }},
+  {{ dimensionProjection . }},
 {{- end }}
   {{ .ValueExpr }} AS {{ .ValueColumn }},
   {{ .TimeSelectExpr }}
@@ -433,7 +440,7 @@ GROUP BY
 {{- range .Dimensions }}
   {{ quoteIdentifier . }},
 {{- end }}
-  {{ .TimeGroupExpr }};`
+  time_window;`
 
 func quoteIdentifier(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
