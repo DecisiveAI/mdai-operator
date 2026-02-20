@@ -6,7 +6,6 @@ import (
 	"html"
 	"html/template"
 	"regexp"
-	"sort"
 	"strings"
 
 	"gorm.io/gorm"
@@ -131,12 +130,8 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string) error
 		if err != nil {
 			return fmt.Errorf("pipeline %s sink template: %w", p.Name, err)
 		}
-		if err := db.Exec(sinkDDL).Error; err != nil {
-			return fmt.Errorf("pipeline %s create sink: %w", p.Name, err)
-		}
-
-		if err := reconcileDimensionColumns(&db, data); err != nil {
-			return fmt.Errorf("pipeline %s reconcile dimensions: %w", p.Name, err)
+		if err := ensureSinkTable(&db, data, sinkDDL); err != nil {
+			return fmt.Errorf("pipeline %s ensure sink table: %w", p.Name, err)
 		}
 
 		flowDDL, err := renderSQLTemplate(templates, p.FlowTemplate, data)
@@ -150,17 +145,40 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string) error
 	return nil
 }
 
-func reconcileDimensionColumns(db *gorm.DB, d TemplateData) error {
+func ensureSinkTable(db *gorm.DB, d TemplateData, sinkDDL string) error {
 	existingCols, err := listTableColumns(db, d.Schema, d.SinkTable)
 	if err != nil {
 		return fmt.Errorf("list table columns: %w", err)
 	}
 
-	desired := make(map[string]struct{}, len(d.Dimensions))
-	for _, dim := range d.Dimensions {
-		desired[dim] = struct{}{}
+	if len(existingCols) == 0 {
+		if err := db.Exec(sinkDDL).Error; err != nil {
+			return fmt.Errorf("create sink table: %w", err)
+		}
+		return nil
 	}
 
+	existingDimensions := existingDimensionColumns(existingCols, d)
+	if sameStringSet(existingDimensions, d.Dimensions) {
+		return nil
+	}
+
+	dropFlow := fmt.Sprintf("DROP FLOW IF EXISTS %s", quoteIdentifier(d.FlowName))
+	if err := db.Exec(dropFlow).Error; err != nil {
+		return fmt.Errorf("drop flow: %w", err)
+	}
+	dropTable := fmt.Sprintf("DROP TABLE IF EXISTS %s", quoteIdentifier(d.SinkTable))
+	if err := db.Exec(dropTable).Error; err != nil {
+		return fmt.Errorf("drop sink table: %w", err)
+	}
+	if err := db.Exec(sinkDDL).Error; err != nil {
+		return fmt.Errorf("recreate sink table: %w", err)
+	}
+
+	return nil
+}
+
+func existingDimensionColumns(existingCols []string, d TemplateData) []string {
 	primaryKeys := make(map[string]struct{}, len(d.PrimaryKeys))
 	for _, c := range d.PrimaryKeys {
 		primaryKeys[c] = struct{}{}
@@ -172,71 +190,17 @@ func reconcileDimensionColumns(db *gorm.DB, d TemplateData) error {
 		"update_at":   {},
 	}
 
-	existingDimensions := make(map[string]struct{})
+	dims := make([]string, 0, len(existingCols))
 	for _, c := range existingCols {
 		if _, ok := managedNonDimension[c]; ok {
 			continue
 		}
-		//if _, ok := primaryKeys[c]; ok {
-		//	continue
-		//}
-		existingDimensions[c] = struct{}{}
-	}
-
-	var toAdd []string
-	for c := range desired {
-		if _, ok := existingDimensions[c]; !ok {
-			toAdd = append(toAdd, c)
+		if _, ok := primaryKeys[c]; ok {
+			continue
 		}
+		dims = append(dims, c)
 	}
-
-	var toDrop []string
-	for c := range existingDimensions {
-		if _, ok := desired[c]; !ok {
-			toDrop = append(toDrop, c)
-		}
-	}
-
-	sort.Strings(toAdd)
-	sort.Strings(toDrop)
-
-	for _, c := range toAdd {
-		addStmt := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s STRING", quoteIdentifier(d.SinkTable), quoteIdentifier(c))
-		if err := db.Exec(addStmt).Error; err != nil {
-			return fmt.Errorf("add column %s: %w", c, err)
-		}
-		indexStmt := fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s SET INVERTED INDEX", quoteIdentifier(d.SinkTable), quoteIdentifier(c))
-		if err := db.Exec(indexStmt).Error; err != nil {
-			return fmt.Errorf("set inverted index for column %s: %w", c, err)
-		}
-	}
-
-	for _, c := range toDrop {
-		unsetStmt := fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s UNSET INVERTED INDEX", quoteIdentifier(d.SinkTable), quoteIdentifier(c))
-		if err := db.Exec(unsetStmt).Error; err != nil {
-			return fmt.Errorf("unset inverted index for column %s: %w", c, err)
-		}
-		dropStmt := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", quoteIdentifier(d.SinkTable), quoteIdentifier(c))
-		if err := db.Exec(dropStmt).Error; err != nil {
-			return fmt.Errorf("drop column %s: %w", c, err)
-		}
-	}
-
-	return nil
-}
-
-func listTableColumns(db *gorm.DB, schema, table string) ([]string, error) {
-	var columns []string
-	err := db.Raw(
-		`SELECT column_name
-		 FROM information_schema.columns
-		 WHERE table_schema = ? AND table_name = ?`,
-		schema, table,
-	).Scan(&columns).Error
-	if err != nil {
-		return nil, err
-	}
-	return columns, nil
+	return dims
 }
 
 func validatePipeline(p Pipeline, d TemplateData) error {
@@ -353,6 +317,42 @@ func renderSQLTemplate(templates map[string]string, templateName string, data Te
 		return "", err
 	}
 	return html.UnescapeString(out.String()), nil
+}
+
+func listTableColumns(db *gorm.DB, schema, table string) ([]string, error) {
+	var columns []string
+	err := db.Raw(
+		`SELECT column_name
+		 FROM information_schema.columns
+		 WHERE table_schema = ? AND table_name = ?`,
+		schema, table,
+	).Scan(&columns).Error
+	if err != nil {
+		return nil, err
+	}
+	return columns, nil
+}
+
+func sameStringSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := make(map[string]int, len(a))
+	for _, v := range a {
+		seen[v]++
+	}
+	for _, v := range b {
+		seen[v]--
+		if seen[v] < 0 {
+			return false
+		}
+	}
+	for _, n := range seen {
+		if n != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 const sinkTrafficTemplate = `
