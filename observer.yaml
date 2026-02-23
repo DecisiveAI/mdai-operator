@@ -1,0 +1,56 @@
+apiVersion: hub.mydecisive.ai/v1
+kind: MdaiObserver
+metadata:
+  finalizers:
+  - mydecisive.ai/finalizer
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: mdai-operator
+  name: sample
+  namespace: mdai
+spec:
+  observerResource:
+    grpcReceiverMaxMsgSize: 10
+    image: observer-collector:0.1
+    replicas: 1
+    tolerations: []
+  observers:
+  - name: watcher1
+    type: dataVolume
+    provider: otelCollector
+    dataVolumeObserver:
+      bytesMetricName: mdai_watcher_one_bytes_total
+      countMetricName: mdai_watcher_one_count_total
+      labelResourceAttributes:
+      - service.name
+  - name: watcher2
+    provider: otelCollector
+    type: dataVolume
+    dataVolumeObserver:
+      countMetricName: mdai_watcher_two_count_total
+      labelResourceAttributes:
+      - team
+      - log_level
+  - name: watcher3
+    provider: otelCollector
+    type: dataVolume
+    dataVolumeObserver:
+      bytesMetricName: mdai_watcher_three_count_total
+      labelResourceAttributes:
+      - region
+      - log_level
+  - name: watcher4
+    provider: otelCollector
+    type: dataVolume
+    filter:
+      error_mode: ignore
+      logs:
+        log_record:
+          - attributes["log_level"] == "INFO"
+    dataVolumeObserver:
+      bytesMetricName: mdai_watcher_four_bytes_total
+      countMetricName: mdai_watcher_four_count_total
+      labelResourceAttributes:
+      - service.name
+      - team
+      - region

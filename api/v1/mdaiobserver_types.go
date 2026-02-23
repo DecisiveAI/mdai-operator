@@ -20,6 +20,7 @@ const (
 	GREPTIME_FLOW  ObserverProvider = "greptimeFlow"
 )
 
+// +kubebuilder:validation:XOpenAPIV3Schema=oneOf:[{required:["dataVolumeObserver"]},{required:["spanMetricsObserver"]}]
 type Observer struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name" yaml:"name"`
@@ -27,21 +28,30 @@ type Observer struct {
 	Provider ObserverProvider `json:"provider" yaml:"provider"`
 	// +kubebuilder:validation:Required
 	Type ObserverType `json:"type" yaml:"type"`
+	// +optional
+	Filter *ObserverFilter `json:"filter,omitempty" yaml:"filter,omitempty"`
+	// +optional
+	DataVolumeObserver *DataVolumeObserverConfig `json:"dataVolumeObserver,omitempty" yaml:"dataVolumeObserver,omitempty"`
+	// +optional
+	SpanMetricsObserver *SpanMetricsObserverConfig `json:"spanMetricsObserver,omitempty" yaml:"spanMetricsObserver,omitempty"`
+}
+
+type DataVolumeObserverConfig struct {
 	// +kubebuilder:validation:Required
 	LabelResourceAttributes []string `json:"labelResourceAttributes" yaml:"labelResourceAttributes"`
-	// +optional
-	SpanMetricsDimensions []string `json:"spanMetricsDimensions" yaml:"spanMetricsDimensions"`
-	// +optional
-	SpanMetricsPrimaryKey string `json:"spanMetricsPrimaryKey" yaml:"spanMetricsPrimaryKey"`
 	// +optional
 	CountMetricName *string `json:"countMetricName,omitempty" yaml:"countMetricName,omitempty"`
 	// +optional
 	BytesMetricName *string `json:"bytesMetricName,omitempty" yaml:"bytesMetricName,omitempty"`
+}
+type SpanMetricsObserverConfig struct {
+	// +kubebuilder:validation:Required
+	Dimensions []string `json:"dimensions" yaml:"dimensions"`
 	// +optional
-	Filter *ObserverFilter `json:"filter,omitempty" yaml:"filter,omitempty"`
+	PrimaryKey string `json:"primaryKey,omitempty" yaml:"primaryKey,omitempty"`
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
-	SpanMetricsConnectorConfig *apiextensionsv1.JSON `json:"spanMetricsConnectorConfig,omitempty" yaml:"spanMetricsConnectorConfig,omitempty"`
+	ConnectorConfig *apiextensionsv1.JSON `json:"connectorConfig,omitempty" yaml:"connectorConfig,omitempty"`
 }
 
 type ObserverLogsFilter struct {

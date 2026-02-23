@@ -354,18 +354,18 @@ func getObserverCollectorConfigDataVolume(
 
 		groupByKey := "groupbyattrs/" + observerName
 		processors.Set(groupByKey, map[string]any{
-			"keys": obs.LabelResourceAttributes,
+			"keys": obs.DataVolumeObserver.LabelResourceAttributes,
 		})
 
 		dvKey := "datavolume/" + observerName
 		dvSpec := map[string]any{
-			"label_resource_attributes": obs.LabelResourceAttributes,
+			"label_resource_attributes": obs.DataVolumeObserver.LabelResourceAttributes,
 		}
-		if obs.CountMetricName != nil {
-			dvSpec["count_metric_name"] = *obs.CountMetricName
+		if obs.DataVolumeObserver.CountMetricName != nil {
+			dvSpec["count_metric_name"] = *obs.DataVolumeObserver.CountMetricName
 		}
-		if obs.BytesMetricName != nil {
-			dvSpec["bytes_metric_name"] = *obs.BytesMetricName
+		if obs.DataVolumeObserver.BytesMetricName != nil {
+			dvSpec["bytes_metric_name"] = *obs.DataVolumeObserver.BytesMetricName
 		}
 		connectors.Set(dvKey, dvSpec)
 
@@ -400,7 +400,7 @@ func getObserverCollectorConfigSpanMetrics(
 
 		groupByKey := "groupbyattrs/" + observerName
 		processors.Set(groupByKey, map[string]any{
-			"keys": obs.LabelResourceAttributes,
+			"keys": obs.SpanMetricsObserver.Dimensions,
 		})
 
 		dvKey := "spanmetrics/" + observerName
@@ -424,10 +424,10 @@ func getObserverCollectorConfigSpanMetrics(
 func ParseSpanMetricsConfig(observer *mdaiv1.Observer) (map[string]any, error) {
 	var configJsonData map[string]any
 	// TODO: figure out if it's ok if there is no SpanMetricsConnectorConfig section
-	if observer.SpanMetricsConnectorConfig == nil {
+	if observer.SpanMetricsObserver.ConnectorConfig == nil {
 		return nil, nil
 	}
-	if err := json.Unmarshal(observer.SpanMetricsConnectorConfig.Raw, &configJsonData); err != nil {
+	if err := json.Unmarshal(observer.SpanMetricsObserver.ConnectorConfig.Raw, &configJsonData); err != nil {
 		return nil, fmt.Errorf("can not marshall observer %s SpanMetricsConnectorConfig to json", observer.Name)
 	}
 
@@ -464,6 +464,5 @@ func ParseSpanMetricsConfig(observer *mdaiv1.Observer) (map[string]any, error) {
 		return nil, fmt.Errorf("validate SpanMetricsConnectorConfig for observer %s failed, Error: %s", observer.Name, err.Error())
 	}
 
-	// Return the original map so YAML marshaling preserves underscore keys.
 	return configJsonData, nil
 }

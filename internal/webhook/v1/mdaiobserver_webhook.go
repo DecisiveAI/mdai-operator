@@ -104,13 +104,13 @@ func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiob
 			}
 		case mdaiv1.DATA_VOLUME:
 			{
-				if observer.BytesMetricName == nil && observer.CountMetricName == nil {
+				if observer.DataVolumeObserver.BytesMetricName == nil && observer.DataVolumeObserver.CountMetricName == nil {
 					return newWarnings, fmt.Errorf("observer %s must have either a bytesMetricName or countMetricName", observer.Name)
 				}
-				if len(observer.LabelResourceAttributes) == 0 {
+				if len(observer.DataVolumeObserver.LabelResourceAttributes) == 0 {
 					newWarnings = append(newWarnings, "observer "+observer.Name+" does not define any labels to apply to counts")
 				}
-				if observer.SpanMetricsConnectorConfig != nil {
+				if observer.SpanMetricsObserver != nil {
 					return newWarnings, fmt.Errorf("observer %s of type %s can not have spanMetricsConnectorConfig section", observer.Name, observer.Type)
 				}
 			}
@@ -121,7 +121,7 @@ func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiob
 
 func ParseSpanMetricsConfig(observer *mdaiv1.Observer) error {
 	var configJsonData map[string]any
-	if err := json.Unmarshal(observer.SpanMetricsConnectorConfig.Raw, &configJsonData); err != nil {
+	if err := json.Unmarshal(observer.SpanMetricsObserver.ConnectorConfig.Raw, &configJsonData); err != nil {
 		return fmt.Errorf("can not marshall observer %s SpanMetricsConnectorConfig to json", observer.Name)
 	}
 

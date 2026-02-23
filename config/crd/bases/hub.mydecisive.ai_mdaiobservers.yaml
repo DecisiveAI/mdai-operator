@@ -157,10 +157,19 @@ spec:
               observers:
                 items:
                   properties:
-                    bytesMetricName:
-                      type: string
-                    countMetricName:
-                      type: string
+                    dataVolumeObserver:
+                      properties:
+                        bytesMetricName:
+                          type: string
+                        countMetricName:
+                          type: string
+                        labelResourceAttributes:
+                          items:
+                            type: string
+                          type: array
+                      required:
+                      - labelResourceAttributes
+                      type: object
                     filter:
                       properties:
                         error_mode:
@@ -175,26 +184,26 @@ spec:
                           - log_record
                           type: object
                       type: object
-                    labelResourceAttributes:
-                      items:
-                        type: string
-                      type: array
                     name:
                       type: string
                     provider:
                       type: string
-                    spanMetricsConnectorConfig:
-                      x-kubernetes-preserve-unknown-fields: true
-                    spanMetricsDimensions:
-                      items:
-                        type: string
-                      type: array
-                    spanMetricsPrimaryKey:
-                      type: string
+                    spanMetricsObserver:
+                      properties:
+                        connectorConfig:
+                          x-kubernetes-preserve-unknown-fields: true
+                        dimensions:
+                          items:
+                            type: string
+                          type: array
+                        primaryKey:
+                          type: string
+                      required:
+                      - dimensions
+                      type: object
                     type:
                       type: string
                   required:
-                  - labelResourceAttributes
                   - name
                   - provider
                   - type
