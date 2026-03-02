@@ -412,11 +412,28 @@ func (c HubAdapter) syncValkeyVariables(ctx context.Context, envMap, manualEnvMa
 	return nil
 }
 
-func (c HubAdapter) restartCollectorAndAudit(ctx context.Context, envMap map[string]string) error {
+func (c HubAdapter) restartCollectorAndAudit(ctx context.Context, collector v1beta1.OpenTelemetryCollector, envMap map[string]string) error {
 	c.logger.Info("Triggering restart of OpenTelemetry Collector(s)")
 
-	if err := c.opampConnectionManager.DispatchRestartCommand(ctx); err != nil {
-		return err
+	if c.opampConnectionManager.IsAgentManaged(collector.Name) {
+		// this collector manages restarts with opamp.
+		if err := c.opampConnectionManager.DispatchRestartCommand(ctx); err != nil {
+			return err
+		}
+	} else {
+		// this collector gets manually restarted.
+		collectorCopy := collector.DeepCopy()
+		if collectorCopy.Annotations == nil {
+			collectorCopy.Annotations = make(map[string]string)
+		}
+		collectorCopy.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+		if err := c.client.Update(ctx, collectorCopy); err != nil {
+			if apierrors.IsConflict(err) {
+				c.logger.Info("Conflict while updating OpenTelemetry Collector, will retry", "name", collectorCopy.Name)
+				return nil // let controller requeue naturally
+			}
+			return err
+		}
 	}
 
 	auditAdapter := audit.NewAuditAdapter(c.zapLogger, c.valKeyClient)
@@ -450,7 +467,7 @@ func (c HubAdapter) syncComputedConfigMapsAndRestart(ctx context.Context, envMap
 	// trigger restarts
 	for _, collector := range collectors {
 		if _, shouldRestart := namespaceToRestart[collector.Namespace]; shouldRestart {
-			if err := c.restartCollectorAndAudit(ctx, envMap); err != nil {
+			if err := c.restartCollectorAndAudit(ctx, collector, envMap); err != nil {
 				return RequeueWithError(err)
 			}
 		}

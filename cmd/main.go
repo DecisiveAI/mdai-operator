@@ -375,9 +375,11 @@ func main() {
 								if uuidErr != nil {
 									setupLog.Error(uuidErr, "Failed to parse instance uuid")
 								}
-								zapLogger.Debug("Received message from Opamp Agent (collector)", zap.String("instanceID", instanceID.String()))
+								zapLogger.Debug("Received message from Opamp Agent (collector)",
+									zap.String("instanceID", instanceID.String()),
+								)
 
-								opampConnectionManager.AddConnection(conn, string(message.GetInstanceUid()))
+								opampConnectionManager.AddConnection(conn, message)
 								return &protobufs.ServerToAgent{
 									InstanceUid: message.GetInstanceUid(),
 								}

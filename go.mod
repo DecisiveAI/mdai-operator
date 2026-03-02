@@ -13,7 +13,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/mydecisive/mdai-data-core v0.3.0
+	github.com/mydecisive/mdai-data-core v0.2.10-0.20260302153347-46d6f44d02c0
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
 	github.com/open-telemetry/opamp-go v0.22.0
