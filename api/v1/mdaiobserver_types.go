@@ -45,13 +45,35 @@ type DataVolumeObserverConfig struct {
 	BytesMetricName *string `json:"bytesMetricName,omitempty" yaml:"bytesMetricName,omitempty"`
 }
 type SpanMetricsObserverConfig struct {
-	// +kubebuilder:validation:Required
-	Dimensions []string `json:"dimensions" yaml:"dimensions"`
+	// +optional
+	Otel *SpanMetricsOtelConfig `json:"otel,omitempty" yaml:"otel,omitempty"`
+	// +optional
+	Greptime *SpanMetricsGreptimeConfig `json:"greptime,omitempty" yaml:"greptime,omitempty"`
+	// Deprecated: use Otel or Greptime instead.
+	// +optional
+	Dimensions []string `json:"dimensions,omitempty" yaml:"dimensions,omitempty"`
+	// Deprecated: use Greptime.PrimaryKey instead.
 	// +optional
 	PrimaryKey string `json:"primaryKey,omitempty" yaml:"primaryKey,omitempty"`
+	// Deprecated: use Otel.ConnectorConfig instead.
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
 	ConnectorConfig *apiextensionsv1.JSON `json:"connectorConfig,omitempty" yaml:"connectorConfig,omitempty"`
+}
+
+type SpanMetricsOtelConfig struct {
+	// +optional
+	GroupByAttrs []string `json:"groupByAttrs,omitempty" yaml:"groupByAttrs,omitempty"`
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ConnectorConfig *apiextensionsv1.JSON `json:"connectorConfig,omitempty" yaml:"connectorConfig,omitempty"`
+}
+
+type SpanMetricsGreptimeConfig struct {
+	// +optional
+	Dimensions []string `json:"dimensions,omitempty" yaml:"dimensions,omitempty"`
+	// +optional
+	PrimaryKey string `json:"primaryKey,omitempty" yaml:"primaryKey,omitempty"`
 }
 
 type ObserverLogsFilter struct {

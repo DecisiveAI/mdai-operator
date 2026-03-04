@@ -31,6 +31,37 @@ type ObserverAdapter struct {
 	greptime    Greptime
 }
 
+type ObserverIndex struct {
+	byProvider     map[mdaiv1.ObserverProvider][]mdaiv1.Observer
+	byProviderType map[mdaiv1.ObserverProvider]map[mdaiv1.ObserverType][]mdaiv1.Observer
+}
+
+func BuildObserverIndex(observers []mdaiv1.Observer) ObserverIndex {
+	idx := ObserverIndex{
+		byProvider:     make(map[mdaiv1.ObserverProvider][]mdaiv1.Observer),
+		byProviderType: make(map[mdaiv1.ObserverProvider]map[mdaiv1.ObserverType][]mdaiv1.Observer),
+	}
+	for _, obs := range observers {
+		idx.byProvider[obs.Provider] = append(idx.byProvider[obs.Provider], obs)
+		if idx.byProviderType[obs.Provider] == nil {
+			idx.byProviderType[obs.Provider] = make(map[mdaiv1.ObserverType][]mdaiv1.Observer)
+		}
+		idx.byProviderType[obs.Provider][obs.Type] = append(idx.byProviderType[obs.Provider][obs.Type], obs)
+	}
+	return idx
+}
+
+func (idx ObserverIndex) ByProvider(provider mdaiv1.ObserverProvider) []mdaiv1.Observer {
+	return idx.byProvider[provider]
+}
+
+func (idx ObserverIndex) By(provider mdaiv1.ObserverProvider, obsType mdaiv1.ObserverType) []mdaiv1.Observer {
+	if idx.byProviderType[provider] == nil {
+		return nil
+	}
+	return idx.byProviderType[provider][obsType]
+}
+
 func NewObserverAdapter(
 	cr *mdaiv1.MdaiObserver,
 	log logr.Logger,
@@ -158,7 +189,6 @@ func (c ObserverAdapter) deleteFinalizer(ctx context.Context, object client.Obje
 	return nil
 }
 
-// TODO: refactor the whole synchronization logic
 func (c ObserverAdapter) ensureSynchronized(ctx context.Context) (OperationResult, error) {
 	observers := c.observerCR.Spec.Observers
 	observerResource := c.observerCR.Spec.ObserverResource
@@ -168,11 +198,9 @@ func (c ObserverAdapter) ensureSynchronized(ctx context.Context) (OperationResul
 		return ContinueProcessing()
 	}
 
-	observersOtel := ObserversForProvider(observers, mdaiv1.OTEL_COLLECTOR)
-	observersGreptime := ObserversForProvider(observers, mdaiv1.GREPTIME_FLOW)
+	idx := BuildObserverIndex(observers)
 
-	// TODO: FIX(?): it wll requeue even if Otel observes sync failed
-	err := c.synchronizeOtelObservers(ctx, observerResource, observersOtel)
+	err := c.syncOtel(ctx, observerResource, idx)
 	if err != nil {
 		if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
 			c.logger.Info("re-queuing due to resource conflict")
@@ -181,7 +209,7 @@ func (c ObserverAdapter) ensureSynchronized(ctx context.Context) (OperationResul
 		return RequeueWithError(err)
 	}
 
-	err = c.synchronizeGreptimeObservers(observersGreptime)
+	err = c.syncGreptime(idx)
 	if err != nil {
 		return RequeueWithError(err)
 	}
@@ -189,11 +217,12 @@ func (c ObserverAdapter) ensureSynchronized(ctx context.Context) (OperationResul
 	return ContinueProcessing()
 }
 
-func (c ObserverAdapter) synchronizeOtelObservers(
+func (c ObserverAdapter) syncOtel(
 	ctx context.Context,
 	observerResource mdaiv1.ObserverResource,
-	observers []mdaiv1.Observer,
+	idx ObserverIndex,
 ) error {
+	observers := idx.ByProvider(mdaiv1.OTEL_COLLECTOR)
 	if len(observers) == 0 {
 		return nil
 	}
@@ -214,33 +243,35 @@ func (c ObserverAdapter) synchronizeOtelObservers(
 	return nil
 }
 
-func (c ObserverAdapter) synchronizeGreptimeObservers(
-	observers []mdaiv1.Observer,
-) error {
+func (c ObserverAdapter) syncGreptime(idx ObserverIndex) error {
+	observers := idx.By(mdaiv1.GREPTIME_FLOW, mdaiv1.SPAN_METRICS)
 	if len(observers) == 0 {
 		return nil
 	}
 	for _, obs := range observers {
-		if obs.Provider != mdaiv1.GREPTIME_FLOW {
-			continue
+		if obs.SpanMetricsObserver == nil {
+			return fmt.Errorf("observer %s missing spanMetricsObserver config", obs.Name)
 		}
-		dimensions := obs.SpanMetricsObserver.Dimensions
-		primaryKey := obs.SpanMetricsObserver.PrimaryKey
+		dimensions := []string{}
+		primaryKey := ""
+		if obs.SpanMetricsObserver.Greptime != nil {
+			dimensions = obs.SpanMetricsObserver.Greptime.Dimensions
+			primaryKey = obs.SpanMetricsObserver.Greptime.PrimaryKey
+		}
+		if len(dimensions) == 0 && len(obs.SpanMetricsObserver.Dimensions) > 0 {
+			dimensions = obs.SpanMetricsObserver.Dimensions
+		}
+		if primaryKey == "" && obs.SpanMetricsObserver.PrimaryKey != "" {
+			primaryKey = obs.SpanMetricsObserver.PrimaryKey
+		}
+		if len(dimensions) == 0 || primaryKey == "" {
+			return fmt.Errorf("observer %s missing greptime dimensions/primaryKey", obs.Name)
+		}
 		return doGreptime(c.greptime, dimensions, primaryKey)
 	}
 	// TODO: delete Greptime resources (sink table and flow) when observers are deleted
 
 	return nil
-}
-
-func ObserversForProvider(observers []mdaiv1.Observer, provider mdaiv1.ObserverProvider) []mdaiv1.Observer {
-	result := make([]mdaiv1.Observer, 0)
-	for _, obs := range observers {
-		if obs.Provider == provider {
-			result = append(result, obs)
-		}
-	}
-	return result
 }
 
 func (c ObserverAdapter) ensureStatusSetToDone(ctx context.Context) (OperationResult, error) {

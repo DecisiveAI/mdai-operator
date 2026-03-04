@@ -1,19 +1,26 @@
-  - name: watcher_gs_greptime
-    provider: greptimeFlow
-    type: spanMetrics
-    spanMetricsObserver:
+- name: watcher_gs_greptime
+  provider: greptimeFlow
+  type: spanMetrics
+  spanMetricsObserver:
+    greptime:
+      # goes to GreptimeDB Flow query: tag columns and `group by` clause
+      # need to be in format of sink table column names
       dimensions:
         - service_name
         - span_attributes.server.address
         - resource_attributes.host.name
       primaryKey: service_name
-  - name: watcher_gs_otel
-    provider: otelCollector
-    type: spanMetrics
-    spanMetricsObserver:
-      dimensions:
-        - service_name
+
+- name: watcher_gs_otel
+  provider: otelCollector
+  type: spanMetrics
+  spanMetricsObserver:
+    otel:
+      # goes to groupbyattr processor
+      groupByAttrs:
+        - some.field
       connectorConfig:
         dimensions:
-          - name: service_name
-          - name: span_attributes.server.address
+          # span or resource attributes (no prefix)
+          - name: host.name
+          - name: server.address

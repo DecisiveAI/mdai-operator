@@ -327,7 +327,10 @@ func addObserverFilterProcessor(processors builder.ConfigBlock, observerName str
 }
 
 func buildObserverPipeline(filterName, groupByKey, exporter string) map[string]any {
-	pipelineProcessors := []string{"batch", groupByKey}
+	pipelineProcessors := []string{"batch"}
+	if groupByKey != "" {
+		pipelineProcessors = append(pipelineProcessors, groupByKey)
+	}
 	if filterName != "" {
 		pipelineProcessors = append([]string{filterName}, pipelineProcessors...)
 	}
@@ -348,6 +351,9 @@ func getObserverCollectorConfigDataVolume(
 ) {
 	for _, obs := range observers {
 		if obs.Type != mdaiv1.DATA_VOLUME {
+			continue
+		}
+		if obs.DataVolumeObserver == nil {
 			continue
 		}
 		observerName := obs.Name
@@ -388,27 +394,39 @@ func getObserverCollectorConfigSpanMetrics(
 ) error {
 
 	for _, obs := range observers {
-		// TODO: refactor!!!
-		if obs.Provider != mdaiv1.OTEL_COLLECTOR {
-			continue
-		}
 		if obs.Type != mdaiv1.SPAN_METRICS {
 			continue
+		}
+		if obs.SpanMetricsObserver == nil {
+			return fmt.Errorf("observer %s missing spanMetricsObserver config", obs.Name)
 		}
 
 		observerName := obs.Name
 
-		groupByKey := "groupbyattrs/" + observerName
-		processors.Set(groupByKey, map[string]any{
-			"keys": obs.SpanMetricsObserver.Dimensions,
-		})
+		groupByAttrs := []string{}
+		if obs.SpanMetricsObserver.Otel != nil {
+			groupByAttrs = obs.SpanMetricsObserver.Otel.GroupByAttrs
+		}
+		if len(groupByAttrs) == 0 && len(obs.SpanMetricsObserver.Dimensions) > 0 {
+			groupByAttrs = obs.SpanMetricsObserver.Dimensions
+		}
+
+		groupByKey := ""
+		if len(groupByAttrs) > 0 {
+			groupByKey = "groupbyattrs/" + observerName
+			processors.Set(groupByKey, map[string]any{
+				"keys": groupByAttrs,
+			})
+		}
 
 		dvKey := "spanmetrics/" + observerName
 		dvSpec, err := ParseSpanMetricsConfig(&obs)
 		if err != nil {
 			return err
 		}
-		connectors.Set(dvKey, dvSpec)
+		if dvSpec != nil {
+			connectors.Set(dvKey, dvSpec)
+		}
 
 		*receivers = append(*receivers, dvKey)
 
@@ -423,11 +441,18 @@ func getObserverCollectorConfigSpanMetrics(
 
 func ParseSpanMetricsConfig(observer *mdaiv1.Observer) (map[string]any, error) {
 	var configJsonData map[string]any
-	// TODO: figure out if it's ok if there is no SpanMetricsConnectorConfig section
-	if observer.SpanMetricsObserver.ConnectorConfig == nil {
+	if observer.SpanMetricsObserver == nil {
 		return nil, nil
 	}
-	if err := json.Unmarshal(observer.SpanMetricsObserver.ConnectorConfig.Raw, &configJsonData); err != nil {
+	// TODO: figure out if it's ok if there is no SpanMetricsConnectorConfig section
+	connectorConfig := observer.SpanMetricsObserver.ConnectorConfig
+	if observer.SpanMetricsObserver.Otel != nil && observer.SpanMetricsObserver.Otel.ConnectorConfig != nil {
+		connectorConfig = observer.SpanMetricsObserver.Otel.ConnectorConfig
+	}
+	if connectorConfig == nil {
+		return nil, nil
+	}
+	if err := json.Unmarshal(connectorConfig.Raw, &configJsonData); err != nil {
 		return nil, fmt.Errorf("can not marshall observer %s SpanMetricsConnectorConfig to json", observer.Name)
 	}
 

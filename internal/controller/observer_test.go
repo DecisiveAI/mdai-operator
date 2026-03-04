@@ -53,27 +53,35 @@ func TestGetObserverCollectorConfig(t *testing.T) {
 			desc: "observers present",
 			observers: []mdaiv1.Observer{
 				{
-					Name:                    "observer-in",
-					LabelResourceAttributes: []string{"mdai_service"},
-					CountMetricName:         lo.ToPtr("items_received_by_service_total"),
-					BytesMetricName:         lo.ToPtr("bytes_received_by_service_total"),
+					Name:     "observer-in",
+					Provider: mdaiv1.OTEL_COLLECTOR,
+					Type:     mdaiv1.DATA_VOLUME,
 					Filter: &mdaiv1.ObserverFilter{
 						ErrorMode: lo.ToPtr("ignore"),
 						Logs: &mdaiv1.ObserverLogsFilter{
 							LogRecord: []string{`resource.attributes["observer_direction"] != "received"`},
 						},
 					},
+					DataVolumeObserver: &mdaiv1.DataVolumeObserverConfig{
+						LabelResourceAttributes: []string{"mdai_service"},
+						CountMetricName:         lo.ToPtr("items_received_by_service_total"),
+						BytesMetricName:         lo.ToPtr("bytes_received_by_service_total"),
+					},
 				},
 				{
-					Name:                    "observer-out",
-					LabelResourceAttributes: []string{"mdai_service"},
-					CountMetricName:         lo.ToPtr("items_sent_by_service_total"),
-					BytesMetricName:         lo.ToPtr("bytes_sent_by_service_total"),
+					Name:     "observer-out",
+					Provider: mdaiv1.OTEL_COLLECTOR,
+					Type:     mdaiv1.DATA_VOLUME,
 					Filter: &mdaiv1.ObserverFilter{
 						ErrorMode: lo.ToPtr("ignore"),
 						Logs: &mdaiv1.ObserverLogsFilter{
 							LogRecord: []string{`resource.attributes["observer_direction"] != "exported"`},
 						},
+					},
+					DataVolumeObserver: &mdaiv1.DataVolumeObserverConfig{
+						LabelResourceAttributes: []string{"mdai_service"},
+						CountMetricName:         lo.ToPtr("items_sent_by_service_total"),
+						BytesMetricName:         lo.ToPtr("bytes_sent_by_service_total"),
 					},
 				},
 			},
@@ -135,7 +143,7 @@ func TestGetObserverCollectorConfig(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
-			testObj := NewObserverAdapter(nil, logr.Discard(), nil, nil, nil)
+			testObj := NewObserverAdapter(nil, logr.Discard(), nil, nil, nil, Greptime{})
 
 			config, err := testObj.getObserverCollectorConfig(tc.observers, tc.observerResource)
 			tc.check(t, config, err)

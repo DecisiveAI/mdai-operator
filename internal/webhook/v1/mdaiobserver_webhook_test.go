@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -59,6 +60,53 @@ var _ = Describe("MdaiObserver Webhook", func() {
 			Expect(warnings).To(Equal(admission.Warnings{}))
 			Expect(err).ToNot(HaveOccurred())
 		})
+
+		It("Should reject spanmetrics otel observer with overlapping groupByAttrs and connector dimensions", func() {
+			By("simulating an invalid spanmetrics otel config")
+			obj = createObserver()
+			obj.Spec.Observers = []mdaiv1.Observer{
+				{
+					Name:     "span-otel",
+					Provider: mdaiv1.OTEL_COLLECTOR,
+					Type:     mdaiv1.SPAN_METRICS,
+					SpanMetricsObserver: &mdaiv1.SpanMetricsObserverConfig{
+						Otel: &mdaiv1.SpanMetricsOtelConfig{
+							GroupByAttrs: []string{"host.name"},
+							ConnectorConfig: &apiextensionsv1.JSON{
+								Raw: []byte(`{"dimensions":[{"name":"host.name"},{"name":"server.address"}]}`),
+							},
+						},
+					},
+				},
+			}
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(warnings).To(Equal(admission.Warnings{}))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("duplicate attribute"))
+		})
+
+		It("Should accept spanmetrics otel observer with distinct groupByAttrs and connector dimensions", func() {
+			By("simulating a valid spanmetrics otel config")
+			obj = createObserver()
+			obj.Spec.Observers = []mdaiv1.Observer{
+				{
+					Name:     "span-otel",
+					Provider: mdaiv1.OTEL_COLLECTOR,
+					Type:     mdaiv1.SPAN_METRICS,
+					SpanMetricsObserver: &mdaiv1.SpanMetricsObserverConfig{
+						Otel: &mdaiv1.SpanMetricsOtelConfig{
+							GroupByAttrs: []string{"host.name"},
+							ConnectorConfig: &apiextensionsv1.JSON{
+								Raw: []byte(`{"dimensions":[{"name":"server.address"}]}`),
+							},
+						},
+					},
+				},
+			}
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(warnings).To(Equal(admission.Warnings{}))
+			Expect(err).ToNot(HaveOccurred())
+		})
 	})
 })
 
@@ -71,31 +119,47 @@ func createObserver() *mdaiv1.MdaiObserver {
 		Spec: mdaiv1.MdaiObserverSpec{
 			Observers: []mdaiv1.Observer{
 				{
-					Name:                    "watcher1",
-					LabelResourceAttributes: []string{"service.name"},
-					CountMetricName:         ptr.To("mdai_watcher_one_count_total"),
-					BytesMetricName:         ptr.To("mdai_watcher_one_bytes_total"),
+					Name:     "watcher1",
+					Provider: mdaiv1.OTEL_COLLECTOR,
+					Type:     mdaiv1.DATA_VOLUME,
+					DataVolumeObserver: &mdaiv1.DataVolumeObserverConfig{
+						LabelResourceAttributes: []string{"service.name"},
+						CountMetricName:         ptr.To("mdai_watcher_one_count_total"),
+						BytesMetricName:         ptr.To("mdai_watcher_one_bytes_total"),
+					},
 				},
 				{
-					Name:                    "watcher2",
-					LabelResourceAttributes: []string{"team", "log_level"},
-					CountMetricName:         ptr.To("mdai_watcher_two_count_total"),
+					Name:     "watcher2",
+					Provider: mdaiv1.OTEL_COLLECTOR,
+					Type:     mdaiv1.DATA_VOLUME,
+					DataVolumeObserver: &mdaiv1.DataVolumeObserverConfig{
+						LabelResourceAttributes: []string{"team", "log_level"},
+						CountMetricName:         ptr.To("mdai_watcher_two_count_total"),
+					},
 				},
 				{
-					Name:                    "watcher3",
-					LabelResourceAttributes: []string{"region", "log_level"},
-					BytesMetricName:         ptr.To("mdai_watcher_three_count_total"),
+					Name:     "watcher3",
+					Provider: mdaiv1.OTEL_COLLECTOR,
+					Type:     mdaiv1.DATA_VOLUME,
+					DataVolumeObserver: &mdaiv1.DataVolumeObserverConfig{
+						LabelResourceAttributes: []string{"region", "log_level"},
+						BytesMetricName:         ptr.To("mdai_watcher_three_count_total"),
+					},
 				},
 				{
-					Name:                    "watcher4",
-					LabelResourceAttributes: []string{"service.name", "team", "region"},
-					CountMetricName:         ptr.To("mdai_watcher_four_count_total"),
-					BytesMetricName:         ptr.To("mdai_watcher_four_bytes_total"),
+					Name:     "watcher4",
+					Provider: mdaiv1.OTEL_COLLECTOR,
+					Type:     mdaiv1.DATA_VOLUME,
 					Filter: &mdaiv1.ObserverFilter{
 						ErrorMode: ptr.To("ignore"),
 						Logs: &mdaiv1.ObserverLogsFilter{
 							LogRecord: []string{`attributes["log_level"] == "INFO"`},
 						},
+					},
+					DataVolumeObserver: &mdaiv1.DataVolumeObserverConfig{
+						LabelResourceAttributes: []string{"service.name", "team", "region"},
+						CountMetricName:         ptr.To("mdai_watcher_four_count_total"),
+						BytesMetricName:         ptr.To("mdai_watcher_four_bytes_total"),
 					},
 				},
 			},

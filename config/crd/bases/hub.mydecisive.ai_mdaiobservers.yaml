@@ -191,15 +191,34 @@ spec:
                     spanMetricsObserver:
                       properties:
                         connectorConfig:
+                          description: 'Deprecated: use Otel.ConnectorConfig instead.'
                           x-kubernetes-preserve-unknown-fields: true
                         dimensions:
+                          description: 'Deprecated: use Otel or Greptime instead.'
                           items:
                             type: string
                           type: array
+                        greptime:
+                          properties:
+                            dimensions:
+                              items:
+                                type: string
+                              type: array
+                            primaryKey:
+                              type: string
+                          type: object
+                        otel:
+                          properties:
+                            connectorConfig:
+                              x-kubernetes-preserve-unknown-fields: true
+                            groupByAttrs:
+                              items:
+                                type: string
+                              type: array
+                          type: object
                         primaryKey:
+                          description: 'Deprecated: use Greptime.PrimaryKey instead.'
                           type: string
-                      required:
-                      - dimensions
                       type: object
                     type:
                       type: string

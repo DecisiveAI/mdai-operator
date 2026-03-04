@@ -95,15 +95,51 @@ func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiob
 		switch observer.Type {
 		case mdaiv1.SPAN_METRICS:
 			{
-				// TODO: refactor
-				if observer.Provider == mdaiv1.OTEL_COLLECTOR {
-					return newWarnings, ParseSpanMetricsConfig(&observer)
-				} else {
-					return newWarnings, nil
+				if observer.SpanMetricsObserver == nil {
+					return newWarnings, fmt.Errorf("observer %s of type %s must define spanMetricsObserver", observer.Name, observer.Type)
+				}
+				switch observer.Provider {
+				case mdaiv1.OTEL_COLLECTOR:
+					if observer.SpanMetricsObserver.Otel == nil {
+						return newWarnings, fmt.Errorf("observer %s of provider %s must define spanMetricsObserver.otel", observer.Name, observer.Provider)
+					}
+					if observer.SpanMetricsObserver.Greptime != nil {
+						return newWarnings, fmt.Errorf("observer %s of provider %s must not define spanMetricsObserver.greptime", observer.Name, observer.Provider)
+					}
+					config, err := ParseSpanMetricsConfig(&observer)
+					if err != nil {
+						return newWarnings, err
+					}
+					if config != nil && len(observer.SpanMetricsObserver.Otel.GroupByAttrs) > 0 {
+						used := make(map[string]struct{}, len(config.Dimensions))
+						for _, dim := range config.Dimensions {
+							used[dim.Name] = struct{}{}
+						}
+						for _, attr := range observer.SpanMetricsObserver.Otel.GroupByAttrs {
+							if _, ok := used[attr]; ok {
+								return newWarnings, fmt.Errorf("observer %s has duplicate attribute %q in groupByAttrs and connectorConfig.dimensions", observer.Name, attr)
+							}
+						}
+					}
+				case mdaiv1.GREPTIME_FLOW:
+					if observer.SpanMetricsObserver.Greptime == nil {
+						return newWarnings, fmt.Errorf("observer %s of provider %s must define spanMetricsObserver.greptime", observer.Name, observer.Provider)
+					}
+					if observer.SpanMetricsObserver.Otel != nil {
+						return newWarnings, fmt.Errorf("observer %s of provider %s must not define spanMetricsObserver.otel", observer.Name, observer.Provider)
+					}
+					if len(observer.SpanMetricsObserver.Greptime.Dimensions) == 0 || observer.SpanMetricsObserver.Greptime.PrimaryKey == "" {
+						return newWarnings, fmt.Errorf("observer %s of provider %s must define greptime dimensions and primaryKey", observer.Name, observer.Provider)
+					}
+				default:
+					return newWarnings, fmt.Errorf("observer %s has unsupported provider %s for type %s", observer.Name, observer.Provider, observer.Type)
 				}
 			}
 		case mdaiv1.DATA_VOLUME:
 			{
+				if observer.DataVolumeObserver == nil {
+					return newWarnings, fmt.Errorf("observer %s of type %s must define dataVolumeObserver", observer.Name, observer.Type)
+				}
 				if observer.DataVolumeObserver.BytesMetricName == nil && observer.DataVolumeObserver.CountMetricName == nil {
 					return newWarnings, fmt.Errorf("observer %s must have either a bytesMetricName or countMetricName", observer.Name)
 				}
@@ -111,7 +147,7 @@ func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiob
 					newWarnings = append(newWarnings, "observer "+observer.Name+" does not define any labels to apply to counts")
 				}
 				if observer.SpanMetricsObserver != nil {
-					return newWarnings, fmt.Errorf("observer %s of type %s can not have spanMetricsConnectorConfig section", observer.Name, observer.Type)
+					return newWarnings, fmt.Errorf("observer %s of type %s can not have spanMetricsObserver section", observer.Name, observer.Type)
 				}
 			}
 		}
@@ -119,10 +155,13 @@ func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiob
 	return newWarnings, nil
 }
 
-func ParseSpanMetricsConfig(observer *mdaiv1.Observer) error {
+func ParseSpanMetricsConfig(observer *mdaiv1.Observer) (*spanmetricsconnector.Config, error) {
 	var configJsonData map[string]any
-	if err := json.Unmarshal(observer.SpanMetricsObserver.ConnectorConfig.Raw, &configJsonData); err != nil {
-		return fmt.Errorf("can not marshall observer %s SpanMetricsConnectorConfig to json", observer.Name)
+	if observer.SpanMetricsObserver == nil || observer.SpanMetricsObserver.Otel == nil || observer.SpanMetricsObserver.Otel.ConnectorConfig == nil {
+		return nil, nil
+	}
+	if err := json.Unmarshal(observer.SpanMetricsObserver.Otel.ConnectorConfig.Raw, &configJsonData); err != nil {
+		return nil, fmt.Errorf("can not marshall observer %s SpanMetricsConnectorConfig to json", observer.Name)
 	}
 
 	var spanmetricsConfig spanmetricsconnector.Config
@@ -140,19 +179,19 @@ func ParseSpanMetricsConfig(observer *mdaiv1.Observer) error {
 		),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to build mapstructure decoder for %s", observer.Name)
+		return nil, fmt.Errorf("failed to build mapstructure decoder for %s", observer.Name)
 	}
 
 	if err := dec.Decode(configJsonData); err != nil {
 		if len(md.Unused) > 0 {
-			return fmt.Errorf("unknown spanMetricsConnectorConfig fields: %v: %w", md.Unused, err)
+			return nil, fmt.Errorf("unknown spanMetricsConnectorConfig fields: %v: %w", md.Unused, err)
 		}
-		return fmt.Errorf("invalid spanMetricsConnectorConfig: %w", err)
+		return nil, fmt.Errorf("invalid spanMetricsConnectorConfig: %w", err)
 	}
 
 	if err := spanmetricsConfig.Validate(); err != nil {
-		return fmt.Errorf("validate SpanMetricsConnectorConfig for observer %s failed, Error: %s", observer.Name, err.Error())
+		return nil, fmt.Errorf("validate SpanMetricsConnectorConfig for observer %s failed, Error: %s", observer.Name, err.Error())
 	}
 
-	return nil
+	return &spanmetricsConfig, nil
 }

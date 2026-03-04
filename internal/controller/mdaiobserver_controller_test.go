@@ -86,8 +86,12 @@ func TestBuildCollectorConfig(t *testing.T) {
 	}
 	observers := []hubv1.Observer{
 		{
-			Name:                    "obs1",
-			LabelResourceAttributes: []string{"label1", "label2"},
+			Name:     "obs1",
+			Provider: hubv1.OTEL_COLLECTOR,
+			Type:     hubv1.DATA_VOLUME,
+			DataVolumeObserver: &hubv1.DataVolumeObserverConfig{
+				LabelResourceAttributes: []string{"label1", "label2"},
+			},
 		},
 	}
 	cr.Spec.Observers = observers
@@ -97,7 +101,7 @@ func TestBuildCollectorConfig(t *testing.T) {
 	fakeClient := observerFakeClient(scheme, cr)
 	recorder := record.NewFakeRecorder(10)
 
-	adapter := NewObserverAdapter(cr, logr.Discard(), fakeClient, recorder, scheme)
+	adapter := NewObserverAdapter(cr, logr.Discard(), fakeClient, recorder, scheme, Greptime{})
 	config, err := adapter.getObserverCollectorConfig(observers, observerResource)
 	if err != nil {
 		t.Fatalf("getObserverCollectorConfig returned error: %v", err)
@@ -120,15 +124,19 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 	scheme := createTestScheme()
 
 	observer := hubv1.Observer{
-		Name:                    "observer4",
-		LabelResourceAttributes: []string{"service.name", "team", "region"},
-		CountMetricName:         ptr.To("mdai_observer_four_count_total"),
-		BytesMetricName:         ptr.To("mdai_observer_four_bytes_total"),
+		Name:     "observer4",
+		Provider: hubv1.OTEL_COLLECTOR,
+		Type:     hubv1.DATA_VOLUME,
 		Filter: &hubv1.ObserverFilter{
 			ErrorMode: ptr.To("ignore"),
 			Logs: &hubv1.ObserverLogsFilter{
 				LogRecord: []string{`attributes["log_level"] == "INFO"`},
 			},
+		},
+		DataVolumeObserver: &hubv1.DataVolumeObserverConfig{
+			LabelResourceAttributes: []string{"service.name", "team", "region"},
+			CountMetricName:         ptr.To("mdai_observer_four_count_total"),
+			BytesMetricName:         ptr.To("mdai_observer_four_bytes_total"),
 		},
 	}
 	observers := []hubv1.Observer{observer}
@@ -149,7 +157,7 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 
 	fakeClient := observerFakeClient(scheme, mdaiCR)
 	recorder := record.NewFakeRecorder(10)
-	adapter := NewObserverAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme)
+	adapter := NewObserverAdapter(mdaiCR, logr.Discard(), fakeClient, recorder, scheme, Greptime{})
 
 	// Call ensureSynchronized.
 	opResult, err := adapter.ensureSynchronized(ctx)
