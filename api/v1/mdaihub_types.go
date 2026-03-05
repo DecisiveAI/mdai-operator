@@ -10,9 +10,9 @@ import (
 
 type Serializer struct {
 	// Name The environment variable name to be used to access the variable's value.
-	// +kubeuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
+	// +kubebuilder:validation:Pattern:="^[a-zA-Z_][a-zA-Z0-9_]*$"
 	// +kubebuilder:validation:MinLength=1
-	// + required
+	// +required
 	Name string `json:"name" yaml:"name"`
 	// Transformers The transformation applied to the value of the variable in the order provided before it is assigned
 	// as an environment variable.
