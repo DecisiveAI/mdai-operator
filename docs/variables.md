@@ -10,6 +10,24 @@ There are three main types of variables, distinguished by the `type` field:
 
 All variables share a common set of data types (`dataType`) and serialization options.
 
+## Variable ConfigMaps
+
+The operator manages multiple ConfigMaps for variables:
+
+1. **`<mdaihub-name>-manual-variables`**: Legacy manual-variable map in the hub namespace.
+   - `data` key: variable key
+   - `data` value: variable `dataType`
+2. **`<mdaihub-name>-variables-schema`**: Structured variable definition map for all variable types (`manual`, `computed`, `meta`) in the hub namespace.
+   - `data` key: variable key
+   - `data` value: JSON object containing:
+     - `type`
+     - `dataType`
+     - `storageType`
+     - optional `variableRefs`
+     - optional `serializeAs`
+   - This map stores definitions only, not runtime variable values.
+3. **`<mdaihub-name>-variables`**: Serialized values consumed by OTEL collectors in collector namespaces.
+
 ## Variable Types
 
 ### 1. Manual Variables (`type: manual`)

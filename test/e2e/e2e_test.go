@@ -421,6 +421,7 @@ var _ = Describe("Manager", Ordered, func() {
 			By("verifying the config map for variables exists")
 			configMapExists("mdaihub-sample-variables", otelNamespace)
 			configMapExists("mdaihub-sample-manual-variables", namespace)
+			configMapExists("mdaihub-sample-variables-schema", namespace)
 
 			By("verifying the config map content for variables defaults")
 			verifyConfigMap := func(g Gomega) {
@@ -445,6 +446,13 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(data["service_list_manual"]).To(Equal("set"))
 			}
 			Eventually(verifyConfigMapManual).Should(Succeed())
+
+			By("verifying the config map content for variable schema")
+			verifySchemaConfigMap := func(g Gomega) {
+				data := getDataFromMap(g, "mdaihub-sample-variables-schema", namespace)
+				verifyVariableSchemaConfigMap(g, data)
+			}
+			Eventually(verifySchemaConfigMap).Should(Succeed())
 		})
 
 		It("can create the config map for automation", func() {
@@ -916,6 +924,13 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 			Eventually(verifyConfigMap).Should(Succeed())
 
+			By("validating that the variable schema map remains definition-only")
+			verifySchemaConfigMap := func(g Gomega) {
+				data := getDataFromMap(g, "mdaihub-sample-variables-schema", namespace)
+				verifyVariableSchemaConfigMap(g, data)
+			}
+			Eventually(verifySchemaConfigMap).Should(Succeed())
+
 			By("validating that the managed OTel collector was restarted, but unmanaged collector was not")
 			verifyOtelDeployment := func(g Gomega) {
 				updatedRevision := getOtelDeploymentRevision("gateway-collector", otelNamespace)
@@ -928,6 +943,30 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(updatedRevision).To(Equal(1))
 			}
 			Eventually(verifyUnmanagedOtelDeployment).Should(Succeed())
+		})
+
+		It("can remove all variables from an existing MdaiHub CR", func() {
+			By("patching MdaiHub to remove variables and variable-driven rules")
+			patchHub := func(g Gomega) {
+				cmd := exec.Command(
+					"kubectl",
+					"patch",
+					"mdaihub",
+					"mdaihub-sample",
+					"-n",
+					namespace,
+					"--type=merge",
+					"-p",
+					`{"spec":{"variables":[],"rules":[]}}`,
+				)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(patchHub).Should(Succeed())
+
+			By("validating hub-scoped variable ConfigMaps are cleaned up")
+			configMapDoesNotExist("mdaihub-sample-variables-schema", namespace)
+			configMapDoesNotExist("mdaihub-sample-manual-variables", namespace)
 		})
 
 		It("can delete MdaiHub CRs and clean up resources", func() {
@@ -944,6 +983,9 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("validating the config map for manual variables is deleted")
 			configMapDoesNotExist("mdaihub-sample-manual-variables", namespace)
+
+			By("validating the config map for variable schema is deleted")
+			configMapDoesNotExist("mdaihub-sample-variables-schema", namespace)
 
 			By("validating the config map for automations is deleted")
 			configMapDoesNotExist("mdaihub-sample-automations", namespace)
@@ -1106,6 +1148,48 @@ func getDataFromMap(g Gomega, cmName string, namespace string) map[string]any {
 	data, ok := cm["data"].(map[string]any)
 	g.Expect(ok).To(BeTrue(), "Expected 'data' field to be a map")
 	return data
+}
+
+func getSchemaEntryFromConfigMapData(g Gomega, data map[string]any, variableKey string) map[string]any {
+	raw, ok := data[variableKey]
+	g.Expect(ok).To(BeTrue(), fmt.Sprintf("Expected schema entry for variable %q", variableKey))
+
+	rawString, ok := raw.(string)
+	g.Expect(ok).To(BeTrue(), fmt.Sprintf("Expected schema entry %q to be string JSON", variableKey))
+
+	var entry map[string]any
+	err := json.Unmarshal([]byte(rawString), &entry)
+	g.Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to parse schema entry for variable %q", variableKey))
+
+	return entry
+}
+
+func verifyVariableSchemaConfigMap(g Gomega, data map[string]any) {
+	g.Expect(data).To(HaveLen(12))
+
+	manualFilter := getSchemaEntryFromConfigMapData(g, data, "manual_filter")
+	g.Expect(manualFilter["type"]).To(Equal("manual"))
+	g.Expect(manualFilter["dataType"]).To(Equal("string"))
+	g.Expect(manualFilter["storageType"]).To(Equal("mdai-valkey"))
+	g.Expect(manualFilter).To(HaveKey("serializeAs"))
+	g.Expect(manualFilter).NotTo(HaveKey("value"))
+
+	serviceListManual := getSchemaEntryFromConfigMapData(g, data, "service_list_manual")
+	g.Expect(serviceListManual["type"]).To(Equal("manual"))
+	g.Expect(serviceListManual["dataType"]).To(Equal("set"))
+	g.Expect(serviceListManual).NotTo(HaveKey("value"))
+
+	myHashSet := getSchemaEntryFromConfigMapData(g, data, "my_hash_set")
+	g.Expect(myHashSet["type"]).To(Equal("meta"))
+	g.Expect(myHashSet["dataType"]).To(Equal("metaHashSet"))
+	g.Expect(myHashSet["variableRefs"]).To(Equal([]any{"severity_number", "severity_filters_by_level"}))
+	g.Expect(myHashSet).NotTo(HaveKey("value"))
+
+	serviceList1 := getSchemaEntryFromConfigMapData(g, data, "service_list_1")
+	g.Expect(serviceList1["type"]).To(Equal("computed"))
+	g.Expect(serviceList1["dataType"]).To(Equal("set"))
+	g.Expect(serviceList1).To(HaveKey("serializeAs"))
+	g.Expect(serviceList1).NotTo(HaveKey("value"))
 }
 
 func getOtelDeploymentRevision(deploymentName string, namespace string) int {
