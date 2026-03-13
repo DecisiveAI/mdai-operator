@@ -1,30 +1,36 @@
+# syntax=docker/dockerfile:1
+
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM golang:1.25-bookworm AS builder
-ARG TARGETOS
-ARG TARGETARCH
-WORKDIR /workspace
+ARG GO_VERSION=1.25
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-bookworm AS builder
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+WORKDIR /src
 
 # Copy the Go Modules manifests
-COPY go.mod go.sum ./
+COPY --link go.mod go.sum ./
 # cache deps before building and copying source so that we don't need to re-download as much
 # and so that source changes don't invalidate our downloaded layer
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod download
 
 # Copy the go source
-COPY . .
+COPY --link . .
 
 # Build
-# the GOARCH has not a default value to allow the binary be built according to the host where the command
-# was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
-# the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
-# by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-w -s" -o manager ./cmd
-
+# GOARCH defaults to the requested target architecture from buildx.
+# For local `make docker-build`, this matches your host arch; for multi-arch `make docker-push`,
+# buildx sets per-platform values while keeping the Dockerfile unchanged.
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-w -s" -o /manager ./cmd
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static-debian13:nonroot AS final
 WORKDIR /
-COPY --from=builder /workspace/manager .
+COPY --link --from=builder /manager /manager
 
 ENTRYPOINT ["/manager"]
