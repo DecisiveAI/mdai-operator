@@ -38,6 +38,7 @@ import (
 const (
 	envConfigMapNamePostfix        = "-variables"
 	manualEnvConfigMapNamePostfix  = "-manual-variables"
+	variableSchemaConfigMapPostfix = "-variables-schema"
 	automationConfigMapNamePostfix = "-automation"
 
 	requeueTime = time.Second * 5
@@ -66,6 +67,14 @@ type HubAdapter struct {
 	valkeyAuditStreamExpiry time.Duration
 	releaseName             string
 	zapLogger               *zap.Logger
+}
+
+type variableSchemaConfigMapEntry struct {
+	Type         mdaiv1.VariableType        `json:"type"`
+	DataType     mdaiv1.VariableDataType    `json:"dataType"`
+	StorageType  mdaiv1.VariableStorageType `json:"storageType"`
+	VariableRefs []string                   `json:"variableRefs,omitempty"`
+	SerializeAs  *[]mdaiv1.Serializer       `json:"serializeAs,omitempty"`
 }
 
 func NewHubAdapter(
@@ -463,13 +472,64 @@ func (c HubAdapter) syncComputedConfigMapsAndRestart(ctx context.Context, envMap
 	return ContinueProcessing()
 }
 
-//nolint:gocyclo // TODO refactor later
+func buildVariableSchemaEnvMap(variables []mdaiv1.Variable) (map[string]string, error) {
+	schemaEnvMap := make(map[string]string, len(variables))
+	for _, variable := range variables {
+		entry := variableSchemaConfigMapEntry{
+			Type:        variable.Type,
+			DataType:    variable.DataType,
+			StorageType: variable.StorageType,
+			SerializeAs: variable.SerializeAs,
+		}
+		if len(variable.VariableRefs) > 0 {
+			entry.VariableRefs = append([]string(nil), variable.VariableRefs...)
+		}
+		data, err := json.Marshal(entry)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal variable schema entry for key %q: %w", variable.Key, err)
+		}
+		schemaEnvMap[variable.Key] = string(data)
+	}
+	return schemaEnvMap, nil
+}
+
+//nolint:gocyclo
 func (c HubAdapter) ensureVariableSynchronized(ctx context.Context) (OperationResult, error) {
-	// current assumption is we have only built-in Valkey storage
+	// the current assumption is we have only built-in Valkey storage
 	variables := c.mdaiCR.Spec.Variables
-	if variables == nil {
-		c.logger.Info("No variables found in the CR, skipping variable synchronization")
+	if len(variables) == 0 {
+		c.logger.Info("No variables found in the CR, skipping variable synchronization and removing variables config maps")
+
+		variableSchemaConfigMapName := c.mdaiCR.Name + variableSchemaConfigMapPostfix
+		c.logger.Info("Deleting variable schema ConfigMap", "hub", c.mdaiCR.Name, "configMap", variableSchemaConfigMapName)
+		if err := c.deleteEnvConfigMap(ctx, variableSchemaConfigMapPostfix, c.mdaiCR.Namespace); err != nil {
+			c.logger.Error(err, "Failed to delete variable schema ConfigMap", "hub", c.mdaiCR.Name, "configMap", variableSchemaConfigMapName, "namespace", c.mdaiCR.Namespace)
+			return ContinueWithError(err)
+		}
+
+		manualVariablesConfigMapName := c.mdaiCR.Name + manualEnvConfigMapNamePostfix
+		c.logger.Info("Deleting manual variables ConfigMap", "hub", c.mdaiCR.Name, "configMap", manualVariablesConfigMapName)
+		if err := c.deleteEnvConfigMap(ctx, manualEnvConfigMapNamePostfix, c.mdaiCR.Namespace); err != nil {
+			c.logger.Error(err, "Failed to delete manual variables ConfigMap", "hub", c.mdaiCR.Name, "configMap", manualVariablesConfigMapName, "namespace", c.mdaiCR.Namespace)
+			return ContinueWithError(err)
+		}
+
+		// intentionally keeping the map with values
+
 		return ContinueProcessing()
+	}
+
+	schemaEnvMap, err := buildVariableSchemaEnvMap(variables)
+	if err != nil {
+		return ContinueWithError(err)
+	}
+
+	if _, _, err = c.createOrUpdateEnvConfigMap(ctx,
+		schemaEnvMap,
+		variableSchemaConfigMapPostfix,
+		c.mdaiCR.Namespace,
+		WithOwnerRef(c.mdaiCR, c.scheme)); err != nil {
+		return ContinueWithError(err)
 	}
 
 	envMap := make(map[string]string)

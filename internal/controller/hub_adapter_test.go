@@ -306,6 +306,60 @@ func TestCreateOrUpdateManualEnvConfigMap(t *testing.T) {
 	assert.Equal(t, "string", cm.Data["VAR"])
 }
 
+func TestBuildVariableSchemaEnvMap(t *testing.T) {
+	serializer := []mdaiv1.Serializer{
+		{Name: "MY_ENV"},
+	}
+	variables := []mdaiv1.Variable{
+		{
+			Key:         "manual_var",
+			Type:        mdaiv1.VariableTypeManual,
+			DataType:    mdaiv1.VariableDataTypeString,
+			StorageType: mdaiv1.VariableSourceTypeBuiltInValkey,
+		},
+		{
+			Key:         "computed_var",
+			Type:        mdaiv1.VariableTypeComputed,
+			DataType:    mdaiv1.VariableDataTypeSet,
+			StorageType: mdaiv1.VariableSourceTypeBuiltInValkey,
+			SerializeAs: &serializer,
+		},
+		{
+			Key:         "meta_var",
+			Type:        mdaiv1.VariableTypeMeta,
+			DataType:    mdaiv1.MetaVariableDataTypeHashSet,
+			StorageType: mdaiv1.VariableSourceTypeBuiltInValkey,
+			VariableRefs: []string{
+				"first",
+				"second",
+			},
+		},
+	}
+
+	schemaMap, err := buildVariableSchemaEnvMap(variables)
+	require.NoError(t, err)
+	require.Len(t, schemaMap, 3)
+
+	manualPayload := map[string]any{}
+	require.NoError(t, json.Unmarshal([]byte(schemaMap["manual_var"]), &manualPayload))
+	assert.Equal(t, "manual", manualPayload["type"])
+	assert.Equal(t, "string", manualPayload["dataType"])
+	assert.Equal(t, "mdai-valkey", manualPayload["storageType"])
+	_, hasManualRefs := manualPayload["variableRefs"]
+	assert.False(t, hasManualRefs)
+	_, hasManualSerializeAs := manualPayload["serializeAs"]
+	assert.False(t, hasManualSerializeAs)
+
+	computedPayload := map[string]any{}
+	require.NoError(t, json.Unmarshal([]byte(schemaMap["computed_var"]), &computedPayload))
+	_, hasComputedSerializeAs := computedPayload["serializeAs"]
+	assert.True(t, hasComputedSerializeAs)
+
+	metaPayload := variableSchemaConfigMapEntry{}
+	require.NoError(t, json.Unmarshal([]byte(schemaMap["meta_var"]), &metaPayload))
+	assert.Equal(t, []string{"first", "second"}, metaPayload.VariableRefs)
+}
+
 func TestEnsureVariableSynced(t *testing.T) {
 	ctx := t.Context()
 	scheme := createTestScheme()
@@ -496,6 +550,25 @@ func TestEnsureVariableSynced(t *testing.T) {
 	assert.Equal(t, "service1,service2", envCM.Data["MY_ENV_PL"])
 	assert.Equal(t, "INFO|WARNING", envCM.Data["MY_ENV_HS"])
 
+	schemaCMName := mdaiCR.Name + variableSchemaConfigMapPostfix
+	schemaCM := &v1core.ConfigMap{}
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: schemaCMName, Namespace: "default"}, schemaCM); err != nil {
+		t.Fatalf("failed to get schema ConfigMap %q: %v", schemaCMName, err)
+	}
+	assert.Len(t, schemaCM.Data, 7)
+
+	setSchema := variableSchemaConfigMapEntry{}
+	require.NoError(t, json.Unmarshal([]byte(schemaCM.Data[variableSet.Key]), &setSchema))
+	assert.Equal(t, variableSet.Type, setSchema.Type)
+	assert.Equal(t, variableSet.DataType, setSchema.DataType)
+	assert.Equal(t, variableSet.StorageType, setSchema.StorageType)
+	require.NotNil(t, setSchema.SerializeAs)
+
+	hashSetSchema := variableSchemaConfigMapEntry{}
+	require.NoError(t, json.Unmarshal([]byte(schemaCM.Data[variableHs.Key]), &hashSetSchema))
+	assert.Equal(t, variableHs.Type, hashSetSchema.Type)
+	assert.Equal(t, variableHs.VariableRefs, hashSetSchema.VariableRefs)
+
 	updatedCollector := &v1beta1.OpenTelemetryCollector{}
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: "collector1", Namespace: "default"}, updatedCollector); err != nil {
 		t.Fatalf("failed to get updated collector: %v", err)
@@ -587,6 +660,23 @@ func TestEnsureManualAndComputedVariableSynced(t *testing.T) {
 		t.Errorf("expected env var MY_ENV to be 'default', got %q", v)
 	}
 
+	schemaCMName := mdaiCR.Name + variableSchemaConfigMapPostfix
+	schemaCM := &v1core.ConfigMap{}
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: schemaCMName, Namespace: "default"}, schemaCM); err != nil {
+		t.Fatalf("failed to get schema ConfigMap %q: %v", schemaCMName, err)
+	}
+	assert.Len(t, schemaCM.Data, 2)
+
+	manualSchema := variableSchemaConfigMapEntry{}
+	require.NoError(t, json.Unmarshal([]byte(schemaCM.Data[manualVariable.Key]), &manualSchema))
+	assert.Equal(t, mdaiv1.VariableTypeManual, manualSchema.Type)
+	assert.Equal(t, manualVariable.DataType, manualSchema.DataType)
+
+	computedSchema := variableSchemaConfigMapEntry{}
+	require.NoError(t, json.Unmarshal([]byte(schemaCM.Data[computedVariable.Key]), &computedSchema))
+	assert.Equal(t, mdaiv1.VariableTypeComputed, computedSchema.Type)
+	require.NotNil(t, computedSchema.SerializeAs)
+
 	updatedCollector := &v1beta1.OpenTelemetryCollector{}
 	if err := fakeClient.Get(ctx, types.NamespacedName{Name: "collector1", Namespace: "default"}, updatedCollector); err != nil {
 		t.Fatalf("failed to get updated collector: %v", err)
@@ -595,6 +685,65 @@ func TestEnsureManualAndComputedVariableSynced(t *testing.T) {
 	if ann, ok := updatedCollector.Annotations[restartAnnotation]; !ok || strings.TrimSpace(ann) == "" {
 		t.Errorf("expected collector to have restart annotation %q set, got: %v", restartAnnotation, updatedCollector.Annotations)
 	}
+}
+
+func TestEnsureVariableSynced_DeletesSchemaConfigMapForEmptyVariables(t *testing.T) {
+	ctx := t.Context()
+	scheme := createTestScheme()
+	mdaiCR := newTestMdaiCR()
+	mdaiCR.Spec.Variables = []mdaiv1.Variable{}
+
+	collector := &v1beta1.OpenTelemetryCollector{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "collector1",
+			Namespace: "default",
+			Labels: map[string]string{
+				LabelMdaiHubName: "test-hub",
+			},
+		},
+	}
+	schemaCMName := mdaiCR.Name + variableSchemaConfigMapPostfix
+	existingSchemaCM := &v1core.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      schemaCMName,
+			Namespace: mdaiCR.Namespace,
+		},
+		Data: map[string]string{
+			"legacy": "schema",
+		},
+	}
+	manualCMName := mdaiCR.Name + manualEnvConfigMapNamePostfix
+	existingManualCM := &v1core.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      manualCMName,
+			Namespace: mdaiCR.Namespace,
+		},
+		Data: map[string]string{
+			"legacy": "manual",
+		},
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(mdaiCR, collector, existingSchemaCM, existingManualCM).
+		WithStatusSubresource(mdaiCR).
+		Build()
+	recorder := record.NewFakeRecorder(10)
+
+	adapter := NewHubAdapter(mdaiCR, logr.Discard(), zap.NewNop(), fakeClient, recorder, scheme, nil, time.Duration(30))
+
+	opResult, err := adapter.ensureVariableSynchronized(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, ContinueOperationResult(), opResult)
+
+	deletedSchemaCM := &v1core.ConfigMap{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: schemaCMName, Namespace: mdaiCR.Namespace}, deletedSchemaCM)
+	require.Error(t, err)
+	assert.True(t, apierrors.IsNotFound(err), "expected schema ConfigMap %q to be deleted", schemaCMName)
+
+	deletedManualCM := &v1core.ConfigMap{}
+	err = fakeClient.Get(ctx, types.NamespacedName{Name: manualCMName, Namespace: mdaiCR.Namespace}, deletedManualCM)
+	require.Error(t, err)
+	assert.True(t, apierrors.IsNotFound(err), "expected manual ConfigMap %q to be deleted", manualCMName)
 }
 
 type XaddMatcher struct {
