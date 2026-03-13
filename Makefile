@@ -18,9 +18,12 @@ SHELL = /usr/bin/env bash -o pipefail
 
 # Update this version to match new release tag and run helm targets
 VERSION = 0.2.12
+GOTOOLCHAIN ?= go1.25.0
+GO := CGO_ENABLED=0 GOTOOLCHAIN=$(GOTOOLCHAIN) go 
+GO_TEST := $(GO) test -count=1
 
 # Image URL to use all building/pushing image targets
-IMG ?= public.ecr.aws/p3k6k6h3/mdai-operator:${VERSION}
+IMG ?= public.ecr.aws/decisiveai/mdai-operator:${VERSION}
 
 CHART_PATH := deployment
 
@@ -59,22 +62,22 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
-	go fmt ./...
+	$(GO) fmt ./...
 
 .PHONY: vet
 vet: ## Run go vet against code.
-	go vet ./...
+	$(GO) vet ./...
 
 .PHONY: test-coverage
 test-coverage: manifests generate fmt vet envtest ## Run tests and generate code coverage.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v -E "/e2e|/test/utils|cmd|pkg/generated") -coverprofile=coverage.txt 
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" $(GO_TEST) $$(go list ./... | grep -v -E "/e2e|/test/utils|cmd|pkg/generated") -coverprofile=coverage.txt 
 	@sed '/zz_generated.deepcopy.go/d' coverage.txt > coverage.tmp
 	@mv coverage.tmp coverage.txt
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests and generate code coverage.
 	# Run Go tests and produce coverage report
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -count=1 -coverprofile cover.txt
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" $(GO_TEST) $$(go list ./... | grep -v /e2e) -count=1 -coverprofile cover.txt
 
 .PHONY: test-e2e
 test-e2e: manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
@@ -86,7 +89,7 @@ test-e2e: manifests generate fmt vet ## Run the e2e tests. Expected an isolated 
 		echo "No Kind cluster is running. Please start a Kind cluster before running the e2e tests."; \
 		exit 1; \
 	}
-	go test ./test/e2e/ -v -ginkgo.v
+	$(GO_TEST) ./test/e2e/ -v -ginkgo.v
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -102,11 +105,11 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 
 .PHONY: tidy
 tidy:
-	@go mod tidy
+	@$(GO) mod tidy
 
 .PHONY: vendor
 vendor:
-	@go mod vendor
+	@$(GO) mod vendor
 
 .PHONY: tidy-check
 tidy-check: tidy
@@ -116,22 +119,31 @@ tidy-check: tidy
 
 .PHONY: build
 build: manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager ./cmd
+	$(GO) build -trimpath -ldflags="-w -s" -o bin/manager ./cmd
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd
 
-# If you wish to build the manager image targeting other platforms you can use the --platform flag.
-# (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
-# More info: https://docs.docker.com/develop/develop-images/build_enhancements/
+# buildx is the standard path for both local and multi-arch image builds.
+# Local builds are loaded into the Docker image store; multi-arch builds are pushed.
+BUILDX_BUILDER ?= mdai-operator-builder
+.PHONY: docker-login 
+docker-login: 
+	aws ecr-public get-login-password | docker login --username AWS --password-stdin public.ecr.aws/decisiveai 
+
+.PHONY: docker-buildx-ensure-builder
+docker-buildx-ensure-builder:
+	@$(CONTAINER_TOOL) buildx inspect >/dev/null 2>&1 || \
+		$(CONTAINER_TOOL) buildx create --name $(BUILDX_BUILDER) --driver docker-container --use
+
 .PHONY: docker-build
-docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+docker-build: docker-buildx-ensure-builder ## Build docker image with the manager.
+	$(CONTAINER_TOOL) buildx build --load --platform=$(PLATFORMS) --tag ${IMG} .
 
 .PHONY: docker-push
-docker-push: ## Push docker image with the manager.
-	$(CONTAINER_TOOL) push ${IMG}
+docker-push: docker-buildx-ensure-builder ## Build and push docker image for the manager for cross-platform support.
+	$(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} .
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -139,16 +151,9 @@ docker-push: ## Push docker image with the manager.
 # - have enabled BuildKit. More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 # - be able to push the image to your registry (i.e. if you do not set a valid value via IMG=<myregistry/image:<tag>> then the export will fail)
 # To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
-PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
+PLATFORMS ?= linux/arm64,linux/amd64
 .PHONY: docker-buildx
-docker-buildx: ## Build and push docker image for the manager for cross-platform support
-	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
-	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	- $(CONTAINER_TOOL) buildx create --name mdai-operator-builder
-	$(CONTAINER_TOOL) buildx use mdai-operator-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
-	- $(CONTAINER_TOOL) buildx rm mdai-operator-builder
-	rm Dockerfile.cross
+docker-buildx: docker-push ## Backward-compatible alias for multi-arch push via buildx.
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
@@ -216,7 +221,7 @@ ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller
 #ENVTEST_K8S_VERSION is the version of Kubernetes to use for setting up ENVTEST binaries (i.e. 1.31)
 ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
 GOLANGCI_LINT_VERSION ?= v2.4
-HELMIFY_VERSION ?= v0.4.19
+HELMIFY_VERSION ?= e57c93d0641d5699967d861dbc055b908d6c671f
 HELM_DOCS_VERSION ?= v1.14.2
 HELM_VERSION ?= v3.19.4
 YQ_VERSION ?= v4.45.4
@@ -298,17 +303,12 @@ ln -sf $(1)-$(3) $(1)
 endef
 
 .PHONY: local-deploy
-local-deploy: manifests install
-	go mod tidy
-	go mod vendor
-	make manifests
-	make generate
-	make lint
-	make helm-update
-	make docker-build IMG=mdai-operator:${VERSION}
-	kind load docker-image mdai-operator:${VERSION} --name mdai
-	make deploy IMG=mdai-operator:${VERSION}
-	kubectl rollout restart deployment mdai-operator-controller-manager -n mdai
+local-deploy: IMG=mdai-operator:${VERSION}
+local-deploy: tidy vendor generate manifests lint helm-update install
+	$(MAKE) docker-build IMG=$(IMG)
+	kind load docker-image $(IMG) --name mdai
+	$(MAKE) deploy IMG=$(IMG)
+	$(KUBECTL) rollout restart deployment mdai-operator-controller-manager -n mdai
 
 LATEST_TAG := $(shell git describe --tags --abbrev=0 $(git rev-parse --abbrev-ref HEAD) | sed 's/^v//')
 CHART_VERSION ?= $(LATEST_TAG)
@@ -330,15 +330,14 @@ helm:
 	@echo "  helm-publish   Publish the Helm chart"
 
 .PHONY: helm-update
+helm-update: HELMIFY_ARGS="-optional-crds"
 helm-update: manifests kustomize helmify helm-docs helm-values-schema-json-plugin yq
 	$(call vecho,"🐳 Updating image to $(IMG)...")
 	@pushd config/manager > /dev/null && $(KUSTOMIZE) edit set image controller=$(IMG) && popd > /dev/null
 	$(call vecho,"🛠️ Kustomizing and Helmifying...")
-	@$(KUSTOMIZE) build config/default | $(HELMIFY) $(CHART_PATH) > /dev/null 2>&1
+	@$(KUSTOMIZE) build config/default | $(HELMIFY) $(HELMIFY_ARGS) $(CHART_PATH) > /dev/null 2>&1
 	$(call vecho,"🛠️ Adding conditionals for cert manager...")
 	@$(CHART_PATH)/files/no_cert_manager_option.sh
-	$(call vecho,"🛠️ Adding conditionals for CRDs...")
-	@$(CHART_PATH)/files/wrap_crds.sh
 	$(call vecho,"📈 Updating Helm chart version to $(VERSION)...")
 	@$(YQ) -i '.version = "$(VERSION)"' $(CHART_PATH)/Chart.yaml
 	$(call vecho,"🧩 Updating Helm chart appVersion to $(VERSION)...")
