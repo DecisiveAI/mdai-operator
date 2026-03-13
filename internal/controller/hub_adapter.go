@@ -524,12 +524,11 @@ func (c HubAdapter) ensureVariableSynchronized(ctx context.Context) (OperationRe
 		return ContinueWithError(err)
 	}
 
-	_, _, err = c.createOrUpdateEnvConfigMap(ctx,
+	if _, _, err = c.createOrUpdateEnvConfigMap(ctx,
 		schemaEnvMap,
 		variableSchemaConfigMapPostfix,
 		c.mdaiCR.Namespace,
-		WithOwnerRef(c.mdaiCR, c.scheme))
-	if err != nil {
+		WithOwnerRef(c.mdaiCR, c.scheme)); err != nil {
 		return ContinueWithError(err)
 	}
 
