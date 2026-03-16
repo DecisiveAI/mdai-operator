@@ -26,7 +26,6 @@ var (
 
 	// projectPlatform is the platform to build the test docker image for
 	projectPlatform = "linux/amd64"
-       
 )
 
 // TestE2E runs the end-to-end (e2e) test suite for the project. These tests execute in an isolated,
