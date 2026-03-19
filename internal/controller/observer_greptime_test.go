@@ -67,7 +67,32 @@ func TestExistingDimensionColumns(t *testing.T) {
 	}
 
 	dims := existingDimensionColumns(existingCols, d)
-	assert.ElementsMatch(t, []string{"region"}, dims)
+	assert.ElementsMatch(t, []string{"service_name", "region"}, dims)
+}
+
+func TestSinkTableNeedsRecreate(t *testing.T) {
+	t.Parallel()
+
+	d := TemplateData{
+		Dimensions:  []string{"service_name", "region"},
+		PrimaryKeys: []string{"service_name"},
+		ValueColumn: "total_count",
+	}
+
+	assert.False(t, sinkTableNeedsRecreate([]string{
+		"service_name",
+		"region",
+		"total_count",
+		"time_window",
+		"update_at",
+	}, d))
+
+	assert.True(t, sinkTableNeedsRecreate([]string{
+		"service_name",
+		"total_count",
+		"time_window",
+		"update_at",
+	}, d))
 }
 
 func TestBuildTimeExprs(t *testing.T) {

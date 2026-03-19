@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/connector/spanmetricsconnector"
@@ -19,6 +21,9 @@ import (
 // nolint:unused
 // log is for logging in this package.
 var mdaiobserverlog = logf.Log.WithName("mdaiobserver-resource")
+
+var sinkTableTTLPattern = regexp.MustCompile(`^(?:\d+\s*(?:nsec|ns|usec|us|msec|ms|seconds|second|sec|s|minutes|minute|min|m|hours|hour|hr|h|days|day|d|weeks|week|w|months|month|M|years|year|y)\s*)+$`)
+var flowAggregateIntervalPattern = regexp.MustCompile(`^\d+\s+(?:nsec|ns|usec|us|msec|ms|seconds|second|sec|s|minutes|minute|min|m|hours|hour|hr|h|days|day|d|weeks|week|w|months|month|M|years|year|y)$`)
 
 // SetupMdaiObserverWebhookWithManager registers the webhook for MdaiObserver in the manager.
 func SetupMdaiObserverWebhookWithManager(mgr ctrl.Manager) error {
@@ -131,6 +136,12 @@ func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiob
 					if len(observer.SpanMetricsObserver.Greptime.Dimensions) == 0 || observer.SpanMetricsObserver.Greptime.PrimaryKey == "" {
 						return newWarnings, fmt.Errorf("observer %s of provider %s must define greptime dimensions and primaryKey", observer.Name, observer.Provider)
 					}
+					if err := validateSinkTableTTL(observer.SpanMetricsObserver.Greptime.SinkTableTtl); err != nil {
+						return newWarnings, fmt.Errorf("observer %s has invalid sinkTableTtl: %w", observer.Name, err)
+					}
+					if err := validateFlowAggregateInterval(observer.SpanMetricsObserver.Greptime.FlowAggregateInterval); err != nil {
+						return newWarnings, fmt.Errorf("observer %s has invalid flowAggregateInterval: %w", observer.Name, err)
+					}
 				default:
 					return newWarnings, fmt.Errorf("observer %s has unsupported provider %s for type %s", observer.Name, observer.Provider, observer.Type)
 				}
@@ -153,6 +164,28 @@ func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiob
 		}
 	}
 	return newWarnings, nil
+}
+
+func validateSinkTableTTL(ttl string) error {
+	ttl = strings.TrimSpace(ttl)
+	if ttl == "" {
+		return nil
+	}
+	if sinkTableTTLPattern.MatchString(ttl) {
+		return nil
+	}
+	return fmt.Errorf("must be a sequence of <number><unit> values using GreptimeDB TTL units")
+}
+
+func validateFlowAggregateInterval(interval string) error {
+	interval = strings.TrimSpace(interval)
+	if interval == "" {
+		return nil
+	}
+	if flowAggregateIntervalPattern.MatchString(interval) {
+		return nil
+	}
+	return fmt.Errorf("must be a single <number> <unit> value using GreptimeDB interval units")
 }
 
 func ParseSpanMetricsConfig(observer *mdaiv1.Observer) (*spanmetricsconnector.Config, error) {

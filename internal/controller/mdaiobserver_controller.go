@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
@@ -15,8 +16,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
 var _ Controller = (*MdaiObserverReconciler)(nil)
@@ -53,6 +57,10 @@ func (r *MdaiObserverReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		log.Info("-- Exiting MdaiObserver reconciliation, CR is deleted already --")
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+	if fetchedCR.DeletionTimestamp.IsZero() && fetchedCR.Status.ObservedGeneration == fetchedCR.Generation {
+		log.Info("-- Exiting MdaiObserver reconciliation, CR has not changed --")
+		return ctrl.Result{}, nil
 	}
 
 	_, err := r.ReconcileHandler(ctx, *NewObserverAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme, r.greptime))
@@ -98,7 +106,7 @@ func (r *MdaiObserverReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&mdaiv1.MdaiObserver{}).
+		For(&mdaiv1.MdaiObserver{}, builder.WithPredicates(r.mdaiObserverPredicates())).
 		Named("mdaiobserver").
 		Complete(r)
 }
@@ -151,4 +159,33 @@ func (r *MdaiObserverReconciler) initializeGreptimeDb() error {
 		return fmt.Errorf("failed to initialize Greptime client after retries: %w", err)
 	}
 	return nil
+}
+
+// nolint:revive
+func (r *MdaiObserverReconciler) mdaiObserverPredicates() predicate.Funcs {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldCR, ok := e.ObjectOld.(*mdaiv1.MdaiObserver)
+			if !ok {
+				return false
+			}
+			newCR, ok := e.ObjectNew.(*mdaiv1.MdaiObserver)
+			if !ok {
+				return false
+			}
+			if oldCR.DeletionTimestamp.IsZero() && !newCR.DeletionTimestamp.IsZero() {
+				return true
+			}
+			return !reflect.DeepEqual(oldCR.Spec, newCR.Spec)
+		},
+		CreateFunc: func(e event.CreateEvent) bool {
+			return true
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return true
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			return false
+		},
+	}
 }

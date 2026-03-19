@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	hubv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
@@ -19,6 +20,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -203,5 +205,27 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 		if port.Name != "otlp-grpc" || port.Port != 4317 || port.TargetPort.String() != "otlp-grpc" {
 			t.Errorf("unexpected service port configuration: %+v", port)
 		}
+	}
+}
+
+func TestMdaiObserverPredicates_UpdateAllowsDeletionTimestampTransition(t *testing.T) {
+	t.Parallel()
+
+	reconciler := &MdaiObserverReconciler{}
+	predicates := reconciler.mdaiObserverPredicates()
+	deletionTime := metav1.NewTime(time.Now())
+
+	oldCR := &hubv1.MdaiObserver{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-observer",
+			Namespace: "default",
+		},
+		Spec: hubv1.MdaiObserverSpec{},
+	}
+	newCR := oldCR.DeepCopy()
+	newCR.DeletionTimestamp = &deletionTime
+
+	if !predicates.Update(event.UpdateEvent{ObjectOld: oldCR, ObjectNew: newCR}) {
+		t.Fatal("expected update predicate to allow deletion timestamp transition")
 	}
 }

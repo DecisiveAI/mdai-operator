@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"testing"
+
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -107,8 +109,160 @@ var _ = Describe("MdaiObserver Webhook", func() {
 			Expect(warnings).To(Equal(admission.Warnings{}))
 			Expect(err).ToNot(HaveOccurred())
 		})
+
+		It("Should accept spanmetrics greptime observer with valid sink table TTL", func() {
+			obj = createObserver()
+			obj.Spec.Observers = []mdaiv1.Observer{
+				{
+					Name:     "span-greptime",
+					Provider: mdaiv1.GREPTIME_FLOW,
+					Type:     mdaiv1.SPAN_METRICS,
+					SpanMetricsObserver: &mdaiv1.SpanMetricsObserverConfig{
+						Greptime: &mdaiv1.SpanMetricsGreptimeConfig{
+							Dimensions:   []string{"service_name", "span_name"},
+							PrimaryKey:   "service_name",
+							SinkTableTtl: "1hour 12min 5s",
+						},
+					},
+				},
+			}
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(warnings).To(Equal(admission.Warnings{}))
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("Should reject spanmetrics greptime observer with invalid sink table TTL", func() {
+			obj = createObserver()
+			obj.Spec.Observers = []mdaiv1.Observer{
+				{
+					Name:     "span-greptime",
+					Provider: mdaiv1.GREPTIME_FLOW,
+					Type:     mdaiv1.SPAN_METRICS,
+					SpanMetricsObserver: &mdaiv1.SpanMetricsObserverConfig{
+						Greptime: &mdaiv1.SpanMetricsGreptimeConfig{
+							Dimensions:   []string{"service_name", "span_name"},
+							PrimaryKey:   "service_name",
+							SinkTableTtl: "1fortnight",
+						},
+					},
+				},
+			}
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(warnings).To(Equal(admission.Warnings{}))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid sinkTableTtl"))
+		})
+
+		It("Should accept spanmetrics greptime observer with valid flow aggregate interval", func() {
+			obj = createObserver()
+			obj.Spec.Observers = []mdaiv1.Observer{
+				{
+					Name:     "span-greptime",
+					Provider: mdaiv1.GREPTIME_FLOW,
+					Type:     mdaiv1.SPAN_METRICS,
+					SpanMetricsObserver: &mdaiv1.SpanMetricsObserverConfig{
+						Greptime: &mdaiv1.SpanMetricsGreptimeConfig{
+							Dimensions:            []string{"service_name", "span_name"},
+							PrimaryKey:            "service_name",
+							FlowAggregateInterval: "2 months",
+						},
+					},
+				},
+			}
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(warnings).To(Equal(admission.Warnings{}))
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("Should reject spanmetrics greptime observer with invalid flow aggregate interval", func() {
+			obj = createObserver()
+			obj.Spec.Observers = []mdaiv1.Observer{
+				{
+					Name:     "span-greptime",
+					Provider: mdaiv1.GREPTIME_FLOW,
+					Type:     mdaiv1.SPAN_METRICS,
+					SpanMetricsObserver: &mdaiv1.SpanMetricsObserverConfig{
+						Greptime: &mdaiv1.SpanMetricsGreptimeConfig{
+							Dimensions:            []string{"service_name", "span_name"},
+							PrimaryKey:            "service_name",
+							FlowAggregateInterval: "2months",
+						},
+					},
+				},
+			}
+			warnings, err := validator.ValidateCreate(ctx, obj)
+			Expect(warnings).To(Equal(admission.Warnings{}))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid flowAggregateInterval"))
+		})
 	})
 })
+
+func TestValidateSinkTableTTL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		ttl     string
+		wantErr bool
+	}{
+		{name: "empty is allowed", ttl: "", wantErr: false},
+		{name: "single unit short suffix", ttl: "5m", wantErr: false},
+		{name: "single unit long suffix", ttl: "1hour", wantErr: false},
+		{name: "multiple units", ttl: "1hour 12min 5s", wantErr: false},
+		{name: "spaces between number and unit", ttl: "1 hour 12 min 5 s", wantErr: false},
+		{name: "invalid unit", ttl: "1fortnight", wantErr: true},
+		{name: "missing number", ttl: "hour", wantErr: true},
+		{name: "garbage suffix", ttl: "5minsx", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateSinkTableTTL(tt.ttl)
+			if tt.wantErr && err == nil {
+				t.Fatalf("expected error for %q", tt.ttl)
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected error for %q: %v", tt.ttl, err)
+			}
+		})
+	}
+}
+
+func TestValidateFlowAggregateInterval(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{name: "empty is allowed", value: "", wantErr: false},
+		{name: "valid singular", value: "1 day", wantErr: false},
+		{name: "valid plural", value: "2 months", wantErr: false},
+		{name: "valid short unit", value: "5 m", wantErr: false},
+		{name: "missing space", value: "2months", wantErr: true},
+		{name: "combined values not allowed", value: "1 hour 5 minutes", wantErr: true},
+		{name: "missing number", value: "day", wantErr: true},
+		{name: "invalid unit", value: "1 fortnight", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateFlowAggregateInterval(tt.value)
+			if tt.wantErr && err == nil {
+				t.Fatalf("expected error for %q", tt.value)
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected error for %q: %v", tt.value, err)
+			}
+		})
+	}
+}
 
 func createObserver() *mdaiv1.MdaiObserver {
 	return &mdaiv1.MdaiObserver{

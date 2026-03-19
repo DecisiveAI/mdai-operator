@@ -403,12 +403,12 @@ func getObserverCollectorConfigSpanMetrics(
 
 		observerName := obs.Name
 
-		groupByAttrs := []string{}
+		var groupByAttrs []string
 		if obs.SpanMetricsObserver.Otel != nil {
 			groupByAttrs = obs.SpanMetricsObserver.Otel.GroupByAttrs
 		}
-		if len(groupByAttrs) == 0 && len(obs.SpanMetricsObserver.Dimensions) > 0 {
-			groupByAttrs = obs.SpanMetricsObserver.Dimensions
+		if len(groupByAttrs) == 0 && len(obs.SpanMetricsObserver.Greptime.Dimensions) > 0 {
+			groupByAttrs = obs.SpanMetricsObserver.Greptime.Dimensions
 		}
 
 		groupByKey := ""
@@ -445,7 +445,7 @@ func ParseSpanMetricsConfig(observer *mdaiv1.Observer) (map[string]any, error) {
 		return nil, nil
 	}
 	// TODO: figure out if it's ok if there is no SpanMetricsConnectorConfig section
-	connectorConfig := observer.SpanMetricsObserver.ConnectorConfig
+	connectorConfig := observer.SpanMetricsObserver.Otel.ConnectorConfig
 	if observer.SpanMetricsObserver.Otel != nil && observer.SpanMetricsObserver.Otel.ConnectorConfig != nil {
 		connectorConfig = observer.SpanMetricsObserver.Otel.ConnectorConfig
 	}

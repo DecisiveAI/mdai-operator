@@ -49,16 +49,6 @@ type SpanMetricsObserverConfig struct {
 	Otel *SpanMetricsOtelConfig `json:"otel,omitempty" yaml:"otel,omitempty"`
 	// +optional
 	Greptime *SpanMetricsGreptimeConfig `json:"greptime,omitempty" yaml:"greptime,omitempty"`
-	// Deprecated: use Otel or Greptime instead.
-	// +optional
-	Dimensions []string `json:"dimensions,omitempty" yaml:"dimensions,omitempty"`
-	// Deprecated: use Greptime.PrimaryKey instead.
-	// +optional
-	PrimaryKey string `json:"primaryKey,omitempty" yaml:"primaryKey,omitempty"`
-	// Deprecated: use Otel.ConnectorConfig instead.
-	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	ConnectorConfig *apiextensionsv1.JSON `json:"connectorConfig,omitempty" yaml:"connectorConfig,omitempty"`
 }
 
 type SpanMetricsOtelConfig struct {
@@ -74,6 +64,10 @@ type SpanMetricsGreptimeConfig struct {
 	Dimensions []string `json:"dimensions,omitempty" yaml:"dimensions,omitempty"`
 	// +optional
 	PrimaryKey string `json:"primaryKey,omitempty" yaml:"primaryKey,omitempty"`
+	// +optional
+	SinkTableTtl string `json:"sinkTableTtl,omitempty" yaml:"SinkTableTtl,omitempty"`
+	// +optional
+	FlowAggregateInterval string `json:"flowAggregateInterval,omitempty" yaml:"flowAggregateInterval,omitempty"`
 }
 
 type ObserverLogsFilter struct {
@@ -124,6 +118,9 @@ type MdaiObserverStatus struct {
 
 	// +optional
 	LastUpdatedTime *metav1.Time `json:"lastUpdatedTime,omitempty"`
+
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// Conditions store the status conditions of the Cluster instances
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`

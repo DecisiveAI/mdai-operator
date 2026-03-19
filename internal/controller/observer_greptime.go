@@ -16,6 +16,9 @@ type Greptime struct {
 	greptimeTemplates map[string]string
 }
 
+const greptimeSinkTableTtl = "3months"
+const greptimeAggregateInterval = "5 second"
+
 type Pipeline struct {
 	Name         string
 	Schema       string
@@ -30,6 +33,7 @@ type Pipeline struct {
 	PrimaryKeys  []string
 	TimeInterval string
 	WhereClause  string
+	// TODO: sink table ttl
 }
 
 type TemplateData struct {
@@ -51,7 +55,7 @@ var identPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 var columnPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`)
 var intervalPattern = regexp.MustCompile(`^[0-9]+\s+(millisecond|milliseconds|second|seconds|minute|minutes|hour|hours)$`)
 
-func doGreptime(greptime Greptime, dimensions []string, primaryKey string) error {
+func doGreptime(greptime Greptime, dimensions []string, primaryKey string, aggregateInterval string) error {
 	db := greptime.greptimeDb
 	templates := greptime.greptimeTemplates
 
@@ -68,8 +72,7 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string) error
 			ValueType:    "INT64",
 			ValueExpr:    fmt.Sprintf("COUNT(%s)", primaryKey),
 			PrimaryKeys:  []string{primaryKey},
-			// TODO: parametrize
-			TimeInterval: "5 seconds",
+			TimeInterval: aggregateInterval,
 			WhereClause:  "span_status_code = 'STATUS_CODE_UNSET'",
 		},
 		{
@@ -84,8 +87,7 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string) error
 			ValueType:    "BINARY",
 			ValueExpr:    "uddsketch_state(128, 0.01, duration_nano)",
 			PrimaryKeys:  []string{primaryKey},
-			// TODO: parametrize
-			TimeInterval: "5 seconds",
+			TimeInterval: aggregateInterval,
 			WhereClause:  "span_status_code = 'STATUS_CODE_UNSET'",
 		},
 		{
@@ -100,8 +102,7 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string) error
 			ValueType:    "INT64",
 			ValueExpr:    fmt.Sprintf("COUNT(%s)", primaryKey),
 			PrimaryKeys:  []string{primaryKey},
-			// TODO: parametrize
-			TimeInterval: "5 seconds",
+			TimeInterval: aggregateInterval,
 			WhereClause:  "span_status_code = 'STATUS_CODE_ERROR'",
 		},
 	}
@@ -130,8 +131,13 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string) error
 		if err != nil {
 			return fmt.Errorf("pipeline %s sink template: %w", p.Name, err)
 		}
-		if err := ensureSinkTable(&db, data, sinkDDL); err != nil {
+
+		sinkChanged, err := ensureSinkTable(&db, data, sinkDDL)
+		if err != nil {
 			return fmt.Errorf("pipeline %s ensure sink table: %w", p.Name, err)
+		}
+		if !sinkChanged {
+			continue
 		}
 
 		flowDDL, err := renderSQLTemplate(templates, p.FlowTemplate, data)
@@ -145,37 +151,51 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string) error
 	return nil
 }
 
-func ensureSinkTable(db *gorm.DB, d TemplateData, sinkDDL string) error {
+func ensureSinkTable(db *gorm.DB, d TemplateData, sinkDDL string) (bool, error) {
 	existingCols, err := listTableColumns(db, d.Schema, d.SinkTable)
 	if err != nil {
-		return fmt.Errorf("list table columns: %w", err)
+		return false, fmt.Errorf("list table columns: %w", err)
 	}
 
 	if len(existingCols) == 0 {
 		if err := db.Exec(sinkDDL).Error; err != nil {
-			return fmt.Errorf("create sink table: %w", err)
+			return false, fmt.Errorf("create sink table: %w", err)
 		}
-		return nil
+		return true, nil
 	}
 
-	existingDimensions := existingDimensionColumns(existingCols, d)
-	if sameStringSet(existingDimensions, d.Dimensions) {
-		return nil
+	if !sinkTableNeedsRecreate(existingCols, d) {
+		// FIX: if dimensions not changed, we don't want to sync
+		return false, nil
 	}
+	// TODO: add sink table ttl values comparison
+	// if sameTtl() {
+	// 	return false, nil
+	// }
+
+	// TODO: add flow temporality (date_bin('5 seconds'::INTERVAL, timestamp)) comparison
+	// if sameDateBin() {
+	// 	return false, nil
+	// }
 
 	dropFlow := fmt.Sprintf("DROP FLOW IF EXISTS %s", quoteIdentifier(d.FlowName))
 	if err := db.Exec(dropFlow).Error; err != nil {
-		return fmt.Errorf("drop flow: %w", err)
+		return false, fmt.Errorf("drop flow: %w", err)
 	}
 	dropTable := fmt.Sprintf("DROP TABLE IF EXISTS %s", quoteIdentifier(d.SinkTable))
 	if err := db.Exec(dropTable).Error; err != nil {
-		return fmt.Errorf("drop sink table: %w", err)
+		return false, fmt.Errorf("drop sink table: %w", err)
 	}
 	if err := db.Exec(sinkDDL).Error; err != nil {
-		return fmt.Errorf("recreate sink table: %w", err)
+		return false, fmt.Errorf("recreate sink table: %w", err)
 	}
 
-	return nil
+	return true, nil
+}
+
+func sinkTableNeedsRecreate(existingCols []string, d TemplateData) bool {
+	existingDimensions := existingDimensionColumns(existingCols, d)
+	return !sameStringSet(existingDimensions, d.Dimensions)
 }
 
 func existingDimensionColumns(existingCols []string, d TemplateData) []string {
@@ -195,9 +215,10 @@ func existingDimensionColumns(existingCols []string, d TemplateData) []string {
 		if _, ok := managedNonDimension[c]; ok {
 			continue
 		}
-		if _, ok := primaryKeys[c]; ok {
-			continue
-		}
+		// FIX: primary keys should be managed as well
+		//if _, ok := primaryKeys[c]; ok {
+		//	continue
+		//}
 		dims = append(dims, c)
 	}
 	return dims

@@ -190,21 +190,17 @@ spec:
                       type: string
                     spanMetricsObserver:
                       properties:
-                        connectorConfig:
-                          description: 'Deprecated: use Otel.ConnectorConfig instead.'
-                          x-kubernetes-preserve-unknown-fields: true
-                        dimensions:
-                          description: 'Deprecated: use Otel or Greptime instead.'
-                          items:
-                            type: string
-                          type: array
                         greptime:
                           properties:
                             dimensions:
                               items:
                                 type: string
                               type: array
+                            flowAggregateInterval:
+                              type: string
                             primaryKey:
+                              type: string
+                            sinkTableTtl:
                               type: string
                           type: object
                         otel:
@@ -216,9 +212,6 @@ spec:
                                 type: string
                               type: array
                           type: object
-                        primaryKey:
-                          description: 'Deprecated: use Greptime.PrimaryKey instead.'
-                          type: string
                       type: object
                     type:
                       type: string
@@ -293,6 +286,9 @@ spec:
               lastUpdatedTime:
                 format: date-time
                 type: string
+              observedGeneration:
+                format: int64
+                type: integer
               observerStatus:
                 description: Status of the Cluster defined by its modules and dependencies
                   statuses

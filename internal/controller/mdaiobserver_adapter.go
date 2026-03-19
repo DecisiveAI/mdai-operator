@@ -102,7 +102,13 @@ func (c ObserverAdapter) ensureStatusInitialized(ctx context.Context) (Operation
 	if len(c.observerCR.Status.Conditions) != 0 {
 		return ContinueProcessing()
 	}
-	meta.SetStatusCondition(&c.observerCR.Status.Conditions, metav1.Condition{Type: typeAvailableHub, Status: metav1.ConditionUnknown, Reason: "Reconciling", Message: "Starting reconciliation"})
+	meta.SetStatusCondition(&c.observerCR.Status.Conditions, metav1.Condition{
+		Type:               typeAvailableHub,
+		Status:             metav1.ConditionUnknown,
+		Reason:             "Reconciling",
+		Message:            "Starting reconciliation",
+		ObservedGeneration: c.observerCR.ObjectMeta.Generation,
+	})
 	if err := c.client.Status().Update(ctx, c.observerCR); err != nil {
 		c.logger.Error(err, "Failed to update MdaiObserver status")
 		return RequeueWithError(err)
@@ -252,22 +258,24 @@ func (c ObserverAdapter) syncGreptime(idx ObserverIndex) error {
 		if obs.SpanMetricsObserver == nil {
 			return fmt.Errorf("observer %s missing spanMetricsObserver config", obs.Name)
 		}
-		dimensions := []string{}
-		primaryKey := ""
-		if obs.SpanMetricsObserver.Greptime != nil {
-			dimensions = obs.SpanMetricsObserver.Greptime.Dimensions
-			primaryKey = obs.SpanMetricsObserver.Greptime.PrimaryKey
+		if obs.SpanMetricsObserver.Greptime == nil {
+			return fmt.Errorf("observer %s missing greptime config", obs.Name)
 		}
-		if len(dimensions) == 0 && len(obs.SpanMetricsObserver.Dimensions) > 0 {
-			dimensions = obs.SpanMetricsObserver.Dimensions
-		}
-		if primaryKey == "" && obs.SpanMetricsObserver.PrimaryKey != "" {
-			primaryKey = obs.SpanMetricsObserver.PrimaryKey
-		}
+
+		dimensions := obs.SpanMetricsObserver.Greptime.Dimensions
+		primaryKey := obs.SpanMetricsObserver.Greptime.PrimaryKey
 		if len(dimensions) == 0 || primaryKey == "" {
 			return fmt.Errorf("observer %s missing greptime dimensions/primaryKey", obs.Name)
 		}
-		return doGreptime(c.greptime, dimensions, primaryKey)
+		sinkTableTtl := obs.SpanMetricsObserver.Greptime.SinkTableTtl
+		if sinkTableTtl == "" {
+			sinkTableTtl = greptimeSinkTableTtl
+		}
+		aggregateInterval := obs.SpanMetricsObserver.Greptime.FlowAggregateInterval
+		if aggregateInterval == "" {
+			aggregateInterval = greptimeAggregateInterval
+		}
+		return doGreptime(c.greptime, dimensions, primaryKey, aggregateInterval)
 	}
 	// TODO: delete Greptime resources (sink table and flow) when observers are deleted
 
@@ -280,10 +288,14 @@ func (c ObserverAdapter) ensureStatusSetToDone(ctx context.Context) (OperationRe
 		c.logger.Error(err, "Failed to re-fetch MdaiObserver")
 		return Requeue()
 	}
+	newStatus := c.observerCR.Status.DeepCopy()
+	newStatus.ObservedGeneration = c.observerCR.Generation
+	c.observerCR.Status = *newStatus
 	meta.SetStatusCondition(&c.observerCR.Status.Conditions, metav1.Condition{
 		Type:   typeAvailableHub,
 		Status: metav1.ConditionTrue, Reason: "Reconciling",
-		Message: "reconciled successfully",
+		ObservedGeneration: c.observerCR.Generation,
+		Message:            "reconciled successfully",
 	})
 	if err := c.client.Status().Update(ctx, c.observerCR); err != nil {
 		if apierrors.ReasonForError(err) == metav1.StatusReasonConflict {
