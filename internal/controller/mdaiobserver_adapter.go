@@ -275,7 +275,7 @@ func (c ObserverAdapter) syncGreptime(idx ObserverIndex) error {
 		if aggregateInterval == "" {
 			aggregateInterval = greptimeAggregateInterval
 		}
-		return doGreptime(c.greptime, dimensions, primaryKey, aggregateInterval)
+		return doGreptime(c.greptime, dimensions, primaryKey, sinkTableTtl, aggregateInterval)
 	}
 	// TODO: delete Greptime resources (sink table and flow) when observers are deleted
 

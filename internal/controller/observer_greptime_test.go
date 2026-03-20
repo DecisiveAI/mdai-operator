@@ -33,6 +33,7 @@ func TestValidatePipeline(t *testing.T) {
 		FlowName:       "golden_signals_traffic_flow",
 		Dimensions:     []string{"service_name", "resource_attributes.host.name"},
 		PrimaryKeys:    []string{"service_name"},
+		SinkTableTTL:   greptimeSinkTableTtl,
 		ValueColumn:    "total_count",
 		ValueType:      "INT64",
 		ValueExpr:      "COUNT(service_name)",
@@ -55,6 +56,7 @@ func TestExistingDimensionColumns(t *testing.T) {
 	d := TemplateData{
 		Dimensions:  []string{"service_name", "region"},
 		PrimaryKeys: []string{"service_name"},
+		SinkTableTTL: greptimeSinkTableTtl,
 		ValueColumn: "total_count",
 	}
 
@@ -76,6 +78,7 @@ func TestSinkTableNeedsRecreate(t *testing.T) {
 	d := TemplateData{
 		Dimensions:  []string{"service_name", "region"},
 		PrimaryKeys: []string{"service_name"},
+		SinkTableTTL: "7d",
 		ValueColumn: "total_count",
 	}
 
@@ -85,14 +88,29 @@ func TestSinkTableNeedsRecreate(t *testing.T) {
 		"total_count",
 		"time_window",
 		"update_at",
-	}, d))
+	}, []string{"service_name"}, d))
 
 	assert.True(t, sinkTableNeedsRecreate([]string{
 		"service_name",
 		"total_count",
 		"time_window",
 		"update_at",
-	}, d))
+	}, []string{"service_name"}, d))
+
+	assert.True(t, sinkTableNeedsRecreate([]string{
+		"service_name",
+		"region",
+		"total_count",
+		"time_window",
+		"update_at",
+	}, []string{"region"}, d))
+}
+
+func TestSinkTableTTLNeedsUpdate(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, sinkTableTTLNeedsUpdate("7d", "7d"))
+	assert.True(t, sinkTableTTLNeedsUpdate("3months", "7d"))
 }
 
 func TestBuildTimeExprs(t *testing.T) {
@@ -116,6 +134,7 @@ func TestRenderSQLTemplate(t *testing.T) {
 		FlowName:       "golden_signals_traffic_flow",
 		Dimensions:     []string{"service_name", "region"},
 		PrimaryKeys:    []string{"service_name"},
+		SinkTableTTL:   "7d",
 		ValueColumn:    "total_count",
 		ValueType:      "INT64",
 		ValueExpr:      "COUNT(service_name)",
@@ -129,10 +148,52 @@ func TestRenderSQLTemplate(t *testing.T) {
 	assert.True(t, strings.Contains(sinkDDL, "CREATE TABLE IF NOT EXISTS"))
 	assert.True(t, strings.Contains(sinkDDL, `"service_name"`))
 	assert.True(t, strings.Contains(sinkDDL, `"region"`))
+	assert.True(t, strings.Contains(sinkDDL, "WITH (ttl='7d')"))
 
 	flowDDL, err := renderSQLTemplate(templates, "flow_traffic", d)
 	require.NoError(t, err)
 	assert.True(t, strings.Contains(flowDDL, "CREATE OR REPLACE FLOW"))
 	assert.True(t, strings.Contains(flowDDL, "GROUP BY"))
 	assert.True(t, strings.Contains(flowDDL, `"service_name"`))
+}
+
+func TestExistingSinkTableTTL(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "7d", existingSinkTableTTL(`CREATE TABLE foo (...) WITH (ttl='7d');`))
+	assert.Equal(t, "3months", existingSinkTableTTL(`create table foo (...) with(ttl = '3months');`))
+	assert.Equal(t, "", existingSinkTableTTL(`CREATE TABLE foo (...);`))
+}
+
+func TestExistingPrimaryKeys(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, []string{"service_name"}, existingPrimaryKeys(`CREATE TABLE foo (...) PRIMARY KEY ("service_name");`))
+	assert.Equal(t, []string{"service_name", "region"}, existingPrimaryKeys(`CREATE TABLE foo (...) PRIMARY KEY ("service_name", "region");`))
+	assert.Nil(t, existingPrimaryKeys(`CREATE TABLE foo (...);`))
+}
+
+func TestExistingFlowAggregateInterval(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "5 second", existingFlowAggregateInterval(`
+CREATE FLOW test_flow
+AS
+SELECT date_bin('5 second'::INTERVAL, timestamp) AS time_window
+FROM test;
+`))
+	assert.Equal(t, "1 hour", existingFlowAggregateInterval(`
+create flow test_flow as
+select date_bin('1 hour'::INTERVAL, timestamp) as time_window
+from test;
+`))
+	assert.Equal(t, "", existingFlowAggregateInterval(`CREATE FLOW test_flow AS SELECT * FROM test;`))
+}
+
+func TestFlowNeedsUpdate(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, flowNeedsUpdate("5 second", buildTimeGroupExpr("5 second")))
+	assert.True(t, flowNeedsUpdate("5 second", buildTimeGroupExpr("1 minute")))
+	assert.True(t, flowNeedsUpdate("", buildTimeGroupExpr("5 second")))
 }

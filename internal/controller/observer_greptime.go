@@ -32,8 +32,8 @@ type Pipeline struct {
 	ValueExpr    string
 	PrimaryKeys  []string
 	TimeInterval string
+	SinkTableTTL string
 	WhereClause  string
-	// TODO: sink table ttl
 }
 
 type TemplateData struct {
@@ -43,6 +43,7 @@ type TemplateData struct {
 	FlowName       string
 	Dimensions     []string
 	PrimaryKeys    []string
+	SinkTableTTL   string
 	ValueColumn    string
 	ValueType      string
 	ValueExpr      string
@@ -54,8 +55,19 @@ type TemplateData struct {
 var identPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 var columnPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`)
 var intervalPattern = regexp.MustCompile(`^[0-9]+\s+(millisecond|milliseconds|second|seconds|minute|minutes|hour|hours)$`)
+var ttlPattern = regexp.MustCompile(`(?i)\bttl\s*=\s*'([^']+)'`)
+var flowIntervalPattern = regexp.MustCompile(`(?i)date_bin\('([^']+)'::INTERVAL,\s*timestamp\)`)
+var primaryKeyPattern = regexp.MustCompile(`(?i)PRIMARY KEY\s*\(([^)]*)\)`)
 
-func doGreptime(greptime Greptime, dimensions []string, primaryKey string, aggregateInterval string) error {
+type sinkTableChange int
+
+const (
+	sinkTableUnchanged sinkTableChange = iota
+	sinkTableTTLUpdated
+	sinkTableRecreated
+)
+
+func doGreptime(greptime Greptime, dimensions []string, primaryKey string, sinkTableTTL string, aggregateInterval string) error {
 	db := greptime.greptimeDb
 	templates := greptime.greptimeTemplates
 
@@ -73,6 +85,7 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string, aggre
 			ValueExpr:    fmt.Sprintf("COUNT(%s)", primaryKey),
 			PrimaryKeys:  []string{primaryKey},
 			TimeInterval: aggregateInterval,
+			SinkTableTTL: sinkTableTTL,
 			WhereClause:  "span_status_code = 'STATUS_CODE_UNSET'",
 		},
 		{
@@ -88,6 +101,7 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string, aggre
 			ValueExpr:    "uddsketch_state(128, 0.01, duration_nano)",
 			PrimaryKeys:  []string{primaryKey},
 			TimeInterval: aggregateInterval,
+			SinkTableTTL: sinkTableTTL,
 			WhereClause:  "span_status_code = 'STATUS_CODE_UNSET'",
 		},
 		{
@@ -103,6 +117,7 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string, aggre
 			ValueExpr:    fmt.Sprintf("COUNT(%s)", primaryKey),
 			PrimaryKeys:  []string{primaryKey},
 			TimeInterval: aggregateInterval,
+			SinkTableTTL: sinkTableTTL,
 			WhereClause:  "span_status_code = 'STATUS_CODE_ERROR'",
 		},
 	}
@@ -115,6 +130,7 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string, aggre
 			FlowName:       p.FlowName,
 			Dimensions:     dimensions,
 			PrimaryKeys:    p.PrimaryKeys,
+			SinkTableTTL:   p.SinkTableTTL,
 			ValueColumn:    p.ValueColumn,
 			ValueType:      p.ValueType,
 			ValueExpr:      p.ValueExpr,
@@ -132,70 +148,102 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string, aggre
 			return fmt.Errorf("pipeline %s sink template: %w", p.Name, err)
 		}
 
-		sinkChanged, err := ensureSinkTable(&db, data, sinkDDL)
+		sinkChange, err := ensureSinkTable(&db, data, sinkDDL)
 		if err != nil {
 			return fmt.Errorf("pipeline %s ensure sink table: %w", p.Name, err)
-		}
-		if !sinkChanged {
-			continue
 		}
 
 		flowDDL, err := renderSQLTemplate(templates, p.FlowTemplate, data)
 		if err != nil {
 			return fmt.Errorf("pipeline %s flow template: %w", p.Name, err)
 		}
-		if err := db.Exec(flowDDL).Error; err != nil {
-			return fmt.Errorf("pipeline %s create/replace flow: %w", p.Name, err)
+		flowChanged, err := ensureFlow(&db, data, flowDDL, sinkChange == sinkTableRecreated)
+		if err != nil {
+			return fmt.Errorf("pipeline %s ensure flow: %w", p.Name, err)
+		}
+		if !flowChanged {
+			continue
 		}
 	}
 	return nil
 }
 
-func ensureSinkTable(db *gorm.DB, d TemplateData, sinkDDL string) (bool, error) {
-	existingCols, err := listTableColumns(db, d.Schema, d.SinkTable)
-	if err != nil {
-		return false, fmt.Errorf("list table columns: %w", err)
-	}
-
-	if len(existingCols) == 0 {
-		if err := db.Exec(sinkDDL).Error; err != nil {
-			return false, fmt.Errorf("create sink table: %w", err)
+func ensureFlow(db *gorm.DB, d TemplateData, flowDDL string, sinkChanged bool) (bool, error) {
+	if sinkChanged {
+		if err := db.Exec(flowDDL).Error; err != nil {
+			return false, fmt.Errorf("create/replace flow: %w", err)
 		}
 		return true, nil
 	}
 
-	if !sinkTableNeedsRecreate(existingCols, d) {
-		// FIX: if dimensions not changed, we don't want to sync
+	existingCreateStatement, err := showCreateFlow(db, d.FlowName)
+	if err != nil {
+		return false, fmt.Errorf("show create flow: %w", err)
+	}
+
+	if !flowNeedsUpdate(existingFlowAggregateInterval(existingCreateStatement), d.TimeGroupExpr) {
 		return false, nil
 	}
-	// TODO: add sink table ttl values comparison
-	// if sameTtl() {
-	// 	return false, nil
-	// }
 
-	// TODO: add flow temporality (date_bin('5 seconds'::INTERVAL, timestamp)) comparison
-	// if sameDateBin() {
-	// 	return false, nil
-	// }
-
-	dropFlow := fmt.Sprintf("DROP FLOW IF EXISTS %s", quoteIdentifier(d.FlowName))
-	if err := db.Exec(dropFlow).Error; err != nil {
-		return false, fmt.Errorf("drop flow: %w", err)
+	if err := db.Exec(flowDDL).Error; err != nil {
+		return false, fmt.Errorf("create/replace flow: %w", err)
 	}
-	dropTable := fmt.Sprintf("DROP TABLE IF EXISTS %s", quoteIdentifier(d.SinkTable))
-	if err := db.Exec(dropTable).Error; err != nil {
-		return false, fmt.Errorf("drop sink table: %w", err)
-	}
-	if err := db.Exec(sinkDDL).Error; err != nil {
-		return false, fmt.Errorf("recreate sink table: %w", err)
-	}
-
 	return true, nil
 }
 
-func sinkTableNeedsRecreate(existingCols []string, d TemplateData) bool {
+func ensureSinkTable(db *gorm.DB, d TemplateData, sinkDDL string) (sinkTableChange, error) {
+	existingCols, err := listTableColumns(db, d.Schema, d.SinkTable)
+	if err != nil {
+		return sinkTableUnchanged, fmt.Errorf("list table columns: %w", err)
+	}
+
+	if len(existingCols) == 0 {
+		if err := db.Exec(sinkDDL).Error; err != nil {
+			return sinkTableUnchanged, fmt.Errorf("create sink table: %w", err)
+		}
+		return sinkTableRecreated, nil
+	}
+
+	existingCreateStatement, err := showCreateTable(db, d.Schema, d.SinkTable)
+	if err != nil {
+		return sinkTableUnchanged, fmt.Errorf("show create table: %w", err)
+	}
+
+	if sinkTableNeedsRecreate(existingCols, existingPrimaryKeys(existingCreateStatement), d) {
+		dropFlow := fmt.Sprintf("DROP FLOW IF EXISTS %s", quoteIdentifier(d.FlowName))
+		if err := db.Exec(dropFlow).Error; err != nil {
+			return sinkTableUnchanged, fmt.Errorf("drop flow: %w", err)
+		}
+		dropTable := fmt.Sprintf("DROP TABLE IF EXISTS %s", quoteIdentifier(d.SinkTable))
+		if err := db.Exec(dropTable).Error; err != nil {
+			return sinkTableUnchanged, fmt.Errorf("drop sink table: %w", err)
+		}
+		if err := db.Exec(sinkDDL).Error; err != nil {
+			return sinkTableUnchanged, fmt.Errorf("recreate sink table: %w", err)
+		}
+		return sinkTableRecreated, nil
+	}
+
+	if sinkTableTTLNeedsUpdate(existingSinkTableTTL(existingCreateStatement), d.SinkTableTTL) {
+		if err := alterSinkTableTTL(db, d.Schema, d.SinkTable, d.SinkTableTTL); err != nil {
+			return sinkTableUnchanged, fmt.Errorf("alter sink table ttl: %w", err)
+		}
+		return sinkTableTTLUpdated, nil
+	}
+
+	return sinkTableUnchanged, nil
+}
+
+func sinkTableNeedsRecreate(existingCols []string, existingPrimaryKeys []string, d TemplateData) bool {
 	existingDimensions := existingDimensionColumns(existingCols, d)
-	return !sameStringSet(existingDimensions, d.Dimensions)
+	if !sameStringSet(existingDimensions, d.Dimensions) {
+		return true
+	}
+	return !sameStringSet(existingPrimaryKeys, d.PrimaryKeys)
+}
+
+func sinkTableTTLNeedsUpdate(existingTTL, desiredTTL string) bool {
+	return normalizeTTL(existingTTL) != normalizeTTL(desiredTTL)
 }
 
 func existingDimensionColumns(existingCols []string, d TemplateData) []string {
@@ -354,6 +402,105 @@ func listTableColumns(db *gorm.DB, schema, table string) ([]string, error) {
 	return columns, nil
 }
 
+func showCreateTable(db *gorm.DB, schema, table string) (string, error) {
+	rows, err := db.Raw(
+		fmt.Sprintf("SHOW CREATE TABLE %s.%s", quoteIdentifier(schema), quoteIdentifier(table)),
+	).Rows()
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return "", fmt.Errorf("no SHOW CREATE TABLE result for %s.%s", schema, table)
+	}
+
+	var tableName, createStatement string
+	if err := rows.Scan(&tableName, &createStatement); err != nil {
+		return "", err
+	}
+
+	return createStatement, nil
+}
+
+func alterSinkTableTTL(db *gorm.DB, schema, table, ttl string) error {
+	return db.Exec(
+		fmt.Sprintf(
+			"ALTER TABLE %s.%s SET 'ttl' = '%s'",
+			quoteIdentifier(schema),
+			quoteIdentifier(table),
+			ttl,
+		),
+	).Error
+}
+
+func showCreateFlow(db *gorm.DB, flow string) (string, error) {
+	rows, err := db.Raw(
+		fmt.Sprintf("SHOW CREATE FLOW %s", quoteIdentifier(flow)),
+	).Rows()
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return "", fmt.Errorf("no SHOW CREATE FLOW result for %s", flow)
+	}
+
+	var flowName, createStatement string
+	if err := rows.Scan(&flowName, &createStatement); err != nil {
+		return "", err
+	}
+
+	return createStatement, nil
+}
+
+func existingSinkTableTTL(createStatement string) string {
+	matches := ttlPattern.FindStringSubmatch(createStatement)
+	if len(matches) < 2 {
+		return ""
+	}
+	return matches[1]
+}
+
+func existingPrimaryKeys(createStatement string) []string {
+	matches := primaryKeyPattern.FindStringSubmatch(createStatement)
+	if len(matches) < 2 {
+		return nil
+	}
+
+	parts := strings.Split(matches[1], ",")
+	keys := make([]string, 0, len(parts))
+	for _, part := range parts {
+		key := strings.TrimSpace(part)
+		key = strings.Trim(key, `"`)
+		if key != "" {
+			keys = append(keys, key)
+		}
+	}
+	return keys
+}
+
+func normalizeTTL(ttl string) string {
+	return strings.TrimSpace(ttl)
+}
+
+func existingFlowAggregateInterval(createStatement string) string {
+	matches := flowIntervalPattern.FindStringSubmatch(createStatement)
+	if len(matches) < 2 {
+		return ""
+	}
+	return matches[1]
+}
+
+func flowNeedsUpdate(existingAggregateInterval, desiredTimeGroupExpr string) bool {
+	return normalizeInterval(existingAggregateInterval) != normalizeInterval(existingFlowAggregateInterval(desiredTimeGroupExpr))
+}
+
+func normalizeInterval(interval string) string {
+	return strings.TrimSpace(interval)
+}
+
 func sameStringSet(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -385,7 +532,7 @@ CREATE TABLE IF NOT EXISTS {{ .SinkTable }} (
   time_window TIMESTAMP TIME INDEX,
   update_at TIMESTAMP,
   PRIMARY KEY ({{ joinPrimaryKeys .PrimaryKeys }})
-);`
+) WITH (ttl='{{ .SinkTableTTL }}');`
 
 const flowTrafficTemplate = `
 CREATE OR REPLACE FLOW {{ .FlowName }}
@@ -414,7 +561,7 @@ CREATE TABLE IF NOT EXISTS {{ .SinkTable }} (
   time_window TIMESTAMP TIME INDEX,
   update_at TIMESTAMP,
   PRIMARY KEY ({{ joinPrimaryKeys .PrimaryKeys }})
-);`
+) WITH (ttl='{{ .SinkTableTTL }}');`
 
 const flowLatencyTemplate = `
 CREATE OR REPLACE FLOW {{ .FlowName }}
@@ -443,7 +590,7 @@ CREATE TABLE IF NOT EXISTS {{ .SinkTable }} (
   time_window TIMESTAMP TIME INDEX,
   update_at TIMESTAMP,
   PRIMARY KEY ({{ joinPrimaryKeys .PrimaryKeys }})
-);`
+) WITH (ttl='{{ .SinkTableTTL }}');`
 
 const flowErrorsTemplate = `
 CREATE OR REPLACE FLOW {{ .FlowName }}
