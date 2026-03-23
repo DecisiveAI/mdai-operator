@@ -192,6 +192,9 @@ spec:
                       properties:
                         greptime:
                           properties:
+                            allowSinkTableRecreate:
+                              default: false
+                              type: boolean
                             dimensions:
                               items:
                                 type: string

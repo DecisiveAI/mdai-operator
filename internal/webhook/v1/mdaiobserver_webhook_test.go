@@ -24,7 +24,7 @@ var _ = Describe("MdaiObserver Webhook", func() {
 	BeforeEach(func() {
 		obj = &mdaiv1.MdaiObserver{}
 		oldObj = &mdaiv1.MdaiObserver{}
-		validator = MdaiObserverCustomValidator{}
+		validator = *NewMdaiObserverCustomValidator()
 		Expect(validator).NotTo(BeNil(), "Expected validator to be initialized")
 		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")
 		Expect(obj).NotTo(BeNil(), "Expected obj to be initialized")
@@ -57,8 +57,9 @@ var _ = Describe("MdaiObserver Webhook", func() {
 
 		It("Should validate updates correctly", func() {
 			By("simulating a valid update scenario")
+			oldObj = createObserver()
 			obj = createObserver()
-			warnings, err := validator.ValidateCreate(ctx, obj)
+			warnings, err := validator.ValidateUpdate(ctx, oldObj, obj)
 			Expect(warnings).To(Equal(admission.Warnings{}))
 			Expect(err).ToNot(HaveOccurred())
 		})
@@ -198,6 +199,18 @@ var _ = Describe("MdaiObserver Webhook", func() {
 	})
 })
 
+type fakeGreptimeInspector struct {
+	existingTables map[string]bool
+	err            error
+}
+
+func (f *fakeGreptimeInspector) TableExists(schema, table string) (bool, error) {
+	if f.err != nil {
+		return false, f.err
+	}
+	return f.existingTables[schema+"."+table], nil
+}
+
 func TestValidateSinkTableTTL(t *testing.T) {
 	t.Parallel()
 
@@ -259,6 +272,133 @@ func TestValidateFlowAggregateInterval(t *testing.T) {
 			}
 			if !tt.wantErr && err != nil {
 				t.Fatalf("unexpected error for %q: %v", tt.value, err)
+			}
+		})
+	}
+}
+
+func TestValidateGreptimeRecreatePolicy(t *testing.T) {
+	t.Parallel()
+
+	makeGreptimeObserver := func(dimensions []string, primaryKey string, allow bool) mdaiv1.Observer {
+		return mdaiv1.Observer{
+			Name:     "span-greptime",
+			Provider: mdaiv1.GREPTIME_FLOW,
+			Type:     mdaiv1.SPAN_METRICS,
+			SpanMetricsObserver: &mdaiv1.SpanMetricsObserverConfig{
+				Greptime: &mdaiv1.SpanMetricsGreptimeConfig{
+					Dimensions:             dimensions,
+					PrimaryKey:             primaryKey,
+					AllowSinkTableRecreate: allow,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name           string
+		oldObservers   []mdaiv1.Observer
+		newObservers   []mdaiv1.Observer
+		existingTables map[string]bool
+		wantErr        bool
+	}{
+		{
+			name: "deny dimension change when sink tables exist and recreate disabled",
+			oldObservers: []mdaiv1.Observer{
+				makeGreptimeObserver([]string{"service_name"}, "service_name", false),
+			},
+			newObservers: []mdaiv1.Observer{
+				makeGreptimeObserver([]string{"service_name", "span_name"}, "service_name", false),
+			},
+			existingTables: map[string]bool{"public.golden_signals_traffic": true},
+			wantErr:        true,
+		},
+		{
+			name: "deny primary key change when sink tables exist and recreate disabled",
+			oldObservers: []mdaiv1.Observer{
+				makeGreptimeObserver([]string{"service_name"}, "service_name", false),
+			},
+			newObservers: []mdaiv1.Observer{
+				makeGreptimeObserver([]string{"service_name"}, "span_name", false),
+			},
+			existingTables: map[string]bool{"public.golden_signals_errors": true},
+			wantErr:        true,
+		},
+		{
+			name: "allow dimension change when recreate enabled",
+			oldObservers: []mdaiv1.Observer{
+				makeGreptimeObserver([]string{"service_name"}, "service_name", false),
+			},
+			newObservers: []mdaiv1.Observer{
+				makeGreptimeObserver([]string{"service_name", "span_name"}, "service_name", true),
+			},
+			existingTables: map[string]bool{"public.golden_signals_traffic": true},
+			wantErr:        false,
+		},
+		{
+			name: "allow dimension change when sink tables do not exist yet",
+			oldObservers: []mdaiv1.Observer{
+				makeGreptimeObserver([]string{"service_name"}, "service_name", false),
+			},
+			newObservers: []mdaiv1.Observer{
+				makeGreptimeObserver([]string{"service_name", "span_name"}, "service_name", false),
+			},
+			existingTables: map[string]bool{},
+			wantErr:        false,
+		},
+		{
+			name: "allow ttl-only change when recreate disabled",
+			oldObservers: []mdaiv1.Observer{
+				{
+					Name:     "span-greptime",
+					Provider: mdaiv1.GREPTIME_FLOW,
+					Type:     mdaiv1.SPAN_METRICS,
+					SpanMetricsObserver: &mdaiv1.SpanMetricsObserverConfig{
+						Greptime: &mdaiv1.SpanMetricsGreptimeConfig{
+							Dimensions:   []string{"service_name"},
+							PrimaryKey:   "service_name",
+							SinkTableTtl: "3months",
+						},
+					},
+				},
+			},
+			newObservers: []mdaiv1.Observer{
+				{
+					Name:     "span-greptime",
+					Provider: mdaiv1.GREPTIME_FLOW,
+					Type:     mdaiv1.SPAN_METRICS,
+					SpanMetricsObserver: &mdaiv1.SpanMetricsObserverConfig{
+						Greptime: &mdaiv1.SpanMetricsGreptimeConfig{
+							Dimensions:   []string{"service_name"},
+							PrimaryKey:   "service_name",
+							SinkTableTtl: "7d",
+						},
+					},
+				},
+			},
+			existingTables: map[string]bool{"public.golden_signals_traffic": true},
+			wantErr:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			validator := &MdaiObserverCustomValidator{
+				greptimeInspector: &fakeGreptimeInspector{existingTables: tt.existingTables},
+			}
+			oldObj := createObserver()
+			oldObj.Spec.Observers = tt.oldObservers
+			newObj := createObserver()
+			newObj.Spec.Observers = tt.newObservers
+
+			_, err := validator.ValidateUpdate(ctx, oldObj, newObj)
+			if tt.wantErr && err == nil {
+				t.Fatal("expected update validation error")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected update validation error: %v", err)
 			}
 		})
 	}

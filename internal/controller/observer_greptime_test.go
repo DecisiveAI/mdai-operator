@@ -54,10 +54,10 @@ func TestExistingDimensionColumns(t *testing.T) {
 	t.Parallel()
 
 	d := TemplateData{
-		Dimensions:  []string{"service_name", "region"},
-		PrimaryKeys: []string{"service_name"},
+		Dimensions:   []string{"service_name", "region"},
+		PrimaryKeys:  []string{"service_name"},
 		SinkTableTTL: greptimeSinkTableTtl,
-		ValueColumn: "total_count",
+		ValueColumn:  "total_count",
 	}
 
 	existingCols := []string{
@@ -76,10 +76,10 @@ func TestSinkTableNeedsRecreate(t *testing.T) {
 	t.Parallel()
 
 	d := TemplateData{
-		Dimensions:  []string{"service_name", "region"},
-		PrimaryKeys: []string{"service_name"},
+		Dimensions:   []string{"service_name", "region"},
+		PrimaryKeys:  []string{"service_name"},
 		SinkTableTTL: "7d",
-		ValueColumn: "total_count",
+		ValueColumn:  "total_count",
 	}
 
 	assert.False(t, sinkTableNeedsRecreate([]string{

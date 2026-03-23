@@ -95,7 +95,7 @@ func (c ObserverAdapter) ensureFinalizerInitialized(ctx context.Context) (Operat
 		c.logger.Error(err, "Failed to update custom resource to add finalizer")
 		return RequeueWithError(err)
 	}
-	return StopProcessing() // when finalizer is added it will trigger reconciliation
+	return Requeue()
 }
 
 func (c ObserverAdapter) ensureStatusInitialized(ctx context.Context) (OperationResult, error) {
@@ -114,7 +114,7 @@ func (c ObserverAdapter) ensureStatusInitialized(ctx context.Context) (Operation
 		return RequeueWithError(err)
 	}
 	c.logger.Info("Re-queued to reconcile with updated status")
-	return StopProcessing()
+	return Requeue()
 }
 
 // ensureDeletionProcessed deletes MdaiObserver in cases a deletion was triggered

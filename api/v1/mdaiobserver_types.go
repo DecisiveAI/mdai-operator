@@ -68,6 +68,9 @@ type SpanMetricsGreptimeConfig struct {
 	SinkTableTtl string `json:"sinkTableTtl,omitempty" yaml:"SinkTableTtl,omitempty"`
 	// +optional
 	FlowAggregateInterval string `json:"flowAggregateInterval,omitempty" yaml:"flowAggregateInterval,omitempty"`
+	// +kubebuilder:default=false
+	// +optional
+	AllowSinkTableRecreate bool `json:"allowSinkTableRecreate,omitempty" yaml:"allowSinkTableRecreate,omitempty"`
 }
 
 type ObserverLogsFilter struct {

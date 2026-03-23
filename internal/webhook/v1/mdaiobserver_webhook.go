@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/decisiveai/mdai-operator/internal/greptimedb"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/connector/spanmetricsconnector"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -14,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"gorm.io/gorm"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -24,11 +26,16 @@ var mdaiobserverlog = logf.Log.WithName("mdaiobserver-resource")
 
 var sinkTableTTLPattern = regexp.MustCompile(`^(?:\d+\s*(?:nsec|ns|usec|us|msec|ms|seconds|second|sec|s|minutes|minute|min|m|hours|hour|hr|h|days|day|d|weeks|week|w|months|month|M|years|year|y)\s*)+$`)
 var flowAggregateIntervalPattern = regexp.MustCompile(`^\d+\s+(?:nsec|ns|usec|us|msec|ms|seconds|second|sec|s|minutes|minute|min|m|hours|hour|hr|h|days|day|d|weeks|week|w|months|month|M|years|year|y)$`)
+var greptimeObserverSinkTables = []string{
+	"golden_signals_traffic",
+	"golden_signals_duration_sketch_5s",
+	"golden_signals_errors",
+}
 
 // SetupMdaiObserverWebhookWithManager registers the webhook for MdaiObserver in the manager.
 func SetupMdaiObserverWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).For(&mdaiv1.MdaiObserver{}).
-		WithValidator(&MdaiObserverCustomValidator{}).
+		WithValidator(NewMdaiObserverCustomValidator()).
 		Complete()
 }
 
@@ -43,10 +50,23 @@ func SetupMdaiObserverWebhookWithManager(mgr ctrl.Manager) error {
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type MdaiObserverCustomValidator struct {
-	// TODO(user): Add more fields as needed for validation
+	greptimeInspector        greptimeInspector
+	greptimeInspectorFactory func() (greptimeInspector, error)
 }
 
 var _ webhook.CustomValidator = &MdaiObserverCustomValidator{}
+
+func NewMdaiObserverCustomValidator() *MdaiObserverCustomValidator {
+	return &MdaiObserverCustomValidator{
+		greptimeInspectorFactory: func() (greptimeInspector, error) {
+			db, err := greptimedb.OpenFromEnv(mdaiobserverlog)
+			if err != nil {
+				return nil, err
+			}
+			return &gormGreptimeInspector{db: db}, nil
+		},
+	}
+}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type MdaiObserver.
 func (v *MdaiObserverCustomValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
@@ -60,14 +80,22 @@ func (v *MdaiObserverCustomValidator) ValidateCreate(_ context.Context, obj runt
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type MdaiObserver.
-func (v *MdaiObserverCustomValidator) ValidateUpdate(_ context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
+func (v *MdaiObserverCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	mdaiobserver, ok := newObj.(*mdaiv1.MdaiObserver)
 	if !ok {
 		return nil, fmt.Errorf("expected a MdaiObserver object for the newObj but got %T", newObj)
 	}
+	oldMdaiobserver, ok := oldObj.(*mdaiv1.MdaiObserver)
+	if !ok {
+		return nil, fmt.Errorf("expected a MdaiObserver object for the oldObj but got %T", oldObj)
+	}
 	mdaiobserverlog.Info("Validation for MdaiObserver upon update", "name", mdaiobserver.GetName())
 
-	return v.validateObserversAndObserverResources(mdaiobserver)
+	warnings, err := v.validateObserversAndObserverResources(mdaiobserver)
+	if err != nil {
+		return warnings, err
+	}
+	return warnings, v.validateGreptimeRecreatePolicy(oldMdaiobserver, mdaiobserver)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type MdaiObserver.
@@ -164,6 +192,142 @@ func (*MdaiObserverCustomValidator) validateObserversAndObserverResources(mdaiob
 		}
 	}
 	return newWarnings, nil
+}
+
+func (v *MdaiObserverCustomValidator) validateGreptimeRecreatePolicy(oldObj, newObj *mdaiv1.MdaiObserver) error {
+	oldObservers := greptimeObserversByName(oldObj.Spec.Observers)
+	newObservers := greptimeObserversByName(newObj.Spec.Observers)
+
+	for name, newObserver := range newObservers {
+		if newObserver.SpanMetricsObserver == nil || newObserver.SpanMetricsObserver.Greptime == nil {
+			continue
+		}
+		if newObserver.SpanMetricsObserver.Greptime.AllowSinkTableRecreate {
+			continue
+		}
+
+		oldObserver, ok := oldObservers[name]
+		if !ok {
+			continue
+		}
+		if !greptimeObserverRequiresSinkRecreate(oldObserver, newObserver) {
+			continue
+		}
+
+		inspector, err := v.getGreptimeInspector()
+		if err != nil {
+			return fmt.Errorf("initialize GreptimeDB inspector: %w", err)
+		}
+
+		exists, err := greptimeSinkTablesExist(inspector)
+		if err != nil {
+			return fmt.Errorf("inspect GreptimeDB sink tables for observer %s: %w", name, err)
+		}
+		if !exists {
+			continue
+		}
+
+		mdaiobserverlog.Info("WARN: rejecting MdaiObserver update because sink table recreation is disabled", "observer", name)
+		return fmt.Errorf("observer %s update requires Greptime sink table recreation, but allowSinkTableRecreate is false", name)
+	}
+
+	return nil
+}
+
+func (v *MdaiObserverCustomValidator) getGreptimeInspector() (greptimeInspector, error) {
+	if v.greptimeInspector != nil {
+		return v.greptimeInspector, nil
+	}
+	if v.greptimeInspectorFactory == nil {
+		return nil, fmt.Errorf("greptime inspector is not configured")
+	}
+
+	inspector, err := v.greptimeInspectorFactory()
+	if err != nil {
+		return nil, err
+	}
+	v.greptimeInspector = inspector
+	return inspector, nil
+}
+
+func greptimeObserversByName(observers []mdaiv1.Observer) map[string]mdaiv1.Observer {
+	result := make(map[string]mdaiv1.Observer)
+	for _, observer := range observers {
+		if observer.Provider != mdaiv1.GREPTIME_FLOW || observer.Type != mdaiv1.SPAN_METRICS {
+			continue
+		}
+		result[observer.Name] = observer
+	}
+	return result
+}
+
+func greptimeObserverRequiresSinkRecreate(oldObserver, newObserver mdaiv1.Observer) bool {
+	oldGreptime := oldObserver.SpanMetricsObserver.Greptime
+	newGreptime := newObserver.SpanMetricsObserver.Greptime
+	if oldGreptime == nil || newGreptime == nil {
+		return false
+	}
+	if !sameStringSet(oldGreptime.Dimensions, newGreptime.Dimensions) {
+		return true
+	}
+	return oldGreptime.PrimaryKey != newGreptime.PrimaryKey
+}
+
+func greptimeSinkTablesExist(inspector greptimeInspector) (bool, error) {
+	for _, table := range greptimeObserverSinkTables {
+		exists, err := inspector.TableExists("public", table)
+		if err != nil {
+			return false, err
+		}
+		if exists {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func sameStringSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := make(map[string]int, len(a))
+	for _, v := range a {
+		seen[v]++
+	}
+	for _, v := range b {
+		seen[v]--
+		if seen[v] < 0 {
+			return false
+		}
+	}
+	for _, n := range seen {
+		if n != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+type greptimeInspector interface {
+	TableExists(schema, table string) (bool, error)
+}
+
+type gormGreptimeInspector struct {
+	db *gorm.DB
+}
+
+func (g *gormGreptimeInspector) TableExists(schema, table string) (bool, error) {
+	var count int64
+	err := g.db.Raw(
+		`SELECT COUNT(*)
+		 FROM information_schema.columns
+		 WHERE table_schema = ? AND table_name = ?`,
+		schema, table,
+	).Scan(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func validateSinkTableTTL(ttl string) error {

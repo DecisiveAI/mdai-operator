@@ -2,16 +2,11 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
 	"reflect"
-	"time"
 
-	"github.com/cenkalti/backoff/v5"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"github.com/decisiveai/mdai-operator/internal/greptimedb"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -63,14 +58,14 @@ func (r *MdaiObserverReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil
 	}
 
-	_, err := r.ReconcileHandler(ctx, *NewObserverAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme, r.greptime))
+	result, err := r.ReconcileHandler(ctx, *NewObserverAdapter(fetchedCR, log, r.Client, r.Recorder, r.Scheme, r.greptime))
 	if err != nil {
-		return ctrl.Result{}, err
+		return result, err
 	}
 
 	log.Info("-- Finished MdaiObserver reconciliation --")
 
-	return ctrl.Result{}, nil
+	return result, nil
 }
 
 // ReconcileHandler processes the MdaiObserver CR and performs the necessary operations.
@@ -90,7 +85,10 @@ func (*MdaiObserverReconciler) ReconcileHandler(ctx context.Context, adapter Ada
 	for _, operation := range operations {
 		result, err := operation(ctx)
 		if err != nil || result.RequeueRequest {
-			return ctrl.Result{RequeueAfter: result.RequeueDelay}, err
+			if result.RequeueDelay > 0 {
+				return ctrl.Result{RequeueAfter: result.RequeueDelay}, err
+			}
+			return ctrl.Result{Requeue: true}, err
 		}
 		if result.CancelRequest {
 			return ctrl.Result{}, nil
@@ -112,52 +110,12 @@ func (r *MdaiObserverReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *MdaiObserverReconciler) initializeGreptimeDb() error {
-	ctx := context.Background()
-	log := logger.FromContext(ctx)
-	retryCount := 0
-
-	greptimeHost := os.Getenv("GREPTIME_HOST")
-	greptimePort := ""
-	if greptimePort = os.Getenv("GREPTIME_PORT"); greptimePort != "" {
-		greptimePort = "4003"
+	log := logger.FromContext(context.Background())
+	greptimeDb, err := greptimedb.OpenFromEnv(log)
+	if err != nil {
+		return err
 	}
-	greptimePassword := os.Getenv("GREPTIME_PASSWORD")
-	if greptimeHost == "" || greptimePassword == "" {
-		return errors.New("GREPTIME_HOST and GREPTIME_PASSWORD environment variables must be set to enable GreptimeDB client")
-	}
-	log.Info("Initializing GreptimeDB  client", "host", greptimeHost, "port", greptimePort)
-	operation := func() (string, error) {
-		// TODO: add password
-		dsn := fmt.Sprintf("host=%s port=%s dbname=public sslmode=disable", greptimeHost, greptimePort)
-		greptimeDb, err := gorm.Open(postgres.New(postgres.Config{
-			DSN:              dsn,
-			WithoutReturning: true,
-		}), &gorm.Config{
-			DisableAutomaticPing: true,
-		})
-		if err != nil {
-			retryCount++
-			log.Error(err, "Failed to initialize Greptime  client. Retrying...")
-			return "", err
-		}
-		r.greptime = Greptime{greptimeDb: *greptimeDb, greptimeTemplates: loadTemplates()}
-		return "", nil
-	}
-
-	exponentialBackoff := backoff.NewExponentialBackOff()
-	exponentialBackoff.InitialInterval = 5 * time.Second //nolint:mnd
-
-	notifyFunc := func(err error, duration time.Duration) {
-		log.Error(err, "Failed to initialize Greptime client. Retrying...", "retry_count", retryCount, "duration", duration.String())
-	}
-
-	if _, err := backoff.Retry(context.TODO(), operation,
-		backoff.WithBackOff(exponentialBackoff),
-		backoff.WithMaxElapsedTime(3*time.Minute), //nolint:mnd
-		backoff.WithNotify(notifyFunc),
-	); err != nil {
-		return fmt.Errorf("failed to initialize Greptime client after retries: %w", err)
-	}
+	r.greptime = Greptime{greptimeDb: *greptimeDb, greptimeTemplates: loadTemplates()}
 	return nil
 }
 

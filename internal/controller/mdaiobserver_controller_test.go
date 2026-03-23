@@ -229,3 +229,110 @@ func TestMdaiObserverPredicates_UpdateAllowsDeletionTimestampTransition(t *testi
 		t.Fatal("expected update predicate to allow deletion timestamp transition")
 	}
 }
+
+func TestObserverAdapter_EnsureStatusInitializedRequestsRequeue(t *testing.T) {
+	t.Parallel()
+
+	cr := &hubv1.MdaiObserver{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-observer",
+			Namespace:  "default",
+			Generation: 1,
+		},
+		Spec:   hubv1.MdaiObserverSpec{},
+		Status: hubv1.MdaiObserverStatus{},
+	}
+
+	scheme := createTestScheme()
+	fakeClient := observerFakeClient(scheme, cr)
+	adapter := NewObserverAdapter(cr, logr.Discard(), fakeClient, record.NewFakeRecorder(1), scheme, Greptime{})
+
+	result, err := adapter.ensureStatusInitialized(context.Background())
+	if err != nil {
+		t.Fatalf("ensureStatusInitialized returned error: %v", err)
+	}
+	if !result.RequeueRequest || result.CancelRequest {
+		t.Fatalf("expected ensureStatusInitialized to request requeue, got: %+v", result)
+	}
+}
+
+func TestObserverAdapter_EnsureFinalizerInitializedRequestsRequeue(t *testing.T) {
+	t.Parallel()
+
+	cr := &hubv1.MdaiObserver{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-observer",
+			Namespace:  "default",
+			Generation: 1,
+		},
+		Spec:   hubv1.MdaiObserverSpec{},
+		Status: hubv1.MdaiObserverStatus{Conditions: []metav1.Condition{{Type: typeAvailableHub}}},
+	}
+
+	scheme := createTestScheme()
+	fakeClient := observerFakeClient(scheme, cr)
+	adapter := NewObserverAdapter(cr, logr.Discard(), fakeClient, record.NewFakeRecorder(1), scheme, Greptime{})
+
+	result, err := adapter.ensureFinalizerInitialized(context.Background())
+	if err != nil {
+		t.Fatalf("ensureFinalizerInitialized returned error: %v", err)
+	}
+	if !result.RequeueRequest || result.CancelRequest {
+		t.Fatalf("expected ensureFinalizerInitialized to request requeue, got: %+v", result)
+	}
+}
+
+func TestMdaiObserverReconcileHandler_MapsImmediateRequeue(t *testing.T) {
+	t.Parallel()
+
+	reconciler := &MdaiObserverReconciler{}
+	cr := &hubv1.MdaiObserver{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-observer",
+			Namespace:  "default",
+			Generation: 1,
+		},
+		Spec:   hubv1.MdaiObserverSpec{},
+		Status: hubv1.MdaiObserverStatus{},
+	}
+	scheme := createTestScheme()
+	adapter := *NewObserverAdapter(cr, logr.Discard(), observerFakeClient(scheme, cr), record.NewFakeRecorder(1), scheme, Greptime{})
+
+	result, err := reconciler.ReconcileHandler(context.Background(), adapter)
+	if err != nil {
+		t.Fatalf("ReconcileHandler returned error: %v", err)
+	}
+	if !result.Requeue || result.RequeueAfter != 0 {
+		t.Fatalf("expected immediate requeue, got: %+v", result)
+	}
+}
+
+func TestMdaiObserverReconcile_ReturnsHandlerResult(t *testing.T) {
+	t.Parallel()
+
+	scheme := createTestScheme()
+	cr := &hubv1.MdaiObserver{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-observer",
+			Namespace:  "default",
+			Generation: 1,
+		},
+		Spec:   hubv1.MdaiObserverSpec{},
+		Status: hubv1.MdaiObserverStatus{},
+	}
+
+	reconciler := &MdaiObserverReconciler{
+		Client: observerFakeClient(scheme, cr),
+		Scheme: scheme,
+	}
+
+	result, err := reconciler.Reconcile(context.Background(), reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+	if !result.Requeue {
+		t.Fatalf("expected reconcile to return requeue result, got: %+v", result)
+	}
+}
