@@ -159,10 +159,19 @@ spec:
               observers:
                 items:
                   properties:
-                    bytesMetricName:
-                      type: string
-                    countMetricName:
-                      type: string
+                    dataVolumeObserver:
+                      properties:
+                        bytesMetricName:
+                          type: string
+                        countMetricName:
+                          type: string
+                        labelResourceAttributes:
+                          items:
+                            type: string
+                          type: array
+                      required:
+                      - labelResourceAttributes
+                      type: object
                     filter:
                       properties:
                         error_mode:
@@ -177,15 +186,44 @@ spec:
                           - log_record
                           type: object
                       type: object
-                    labelResourceAttributes:
-                      items:
-                        type: string
-                      type: array
                     name:
                       type: string
+                    provider:
+                      type: string
+                    spanMetricsObserver:
+                      properties:
+                        greptime:
+                          properties:
+                            allowSinkTableRecreate:
+                              default: false
+                              type: boolean
+                            dimensions:
+                              items:
+                                type: string
+                              type: array
+                            flowAggregateInterval:
+                              type: string
+                            primaryKey:
+                              type: string
+                            sinkTableTtl:
+                              type: string
+                          type: object
+                        otel:
+                          properties:
+                            connectorConfig:
+                              x-kubernetes-preserve-unknown-fields: true
+                            groupByAttrs:
+                              items:
+                                type: string
+                              type: array
+                          type: object
+                      type: object
+                    type:
+                      type: string
                   required:
-                  - labelResourceAttributes
                   - name
+                  - provider
+                  - type
                   type: object
                 type: array
             type: object
@@ -252,6 +290,9 @@ spec:
               lastUpdatedTime:
                 format: date-time
                 type: string
+              observedGeneration:
+                format: int64
+                type: integer
               observerStatus:
                 description: Status of the Cluster defined by its modules and dependencies
                   statuses

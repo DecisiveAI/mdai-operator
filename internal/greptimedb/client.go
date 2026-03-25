@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
@@ -12,6 +13,8 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
+
+const defaultDatabaseName = "public"
 
 func OpenFromEnv(log logr.Logger) (*gorm.DB, error) {
 	retryCount := 0
@@ -21,15 +24,28 @@ func OpenFromEnv(log logr.Logger) (*gorm.DB, error) {
 	if greptimePort == "" {
 		greptimePort = "4003"
 	}
-	greptimePassword := os.Getenv("GREPTIME_PASSWORD")
-	if greptimeHost == "" || greptimePassword == "" {
-		return nil, errors.New("GREPTIME_HOST and GREPTIME_PASSWORD environment variables must be set to enable GreptimeDB client")
+	greptimeDatabase := os.Getenv("GREPTIME_DATABASE")
+	if greptimeDatabase == "" {
+		greptimeDatabase = defaultDatabaseName
+	}
+	greptimeAuth := os.Getenv("GREPTIME_AUTH")
+	if greptimeHost == "" || greptimeAuth == "" {
+		return nil, errors.New("GREPTIME_HOST and GREPTIME_AUTH environment variables must be set to enable GreptimeDB client")
+	}
+	greptimedbUserPassword := strings.Split(greptimeAuth, "=")
+	greptimedbUser := greptimedbUserPassword[0]
+	greptimedbPassword := greptimedbUserPassword[1]
+	if len(greptimedbUser) == 0 || len(greptimedbPassword) == 0 {
+		return nil, errors.New("GreptimeDB user and password must me set")
+	}
+
+	if len(greptimedbUserPassword) != 2 {
+		return nil, errors.New("GREPTIME_AUTH must be in the format 'username:password'")
 	}
 
 	log.Info("Initializing GreptimeDB client", "host", greptimeHost, "port", greptimePort)
 	operation := func() (*gorm.DB, error) {
-		// TODO: add password
-		dsn := fmt.Sprintf("host=%s port=%s dbname=public sslmode=disable", greptimeHost, greptimePort)
+		dsn := fmt.Sprintf("user=%s password=%s host=%s port=%s dbname=%s sslmode=disable", greptimedbUser, greptimedbPassword, greptimeHost, greptimePort, greptimeDatabase)
 		greptimeDb, err := gorm.Open(postgres.New(postgres.Config{
 			DSN:              dsn,
 			WithoutReturning: true,
