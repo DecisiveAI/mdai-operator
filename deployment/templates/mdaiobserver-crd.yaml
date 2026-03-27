@@ -187,6 +187,7 @@ spec:
                           type: object
                       type: object
                     name:
+                      maxLength: 30
                       type: string
                     provider:
                       type: string

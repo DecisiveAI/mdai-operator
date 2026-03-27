@@ -208,6 +208,46 @@ func TestEnsureObserversSynchronized_WithObservers(t *testing.T) {
 	}
 }
 
+func TestGreptimeObserverConfig_ValidatesLaterObserver(t *testing.T) {
+	t.Parallel()
+
+	observers := []hubv1.Observer{
+		{
+			Name:     "greptime-one",
+			Provider: hubv1.GREPTIME_FLOW,
+			Type:     hubv1.SPAN_METRICS,
+			SpanMetricsObserver: &hubv1.SpanMetricsObserverConfig{
+				Greptime: &hubv1.SpanMetricsGreptimeConfig{
+					Dimensions: []string{"service_name"},
+					PrimaryKey: "service_name",
+				},
+			},
+		},
+		{
+			Name:     "greptime-two",
+			Provider: hubv1.GREPTIME_FLOW,
+			Type:     hubv1.SPAN_METRICS,
+			SpanMetricsObserver: &hubv1.SpanMetricsObserverConfig{
+				Greptime: &hubv1.SpanMetricsGreptimeConfig{
+					Dimensions: nil,
+					PrimaryKey: "service_name",
+				},
+			},
+		},
+	}
+
+	if _, _, _, _, err := greptimeObserverConfig(observers[0]); err != nil {
+		t.Fatalf("expected first observer config to be valid, got: %v", err)
+	}
+	_, _, _, _, err := greptimeObserverConfig(observers[1])
+	if err == nil {
+		t.Fatal("expected second observer config to be invalid")
+	}
+	if !strings.Contains(err.Error(), "observer greptime-two missing greptime dimensions/primaryKey") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestMdaiObserverPredicates_UpdateAllowsDeletionTimestampTransition(t *testing.T) {
 	t.Parallel()
 

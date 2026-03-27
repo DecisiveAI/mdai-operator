@@ -278,7 +278,7 @@ func TestValidateFlowAggregateInterval(t *testing.T) {
 }
 
 func TestValidateGreptimeRecreatePolicy(t *testing.T) {
-	t.Parallel()
+	t.Setenv("GREPTIME_DATABASE", "mdai")
 
 	makeGreptimeObserver := func(dimensions []string, primaryKey string, allow bool) mdaiv1.Observer {
 		return mdaiv1.Observer{
@@ -310,7 +310,7 @@ func TestValidateGreptimeRecreatePolicy(t *testing.T) {
 			newObservers: []mdaiv1.Observer{
 				makeGreptimeObserver([]string{"service_name", "span_name"}, "service_name", false),
 			},
-			existingTables: map[string]bool{"public.golden_signals_traffic": true},
+			existingTables: map[string]bool{"mdai.span-greptime_golden_signals_traffic": true},
 			wantErr:        true,
 		},
 		{
@@ -321,7 +321,7 @@ func TestValidateGreptimeRecreatePolicy(t *testing.T) {
 			newObservers: []mdaiv1.Observer{
 				makeGreptimeObserver([]string{"service_name"}, "span_name", false),
 			},
-			existingTables: map[string]bool{"public.golden_signals_errors": true},
+			existingTables: map[string]bool{"mdai.span-greptime_golden_signals_errors": true},
 			wantErr:        true,
 		},
 		{
@@ -332,7 +332,7 @@ func TestValidateGreptimeRecreatePolicy(t *testing.T) {
 			newObservers: []mdaiv1.Observer{
 				makeGreptimeObserver([]string{"service_name", "span_name"}, "service_name", true),
 			},
-			existingTables: map[string]bool{"public.golden_signals_traffic": true},
+			existingTables: map[string]bool{"mdai.span-greptime_golden_signals_traffic": true},
 			wantErr:        false,
 		},
 		{
@@ -376,7 +376,7 @@ func TestValidateGreptimeRecreatePolicy(t *testing.T) {
 					},
 				},
 			},
-			existingTables: map[string]bool{"public.golden_signals_traffic": true},
+			existingTables: map[string]bool{"mdai.span-greptime_golden_signals_traffic": true},
 			wantErr:        false,
 		},
 	}
@@ -401,6 +401,24 @@ func TestValidateGreptimeRecreatePolicy(t *testing.T) {
 				t.Fatalf("unexpected update validation error: %v", err)
 			}
 		})
+	}
+}
+
+func TestGreptimeSinkTablesExistUsesObserverPrefix(t *testing.T) {
+	t.Setenv("GREPTIME_DATABASE", "mdai")
+
+	inspector := &fakeGreptimeInspector{
+		existingTables: map[string]bool{
+			"mdai.sample_golden_signals_duration": true,
+		},
+	}
+
+	exists, err := greptimeSinkTablesExist(inspector, "sample")
+	if err != nil {
+		t.Fatalf("greptimeSinkTablesExist returned error: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected prefixed sink table to be detected")
 	}
 }
 

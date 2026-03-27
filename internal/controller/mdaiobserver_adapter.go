@@ -255,31 +255,42 @@ func (c ObserverAdapter) syncGreptime(idx ObserverIndex) error {
 		return nil
 	}
 	for _, obs := range observers {
-		if obs.SpanMetricsObserver == nil {
-			return fmt.Errorf("observer %s missing spanMetricsObserver config", obs.Name)
+		dimensions, primaryKey, sinkTableTtl, aggregateInterval, err := greptimeObserverConfig(obs)
+		if err != nil {
+			return err
 		}
-		if obs.SpanMetricsObserver.Greptime == nil {
-			return fmt.Errorf("observer %s missing greptime config", obs.Name)
+		if err := doGreptime(c.greptime, obs.Name, dimensions, primaryKey, sinkTableTtl, aggregateInterval); err != nil {
+			return err
 		}
-
-		dimensions := obs.SpanMetricsObserver.Greptime.Dimensions
-		primaryKey := obs.SpanMetricsObserver.Greptime.PrimaryKey
-		if len(dimensions) == 0 || primaryKey == "" {
-			return fmt.Errorf("observer %s missing greptime dimensions/primaryKey", obs.Name)
-		}
-		sinkTableTtl := obs.SpanMetricsObserver.Greptime.SinkTableTtl
-		if sinkTableTtl == "" {
-			sinkTableTtl = greptimeSinkTableTtl
-		}
-		aggregateInterval := obs.SpanMetricsObserver.Greptime.FlowAggregateInterval
-		if aggregateInterval == "" {
-			aggregateInterval = greptimeAggregateInterval
-		}
-		return doGreptime(c.greptime, dimensions, primaryKey, sinkTableTtl, aggregateInterval)
 	}
 	// TODO: delete Greptime resources (sink table and flow) when observers are deleted
 
 	return nil
+}
+
+func greptimeObserverConfig(obs mdaiv1.Observer) ([]string, string, string, string, error) {
+	if obs.SpanMetricsObserver == nil {
+		return nil, "", "", "", fmt.Errorf("observer %s missing spanMetricsObserver config", obs.Name)
+	}
+	if obs.SpanMetricsObserver.Greptime == nil {
+		return nil, "", "", "", fmt.Errorf("observer %s missing greptime config", obs.Name)
+	}
+
+	dimensions := obs.SpanMetricsObserver.Greptime.Dimensions
+	primaryKey := obs.SpanMetricsObserver.Greptime.PrimaryKey
+	if len(dimensions) == 0 || primaryKey == "" {
+		return nil, "", "", "", fmt.Errorf("observer %s missing greptime dimensions/primaryKey", obs.Name)
+	}
+	sinkTableTtl := obs.SpanMetricsObserver.Greptime.SinkTableTtl
+	if sinkTableTtl == "" {
+		sinkTableTtl = greptimeSinkTableTtl
+	}
+	aggregateInterval := obs.SpanMetricsObserver.Greptime.FlowAggregateInterval
+	if aggregateInterval == "" {
+		aggregateInterval = greptimeAggregateInterval
+	}
+
+	return dimensions, primaryKey, sinkTableTtl, aggregateInterval, nil
 }
 
 func (c ObserverAdapter) ensureStatusSetToDone(ctx context.Context) (OperationResult, error) {

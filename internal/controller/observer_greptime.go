@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/decisiveai/mdai-operator/internal/greptimedb"
 	"gorm.io/gorm"
 )
 
@@ -18,6 +19,24 @@ type Greptime struct {
 
 const greptimeSinkTableTtl = "3months"
 const greptimeAggregateInterval = "5 second"
+
+var greptimePipelineBaseNames = map[string]struct {
+	sinkTable string
+	flowName  string
+}{
+	"traffic": {
+		sinkTable: "golden_signals_traffic",
+		flowName:  "golden_signals_traffic_flow",
+	},
+	"latency": {
+		sinkTable: "golden_signals_duration",
+		flowName:  "golden_signals_duration_flow",
+	},
+	"errors": {
+		sinkTable: "golden_signals_errors",
+		flowName:  "golden_signals_errors_flow",
+	},
+}
 
 type Pipeline struct {
 	Name         string
@@ -67,17 +86,18 @@ const (
 	sinkTableRecreated
 )
 
-func doGreptime(greptime Greptime, dimensions []string, primaryKey string, sinkTableTTL string, aggregateInterval string) error {
+func doGreptime(greptime Greptime, observerName string, dimensions []string, primaryKey string, sinkTableTTL string, aggregateInterval string) error {
 	db := greptime.greptimeDb
 	templates := greptime.greptimeTemplates
+	schema := greptimedb.DatabaseNameFromEnv()
 
 	pipelines := []Pipeline{
 		{
 			Name:         "traffic",
-			Schema:       "public",
+			Schema:       schema,
 			SourceTable:  "opentelemetry_traces",
-			SinkTable:    "golden_signals_traffic",
-			FlowName:     "golden_signals_traffic_flow",
+			SinkTable:    prefixedGreptimeObjectName(observerName, greptimePipelineBaseNames["traffic"].sinkTable),
+			FlowName:     prefixedGreptimeObjectName(observerName, greptimePipelineBaseNames["traffic"].flowName),
 			SinkTemplate: "sink_traffic",
 			FlowTemplate: "flow_traffic",
 			ValueColumn:  "total_count",
@@ -90,10 +110,10 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string, sinkT
 		},
 		{
 			Name:         "latency",
-			Schema:       "public",
+			Schema:       schema,
 			SourceTable:  "opentelemetry_traces",
-			SinkTable:    "golden_signals_duration_sketch_5s",
-			FlowName:     "golden_signals_duration_sketch_5s_flow",
+			SinkTable:    prefixedGreptimeObjectName(observerName, greptimePipelineBaseNames["latency"].sinkTable),
+			FlowName:     prefixedGreptimeObjectName(observerName, greptimePipelineBaseNames["latency"].flowName),
 			SinkTemplate: "sink_latency",
 			FlowTemplate: "flow_latency",
 			ValueColumn:  "latency_sketch",
@@ -106,10 +126,10 @@ func doGreptime(greptime Greptime, dimensions []string, primaryKey string, sinkT
 		},
 		{
 			Name:         "errors",
-			Schema:       "public",
+			Schema:       schema,
 			SourceTable:  "opentelemetry_traces",
-			SinkTable:    "golden_signals_errors",
-			FlowName:     "golden_signals_errors_flow",
+			SinkTable:    prefixedGreptimeObjectName(observerName, greptimePipelineBaseNames["errors"].sinkTable),
+			FlowName:     prefixedGreptimeObjectName(observerName, greptimePipelineBaseNames["errors"].flowName),
 			SinkTemplate: "sink_errors",
 			FlowTemplate: "flow_errors",
 			ValueColumn:  "total_count",
@@ -280,8 +300,6 @@ func validatePipeline(p Pipeline, d TemplateData) error {
 		{name: p.Name, label: "pipeline name"},
 		{name: d.Schema, label: "schema"},
 		{name: d.SourceTable, label: "source table"},
-		{name: d.SinkTable, label: "sink table"},
-		{name: d.FlowName, label: "flow name"},
 		{name: d.ValueColumn, label: "value column"},
 	} {
 		if !identPattern.MatchString(id.name) {
@@ -524,7 +542,7 @@ func sameStringSet(a, b []string) bool {
 }
 
 const sinkTrafficTemplate = `
-CREATE TABLE IF NOT EXISTS {{ .SinkTable }} (
+CREATE TABLE IF NOT EXISTS {{ quoteIdentifier .SinkTable }} (
 {{- range .Dimensions }}
   {{ quoteIdentifier . }} STRING INVERTED INDEX,
 {{- end }}
@@ -535,8 +553,8 @@ CREATE TABLE IF NOT EXISTS {{ .SinkTable }} (
 ) WITH (ttl='{{ .SinkTableTTL }}');`
 
 const flowTrafficTemplate = `
-CREATE OR REPLACE FLOW {{ .FlowName }}
-SINK TO {{ .SinkTable }}
+CREATE OR REPLACE FLOW {{ quoteIdentifier .FlowName }}
+SINK TO {{ quoteIdentifier .SinkTable }}
 AS
 SELECT
 {{- range .Dimensions }}
@@ -553,7 +571,7 @@ GROUP BY
   time_window;`
 
 const sinkLatencyTemplate = `
-CREATE TABLE IF NOT EXISTS {{ .SinkTable }} (
+CREATE TABLE IF NOT EXISTS {{ quoteIdentifier .SinkTable }} (
 {{- range .Dimensions }}
   {{ quoteIdentifier . }} STRING INVERTED INDEX,
 {{- end }}
@@ -564,8 +582,8 @@ CREATE TABLE IF NOT EXISTS {{ .SinkTable }} (
 ) WITH (ttl='{{ .SinkTableTTL }}');`
 
 const flowLatencyTemplate = `
-CREATE OR REPLACE FLOW {{ .FlowName }}
-SINK TO {{ .SinkTable }}
+CREATE OR REPLACE FLOW {{ quoteIdentifier .FlowName }}
+SINK TO {{ quoteIdentifier .SinkTable }}
 AS
 SELECT
 {{- range .Dimensions }}
@@ -582,7 +600,7 @@ GROUP BY
   time_window;`
 
 const sinkErrorsTemplate = `
-CREATE TABLE IF NOT EXISTS {{ .SinkTable }} (
+CREATE TABLE IF NOT EXISTS {{ quoteIdentifier .SinkTable }} (
 {{- range .Dimensions }}
   {{ quoteIdentifier . }} STRING INVERTED INDEX,
 {{- end }}
@@ -593,8 +611,8 @@ CREATE TABLE IF NOT EXISTS {{ .SinkTable }} (
 ) WITH (ttl='{{ .SinkTableTTL }}');`
 
 const flowErrorsTemplate = `
-CREATE OR REPLACE FLOW {{ .FlowName }}
-SINK TO {{ .SinkTable }}
+CREATE OR REPLACE FLOW {{ quoteIdentifier .FlowName }}
+SINK TO {{ quoteIdentifier .SinkTable }}
 AS
 SELECT
 {{- range .Dimensions }}
@@ -612,4 +630,8 @@ GROUP BY
 
 func quoteIdentifier(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+}
+
+func prefixedGreptimeObjectName(observerName, baseName string) string {
+	return fmt.Sprintf("%s_%s", observerName, baseName)
 }

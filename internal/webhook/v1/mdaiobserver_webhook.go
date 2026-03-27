@@ -28,7 +28,7 @@ var sinkTableTTLPattern = regexp.MustCompile(`^(?:\d+\s*(?:nsec|ns|usec|us|msec|
 var flowAggregateIntervalPattern = regexp.MustCompile(`^\d+\s+(?:nsec|ns|usec|us|msec|ms|seconds|second|sec|s|minutes|minute|min|m|hours|hour|hr|h|days|day|d|weeks|week|w|months|month|M|years|year|y)$`)
 var greptimeObserverSinkTables = []string{
 	"golden_signals_traffic",
-	"golden_signals_duration_sketch_5s",
+	"golden_signals_duration",
 	"golden_signals_errors",
 }
 
@@ -219,7 +219,7 @@ func (v *MdaiObserverCustomValidator) validateGreptimeRecreatePolicy(oldObj, new
 			return fmt.Errorf("initialize GreptimeDB inspector: %w", err)
 		}
 
-		exists, err := greptimeSinkTablesExist(inspector)
+		exists, err := greptimeSinkTablesExist(inspector, name)
 		if err != nil {
 			return fmt.Errorf("inspect GreptimeDB sink tables for observer %s: %w", name, err)
 		}
@@ -273,9 +273,10 @@ func greptimeObserverRequiresSinkRecreate(oldObserver, newObserver mdaiv1.Observ
 	return oldGreptime.PrimaryKey != newGreptime.PrimaryKey
 }
 
-func greptimeSinkTablesExist(inspector greptimeInspector) (bool, error) {
-	for _, table := range greptimeObserverSinkTables {
-		exists, err := inspector.TableExists("public", table)
+func greptimeSinkTablesExist(inspector greptimeInspector, observerName string) (bool, error) {
+	schema := greptimedb.DatabaseNameFromEnv()
+	for _, baseName := range greptimeObserverSinkTables {
+		exists, err := inspector.TableExists(schema, prefixedGreptimeObjectName(observerName, baseName))
 		if err != nil {
 			return false, err
 		}
@@ -306,6 +307,10 @@ func sameStringSet(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func prefixedGreptimeObjectName(observerName, baseName string) string {
+	return fmt.Sprintf("%s_%s", observerName, baseName)
 }
 
 type greptimeInspector interface {

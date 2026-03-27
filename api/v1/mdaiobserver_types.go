@@ -22,7 +22,7 @@ const (
 
 // +kubebuilder:validation:XOpenAPIV3Schema=oneOf:[{required:["dataVolumeObserver"]},{required:["spanMetricsObserver"]}]
 type Observer struct {
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxLength=30
 	Name string `json:"name" yaml:"name"`
 	// +kubebuilder:validation:Required
 	Provider ObserverProvider `json:"provider" yaml:"provider"`

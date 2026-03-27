@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/decisiveai/mdai-operator/internal/greptimedb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,8 +16,8 @@ func TestValidatePipeline(t *testing.T) {
 		Name:         "traffic",
 		Schema:       "public",
 		SourceTable:  "opentelemetry_traces",
-		SinkTable:    "golden_signals_traffic",
-		FlowName:     "golden_signals_traffic_flow",
+		SinkTable:    prefixedGreptimeObjectName("observer1", "golden_signals_traffic"),
+		FlowName:     prefixedGreptimeObjectName("observer1", "golden_signals_traffic_flow"),
 		SinkTemplate: "sink_traffic",
 		FlowTemplate: "flow_traffic",
 		ValueColumn:  "total_count",
@@ -29,8 +30,8 @@ func TestValidatePipeline(t *testing.T) {
 	d := TemplateData{
 		Schema:         "public",
 		SourceTable:    "opentelemetry_traces",
-		SinkTable:      "golden_signals_traffic",
-		FlowName:       "golden_signals_traffic_flow",
+		SinkTable:      prefixedGreptimeObjectName("observer1", "golden_signals_traffic"),
+		FlowName:       prefixedGreptimeObjectName("observer1", "golden_signals_traffic_flow"),
 		Dimensions:     []string{"service_name", "resource_attributes.host.name"},
 		PrimaryKeys:    []string{"service_name"},
 		SinkTableTTL:   greptimeSinkTableTtl,
@@ -130,8 +131,8 @@ func TestRenderSQLTemplate(t *testing.T) {
 	d := TemplateData{
 		Schema:         "public",
 		SourceTable:    "opentelemetry_traces",
-		SinkTable:      "golden_signals_traffic",
-		FlowName:       "golden_signals_traffic_flow",
+		SinkTable:      prefixedGreptimeObjectName("observer1", "golden_signals_traffic"),
+		FlowName:       prefixedGreptimeObjectName("observer1", "golden_signals_traffic_flow"),
 		Dimensions:     []string{"service_name", "region"},
 		PrimaryKeys:    []string{"service_name"},
 		SinkTableTTL:   "7d",
@@ -146,6 +147,7 @@ func TestRenderSQLTemplate(t *testing.T) {
 	sinkDDL, err := renderSQLTemplate(templates, "sink_traffic", d)
 	require.NoError(t, err)
 	assert.True(t, strings.Contains(sinkDDL, "CREATE TABLE IF NOT EXISTS"))
+	assert.True(t, strings.Contains(sinkDDL, `"observer1_golden_signals_traffic"`))
 	assert.True(t, strings.Contains(sinkDDL, `"service_name"`))
 	assert.True(t, strings.Contains(sinkDDL, `"region"`))
 	assert.True(t, strings.Contains(sinkDDL, "WITH (ttl='7d')"))
@@ -153,8 +155,43 @@ func TestRenderSQLTemplate(t *testing.T) {
 	flowDDL, err := renderSQLTemplate(templates, "flow_traffic", d)
 	require.NoError(t, err)
 	assert.True(t, strings.Contains(flowDDL, "CREATE OR REPLACE FLOW"))
+	assert.True(t, strings.Contains(flowDDL, `"observer1_golden_signals_traffic_flow"`))
+	assert.True(t, strings.Contains(flowDDL, `SINK TO "observer1_golden_signals_traffic"`))
 	assert.True(t, strings.Contains(flowDDL, "GROUP BY"))
 	assert.True(t, strings.Contains(flowDDL, `"service_name"`))
+}
+
+func TestDoGreptimeUsesConfiguredDatabaseName(t *testing.T) {
+	t.Setenv("GREPTIME_DATABASE", "mdai")
+
+	schema := greptimedb.DatabaseNameFromEnv()
+	assert.Equal(t, "mdai", schema)
+
+	p := Pipeline{
+		Name:         "traffic",
+		Schema:       schema,
+		SourceTable:  "opentelemetry_traces",
+		SinkTable:    prefixedGreptimeObjectName("observer1", "golden_signals_traffic"),
+		FlowName:     prefixedGreptimeObjectName("observer1", "golden_signals_traffic_flow"),
+		SinkTemplate: "sink_traffic",
+		FlowTemplate: "flow_traffic",
+		ValueColumn:  "total_count",
+		ValueType:    "INT64",
+		ValueExpr:    "COUNT(service_name)",
+		PrimaryKeys:  []string{"service_name"},
+		TimeInterval: "5 seconds",
+		SinkTableTTL: "7d",
+		WhereClause:  "span_status_code = 'STATUS_CODE_UNSET'",
+	}
+
+	assert.Equal(t, "mdai", p.Schema)
+}
+
+func TestPrefixedGreptimeObjectName(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "sample_golden_signals_traffic", prefixedGreptimeObjectName("sample", "golden_signals_traffic"))
+	assert.Equal(t, "sample_golden_signals_duration_flow", prefixedGreptimeObjectName("sample", "golden_signals_duration_flow"))
 }
 
 func TestExistingSinkTableTTL(t *testing.T) {
