@@ -1,4 +1,4 @@
-package utils
+package utils //nolint:revive // kept for compatibility with existing e2e imports.
 
 import (
 	"bufio"
