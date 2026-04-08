@@ -236,10 +236,10 @@ func TestGreptimeObserverConfig_ValidatesLaterObserver(t *testing.T) {
 		},
 	}
 
-	if _, _, _, _, err := greptimeObserverConfig(observers[0]); err != nil {
+	if _, err := greptimeObserverConfig(observers[0]); err != nil {
 		t.Fatalf("expected first observer config to be valid, got: %v", err)
 	}
-	_, _, _, _, err := greptimeObserverConfig(observers[1])
+	_, err := greptimeObserverConfig(observers[1])
 	if err == nil {
 		t.Fatal("expected second observer config to be invalid")
 	}

@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/decisiveai/mdai-operator/internal/greptimedb"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -225,6 +227,25 @@ select date_bin('1 hour'::INTERVAL, timestamp) as time_window
 from test;
 `))
 	assert.Equal(t, "", existingFlowAggregateInterval(`CREATE FLOW test_flow AS SELECT * FROM test;`))
+}
+
+func TestShowCreateFlowNotFoundError(t *testing.T) {
+	t.Parallel()
+
+	err := fmt.Errorf("%w: %s", errFlowNotFound, "test_flow")
+	assert.True(t, isFlowNotFoundError(err))
+
+	pgErr := &pgconn.PgError{
+		Code:    "42P01",
+		Message: "Flow not found: gs_greptime_one_golden_signals_traffic_flow",
+	}
+	assert.True(t, isFlowNotFoundError(pgErr))
+
+	otherPgErr := &pgconn.PgError{
+		Code:    "42P01",
+		Message: "relation does not exist",
+	}
+	assert.False(t, isFlowNotFoundError(otherPgErr))
 }
 
 func TestFlowNeedsUpdate(t *testing.T) {

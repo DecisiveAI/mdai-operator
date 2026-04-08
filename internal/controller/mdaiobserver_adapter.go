@@ -255,11 +255,11 @@ func (c ObserverAdapter) syncGreptime(idx ObserverIndex) error {
 		return nil
 	}
 	for _, obs := range observers {
-		dimensions, primaryKey, sinkTableTtl, aggregateInterval, err := greptimeObserverConfig(obs)
+		cfg, err := greptimeObserverConfig(obs)
 		if err != nil {
 			return err
 		}
-		if err := doGreptime(c.greptime, obs.Name, dimensions, primaryKey, sinkTableTtl, aggregateInterval); err != nil {
+		if err := doGreptime(c.greptime, obs.Name, cfg.Dimensions, cfg.PrimaryKey, cfg.SinkTableTTL, cfg.AggregateInterval); err != nil {
 			return err
 		}
 	}
@@ -268,18 +268,25 @@ func (c ObserverAdapter) syncGreptime(idx ObserverIndex) error {
 	return nil
 }
 
-func greptimeObserverConfig(obs mdaiv1.Observer) ([]string, string, string, string, error) {
+type greptimeObserverSyncConfig struct {
+	Dimensions        []string
+	PrimaryKey        string
+	SinkTableTTL      string
+	AggregateInterval string
+}
+
+func greptimeObserverConfig(obs mdaiv1.Observer) (greptimeObserverSyncConfig, error) {
 	if obs.SpanMetricsObserver == nil {
-		return nil, "", "", "", fmt.Errorf("observer %s missing spanMetricsObserver config", obs.Name)
+		return greptimeObserverSyncConfig{}, fmt.Errorf("observer %s missing spanMetricsObserver config", obs.Name)
 	}
 	if obs.SpanMetricsObserver.Greptime == nil {
-		return nil, "", "", "", fmt.Errorf("observer %s missing greptime config", obs.Name)
+		return greptimeObserverSyncConfig{}, fmt.Errorf("observer %s missing greptime config", obs.Name)
 	}
 
 	dimensions := obs.SpanMetricsObserver.Greptime.Dimensions
 	primaryKey := obs.SpanMetricsObserver.Greptime.PrimaryKey
 	if len(dimensions) == 0 || primaryKey == "" {
-		return nil, "", "", "", fmt.Errorf("observer %s missing greptime dimensions/primaryKey", obs.Name)
+		return greptimeObserverSyncConfig{}, fmt.Errorf("observer %s missing greptime dimensions/primaryKey", obs.Name)
 	}
 	sinkTableTtl := obs.SpanMetricsObserver.Greptime.SinkTableTtl
 	if sinkTableTtl == "" {
@@ -290,7 +297,12 @@ func greptimeObserverConfig(obs mdaiv1.Observer) ([]string, string, string, stri
 		aggregateInterval = greptimeAggregateInterval
 	}
 
-	return dimensions, primaryKey, sinkTableTtl, aggregateInterval, nil
+	return greptimeObserverSyncConfig{
+		Dimensions:        dimensions,
+		PrimaryKey:        primaryKey,
+		SinkTableTTL:      sinkTableTtl,
+		AggregateInterval: aggregateInterval,
+	}, nil
 }
 
 func (c ObserverAdapter) ensureStatusSetToDone(ctx context.Context) (OperationResult, error) {

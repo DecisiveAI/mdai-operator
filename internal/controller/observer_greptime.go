@@ -2,12 +2,14 @@ package controller
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html"
 	"html/template"
 	"regexp"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/decisiveai/mdai-operator/internal/greptimedb"
 	"gorm.io/gorm"
 )
@@ -77,6 +79,8 @@ var intervalPattern = regexp.MustCompile(`^[0-9]+\s+(millisecond|milliseconds|se
 var ttlPattern = regexp.MustCompile(`(?i)\bttl\s*=\s*'([^']+)'`)
 var flowIntervalPattern = regexp.MustCompile(`(?i)date_bin\('([^']+)'::INTERVAL,\s*timestamp\)`)
 var primaryKeyPattern = regexp.MustCompile(`(?i)PRIMARY KEY\s*\(([^)]*)\)`)
+
+var errFlowNotFound = errors.New("flow not found")
 
 type sinkTableChange int
 
@@ -198,6 +202,12 @@ func ensureFlow(db *gorm.DB, d TemplateData, flowDDL string, sinkChanged bool) (
 
 	existingCreateStatement, err := showCreateFlow(db, d.FlowName)
 	if err != nil {
+		if isFlowNotFoundError(err) {
+			if err := db.Exec(flowDDL).Error; err != nil {
+				return false, fmt.Errorf("create missing flow: %w", err)
+			}
+			return true, nil
+		}
 		return false, fmt.Errorf("show create flow: %w", err)
 	}
 
@@ -462,7 +472,7 @@ func showCreateFlow(db *gorm.DB, flow string) (string, error) {
 	defer rows.Close()
 
 	if !rows.Next() {
-		return "", fmt.Errorf("no SHOW CREATE FLOW result for %s", flow)
+		return "", fmt.Errorf("%w: %s", errFlowNotFound, flow)
 	}
 
 	var flowName, createStatement string
@@ -471,6 +481,19 @@ func showCreateFlow(db *gorm.DB, flow string) (string, error) {
 	}
 
 	return createStatement, nil
+}
+
+func isFlowNotFoundError(err error) bool {
+	if errors.Is(err, errFlowNotFound) {
+		return true
+	}
+
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "42P01" && strings.Contains(pgErr.Message, "Flow not found") {
+		return true
+	}
+
+	return false
 }
 
 func existingSinkTableTTL(createStatement string) string {
